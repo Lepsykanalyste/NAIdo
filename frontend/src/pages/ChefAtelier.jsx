@@ -32,7 +32,7 @@ export default function ChefAtelier() {
       setDashboard(d.data);
       setTrs(t.data.slice(0, 10));
       setRebus(r.data.slice(0, 8));
-    } catch { toast.error('Erreur chargement KPI'); }
+    } catch(e) { console.warn('KPI:', e.message); }
   }, []);
 
   const chargerUsers = useCallback(async () => {
