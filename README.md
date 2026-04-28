@@ -58,4 +58,4 @@ Déposer le fichier Excel Sage dans l'interface admin → Import → Sage 100.
 Format attendu : colonnes N° OF, Code client, Nom client, Réf article, Désignation, Cadence/h, Temps réglage, Quantité, Date livraison.
 
 ---
-© 2026 Green Industry — NAI · Code propriété exclusive du client
+© 2026 Green Industry — NAI · Logiciel créé par SOPHOPSY
