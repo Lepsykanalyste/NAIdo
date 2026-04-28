@@ -1,0 +1,56 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: naido_postgres
+    environment:
+      POSTGRES_DB: naido_db
+      POSTGRES_USER: naido_user
+      POSTGRES_PASSWORD: naido_pass_2026
+    volumes:
+      - naido_pgdata:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5436:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U naido_user -d naido_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: naido_backend
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: naido_db
+      DB_USER: naido_user
+      DB_PASS: naido_pass_2026
+      JWT_SECRET: naido_jwt_secret_green_industry_2026
+      JWT_EXPIRES_IN: 12h
+    ports:
+      - "3090:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - naido_uploads:/app/uploads
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    container_name: naido_frontend
+    ports:
+      - "8090:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  naido_pgdata:
+  naido_uploads:
