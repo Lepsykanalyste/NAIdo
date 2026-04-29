@@ -114,6 +114,8 @@ const MENU = [
   { id:'separator3',  label:'QHSE & MAINTENANCE',  separator:true },
   { id:'qhse',        label:'QHSE / NC',           icon:'qhse',        color:'#b45309' },
   { id:'gmao',        label:'GMAO / Maintenance',  icon:'gmao',        color:'#92400e' },
+  { id:'separator3b', label:'GMAO & MAINTENANCE', separator:true },
+  { id:'gmao',        label:'GMAO / Maintenance',    icon:'tool',        color:'#059669' },
   { id:'separator4b', label:'RESSOURCES HUMAINES', separator:true },
   { id:'rh',          label:'RH — Employés & Paie',  icon:'users',       color:'#0891b2' },
   { id:'separator4',  label:'ADMIN & IA',          separator:true },
@@ -5216,6 +5218,575 @@ function RH() {
             <div style={{display:'flex',gap:10,paddingTop:16,borderTop:'1px solid #f3f4f6'}}>
               <button onClick={sauvegarder}
                 style={{background:'#0891b2',color:'#fff',border:'none',padding:'12px 32px',borderRadius:10,cursor:'pointer',fontWeight:800,fontSize:14}}>
+                ✓ Enregistrer
+              </button>
+              <button onClick={()=>setShowForm(false)}
+                style={{background:'#f3f4f6',border:'none',padding:'12px 20px',borderRadius:10,cursor:'pointer'}}>
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// MODULE GMAO
+// ══════════════════════════════════════════════════════════════
+function GMAO() {
+  const [onglet, setOnglet] = useState('dashboard');
+  const [dashboard, setDashboard] = useState({});
+  const [equipements, setEquipements] = useState([]);
+  const [ots, setOts] = useState([]);
+  const [plans, setPlans] = useState([]);
+  const [pieces, setPieces] = useState([]);
+  const [pannes, setPannes] = useState([]);
+  const [utilisateurs, setUtilisateurs] = useState([]);
+  const [ateliers, setAteliers] = useState([]);
+  const [fournisseurs, setFournisseurs] = useState([]);
+  const [showForm, setShowForm] = useState(false);
+  const [formType, setFormType] = useState('');
+  const [form, setForm] = useState({});
+  const [detail, setDetail] = useState(null);
+  const [filtreStatut, setFiltreStatut] = useState('');
+  const [search, setSearch] = useState('');
+
+  const charger = async () => {
+    try { const {data}=await axios.get(`${API}/gmao/dashboard`); setDashboard(data); } catch {}
+    try { const {data}=await axios.get(`${API}/users`); setUtilisateurs(data); } catch {}
+    try { const {data}=await axios.get(`${API}/ateliers`); setAteliers(data); } catch {}
+    try { const {data}=await axios.get(`${API}/fournisseurs`); setFournisseurs(data); } catch {}
+  };
+
+  const chargerOnglet = async (tab) => {
+    setOnglet(tab); setDetail(null);
+    try {
+      if (tab==='equipements') { const {data}=await axios.get(`${API}/gmao/equipements${filtreStatut?`?statut=${filtreStatut}`:''}`); setEquipements(data); }
+      else if (tab==='ots') { const {data}=await axios.get(`${API}/gmao/ots${filtreStatut?`?statut=${filtreStatut}`:''}`); setOts(data); }
+      else if (tab==='plans') { const {data}=await axios.get(`${API}/gmao/plans`); setPlans(data); }
+      else if (tab==='pieces') { const {data}=await axios.get(`${API}/gmao/pieces`); setPieces(data); }
+      else if (tab==='pannes') { const {data}=await axios.get(`${API}/gmao/pannes`); setPannes(data); }
+    } catch(e) { toast.error('Erreur: '+e.message); }
+  };
+
+  useEffect(() => { charger(); chargerOnglet('dashboard'); }, []);
+
+  const ouvrir = (type, data={}) => { setFormType(type); setForm({...data}); setShowForm(true); };
+
+  const sauvegarder = async () => {
+    try {
+      const urls = { equipement:'/gmao/equipements', ot:'/gmao/ots', plan:'/gmao/plans', piece:'/gmao/pieces' };
+      const url = urls[formType];
+      if (!url) return;
+      if (form.id) await axios.put(`${API}${url}/${form.id}`, form);
+      else await axios.post(`${API}${url}`, form);
+      toast.success('Enregistré ✓');
+      setShowForm(false);
+      const tabs = { equipement:'equipements', ot:'ots', plan:'plans', piece:'pieces' };
+      chargerOnglet(tabs[formType]);
+      charger();
+    } catch(e) { toast.error(e.response?.data?.detail||e.response?.data?.error||'Erreur'); }
+  };
+
+  const changerStatutOT = async (ot, newStatut) => {
+    try {
+      await axios.put(`${API}/gmao/ots/${ot.id}`, {...ot, statut:newStatut});
+      toast.success(`OT ${newStatut}`);
+      chargerOnglet('ots');
+      charger();
+    } catch(e) { toast.error('Erreur'); }
+  };
+
+  const genererOT = async (planId) => {
+    try {
+      await axios.post(`${API}/gmao/plans/${planId}/generer-ot`);
+      toast.success('OT généré depuis le plan ✓');
+      chargerOnglet('ots');
+    } catch(e) { toast.error(e.response?.data?.detail||'Erreur'); }
+  };
+
+  const PRIORITE_COLORS = {
+    urgente:{bg:'#fee2e2',tx:'#dc2626'},
+    haute:{bg:'#fed7aa',tx:'#c2410c'},
+    normale:{bg:'#fef3c7',tx:'#92400e'},
+    basse:{bg:'#f3f4f6',tx:'#6b7280'},
+  };
+  const STATUT_OT = {
+    ouvert:{bg:'#fef3c7',tx:'#92400e'},
+    planifie:{bg:'#dbeafe',tx:'#1d4ed8'},
+    en_cours:{bg:'#dcfce7',tx:'#15803d'},
+    en_attente_pieces:{bg:'#fee2e2',tx:'#dc2626'},
+    termine:{bg:'#f3f4f6',tx:'#6b7280'},
+    annule:{bg:'#f3f4f6',tx:'#9ca3af'},
+  };
+  const STATUT_EQ = {
+    en_service:{bg:'#dcfce7',tx:'#15803d'},
+    en_panne:{bg:'#fee2e2',tx:'#dc2626'},
+    en_maintenance:{bg:'#fef3c7',tx:'#92400e'},
+    hors_service:{bg:'#f3f4f6',tx:'#6b7280'},
+    reforme:{bg:'#f3f4f6',tx:'#9ca3af'},
+  };
+  const CRITICITE_COLORS = {
+    critique:{bg:'#fee2e2',tx:'#dc2626'},
+    importante:{bg:'#fed7aa',tx:'#c2410c'},
+    normale:{bg:'#dbeafe',tx:'#1d4ed8'},
+    faible:{bg:'#f3f4f6',tx:'#6b7280'},
+  };
+
+  const F = ({label,k,type='text',ph='',required=false}) => (
+    <div>
+      <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>{label}{required&&<span style={{color:'#dc2626'}}> *</span>}</label>
+      <input type={type} value={form[k]||''} onChange={e=>setForm({...form,[k]:e.target.value})} placeholder={ph}
+        style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13,boxSizing:'border-box'}}/>
+    </div>
+  );
+  const S = ({label,k,opts,required=false}) => (
+    <div>
+      <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>{label}{required&&<span style={{color:'#dc2626'}}> *</span>}</label>
+      <select value={form[k]||''} onChange={e=>setForm({...form,[k]:e.target.value})}
+        style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13}}>
+        <option value="">-- Sélectionner --</option>
+        {opts.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
+      </select>
+    </div>
+  );
+
+  const ONGLETS = [
+    {id:'dashboard',label:'📊 Tableau de bord'},
+    {id:'equipements',label:'🏭 Équipements'},
+    {id:'ots',label:'🔧 Ordres de travail'},
+    {id:'plans',label:'📅 Maintenance préventive'},
+    {id:'pieces',label:'🔩 Pièces détachées'},
+    {id:'pannes',label:'⚡ Historique pannes'},
+  ];
+
+  return (
+    <div>
+      <div style={{display:'flex',gap:0,marginBottom:20,borderBottom:'2px solid #e5e7eb',overflowX:'auto'}}>
+        {ONGLETS.map(o=>(
+          <button key={o.id} onClick={()=>chargerOnglet(o.id)} style={{
+            padding:'10px 16px',border:'none',background:'none',cursor:'pointer',
+            fontSize:12,whiteSpace:'nowrap',
+            fontWeight:onglet===o.id?700:400,
+            color:onglet===o.id?'#059669':'#6b7280',
+            borderBottom:onglet===o.id?'3px solid #059669':'3px solid transparent',
+          }}>{o.label}</button>
+        ))}
+      </div>
+
+      {/* ══ DASHBOARD ══ */}
+      {onglet==='dashboard' && (
+        <div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:12,marginBottom:24}}>
+            {[
+              {icon:'✅',label:'En service',value:dashboard.equipements_en_service||0,color:'#15803d',bg:'#dcfce7'},
+              {icon:'🔴',label:'En panne',value:dashboard.equipements_en_panne||0,color:'#dc2626',bg:'#fee2e2'},
+              {icon:'🔧',label:'En maintenance',value:dashboard.equipements_maintenance||0,color:'#d97706',bg:'#fef3c7'},
+              {icon:'📋',label:'OT ouverts',value:dashboard.ot_ouverts||0,color:'#1d4ed8',bg:'#dbeafe'},
+              {icon:'🚨',label:'OT urgents',value:dashboard.ot_urgents||0,color:'#dc2626',bg:'#fee2e2'},
+              {icon:'⏳',label:'Attente pièces',value:dashboard.ot_attente_pieces||0,color:'#d97706',bg:'#fef3c7'},
+              {icon:'📅',label:'MP à planifier',value:dashboard.maintenances_a_planifier||0,color:dashboard.maintenances_a_planifier>0?'#d97706':'#15803d',bg:dashboard.maintenances_a_planifier>0?'#fef3c7':'#dcfce7'},
+              {icon:'🔩',label:'Pièces en alerte',value:dashboard.pieces_en_alerte||0,color:dashboard.pieces_en_alerte>0?'#dc2626':'#15803d',bg:dashboard.pieces_en_alerte>0?'#fee2e2':'#dcfce7'},
+            ].map(k=>(
+              <div key={k.label} style={{background:k.bg,borderRadius:12,padding:'14px 16px'}}>
+                <div style={{fontSize:11,color:'#6b7280',marginBottom:4}}>{k.icon} {k.label}</div>
+                <div style={{fontSize:26,fontWeight:800,color:k.color}}>{k.value}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{background:'#f0fdf4',borderRadius:12,padding:16,marginBottom:16,border:'1px solid #bbf7d0'}}>
+            <div style={{fontWeight:700,color:'#059669',marginBottom:8,fontSize:13}}>💰 Coût maintenance année en cours</div>
+            <div style={{fontSize:28,fontWeight:800,color:'#059669'}}>{parseFloat(dashboard.cout_maintenance_annee||0).toLocaleString('fr-FR')} FCFA</div>
+          </div>
+          <div style={{display:'flex',gap:10,flexWrap:'wrap'}}>
+            {[
+              {label:'+ Nouvel équipement',action:()=>ouvrir('equipement',{statut:'en_service',criticite:'normale',type_equipement:'machine'})},
+              {label:'🚨 Déclarer une panne',action:()=>ouvrir('ot',{type_ot:'urgence',priorite:'urgente',arret_machine:true})},
+              {label:'+ Ordre de travail',action:()=>ouvrir('ot',{type_ot:'curatif',priorite:'normale'})},
+              {label:'+ Plan maintenance',action:()=>ouvrir('plan',{periodicite_type:'jours',periodicite_valeur:30})},
+            ].map(b=>(
+              <button key={b.label} onClick={b.action}
+                style={{background:'#059669',color:'#fff',border:'none',padding:'10px 18px',borderRadius:8,cursor:'pointer',fontWeight:700,fontSize:13}}>
+                {b.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ══ ÉQUIPEMENTS ══ */}
+      {onglet==='equipements' && (
+        <div>
+          <div style={{display:'flex',gap:8,marginBottom:16,flexWrap:'wrap',alignItems:'center'}}>
+            <div style={{display:'flex',gap:0}}>
+              {['','en_service','en_panne','en_maintenance','hors_service'].map(s=>(
+                <button key={s} onClick={()=>{setFiltreStatut(s);setTimeout(()=>chargerOnglet('equipements'),50);}} style={{
+                  padding:'7px 12px',border:'1px solid #e5e7eb',
+                  background:filtreStatut===s?'#059669':'#fff',
+                  color:filtreStatut===s?'#fff':'#6b7280',
+                  cursor:'pointer',fontSize:11,fontWeight:filtreStatut===s?700:400,
+                  borderRadius:s===''?'8px 0 0 8px':s==='hors_service'?'0 8px 8px 0':'0'
+                }}>{s||'Tous'}</button>
+              ))}
+            </div>
+            <button onClick={()=>ouvrir('equipement',{statut:'en_service',criticite:'normale',type_equipement:'machine'})}
+              style={{background:'#059669',color:'#fff',border:'none',padding:'9px 18px',borderRadius:8,cursor:'pointer',fontWeight:700,marginLeft:'auto'}}>
+              + Nouvel équipement
+            </button>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(300px,1fr))',gap:12}}>
+            {equipements.map(eq=>{
+              const sc=STATUT_EQ[eq.statut]||{bg:'#f3f4f6',tx:'#374151'};
+              const cc=CRITICITE_COLORS[eq.criticite]||{bg:'#f3f4f6',tx:'#374151'};
+              const maintenanceDate = eq.prochaine_maintenance ? new Date(eq.prochaine_maintenance) : null;
+              const joursMP = maintenanceDate ? Math.ceil((maintenanceDate-new Date())/86400000) : null;
+              return (
+                <div key={eq.id} style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',padding:16,cursor:'pointer',borderTop:`3px solid ${cc.tx}`}}
+                  onClick={()=>setDetail(detail?.id===eq.id?null:eq)}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
+                    <div>
+                      <span style={{fontFamily:'monospace',fontWeight:800,color:'#059669',fontSize:13}}>{eq.code}</span>
+                      <div style={{fontWeight:600,fontSize:14,marginTop:2}}>{eq.designation}</div>
+                      <div style={{fontSize:11,color:'#9ca3af'}}>{eq.marque||''} {eq.modele||''}</div>
+                    </div>
+                    <div style={{display:'flex',flexDirection:'column',gap:4,alignItems:'flex-end'}}>
+                      <span style={{background:sc.bg,color:sc.tx,padding:'2px 8px',borderRadius:20,fontSize:10,fontWeight:700}}>{eq.statut}</span>
+                      <span style={{background:cc.bg,color:cc.tx,padding:'2px 8px',borderRadius:20,fontSize:10,fontWeight:700}}>{eq.criticite}</span>
+                    </div>
+                  </div>
+                  <div style={{display:'flex',gap:12,fontSize:11,color:'#6b7280',marginBottom:8}}>
+                    <span>🏭 {eq.atelier_libelle||'—'}</span>
+                    <span>📍 {eq.localisation||'—'}</span>
+                  </div>
+                  <div style={{display:'flex',gap:8,fontSize:11}}>
+                    <span style={{background:'#f3f4f6',padding:'2px 6px',borderRadius:20}}>🔧 {eq.ot_en_cours||0} OT</span>
+                    <span style={{background:'#f3f4f6',padding:'2px 6px',borderRadius:20}}>⚡ {eq.nb_pannes_total||0} pannes</span>
+                    {joursMP!==null&&<span style={{background:joursMP<7?'#fee2e2':joursMP<30?'#fef3c7':'#dcfce7',color:joursMP<7?'#dc2626':joursMP<30?'#92400e':'#15803d',padding:'2px 6px',borderRadius:20,fontWeight:700}}>
+                      MP: {joursMP}j
+                    </span>}
+                  </div>
+                  {detail?.id===eq.id&&(
+                    <div style={{marginTop:12,paddingTop:12,borderTop:'1px solid #f3f4f6'}}>
+                      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6,marginBottom:10,fontSize:11}}>
+                        {[['N° série',eq.numero_serie],['Type',eq.type_equipement],['Mise en service',eq.date_mise_en_service?new Date(eq.date_mise_en_service).toLocaleDateString('fr-FR'):'—'],['Garantie',eq.date_fin_garantie?new Date(eq.date_fin_garantie).toLocaleDateString('fr-FR'):'—'],['Compteur',`${eq.compteur_heures||0}h`],['Valeur',`${parseFloat(eq.valeur_acquisition||0).toLocaleString('fr-FR')} FCFA`]].map(([l,v])=>v&&(
+                          <div key={l} style={{background:'#f8fdf9',borderRadius:6,padding:'6px 8px'}}>
+                            <div style={{color:'#9ca3af',fontSize:10}}>{l}</div>
+                            <div style={{fontWeight:600,color:'#059669'}}>{v}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{display:'flex',gap:6}}>
+                        <button onClick={e=>{e.stopPropagation();ouvrir('equipement',{...eq});}}
+                          style={{background:'#fef3c7',color:'#92400e',border:'none',padding:'5px 10px',borderRadius:6,cursor:'pointer',fontSize:11,fontWeight:600}}>✏ Modifier</button>
+                        <button onClick={e=>{e.stopPropagation();ouvrir('ot',{equipement_id:eq.id,type_ot:'curatif',priorite:'normale',arret_machine:false});}}
+                          style={{background:'#dbeafe',color:'#1d4ed8',border:'none',padding:'5px 10px',borderRadius:6,cursor:'pointer',fontSize:11,fontWeight:600}}>+ OT curatif</button>
+                        <button onClick={e=>{e.stopPropagation();ouvrir('ot',{equipement_id:eq.id,type_ot:'urgence',priorite:'urgente',arret_machine:true});}}
+                          style={{background:'#fee2e2',color:'#dc2626',border:'none',padding:'5px 10px',borderRadius:6,cursor:'pointer',fontSize:11,fontWeight:600}}>🚨 Panne</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {equipements.length===0&&<div style={{textAlign:'center',padding:60,color:'#9ca3af',gridColumn:'1/-1'}}><div style={{fontSize:40,marginBottom:12}}>🏭</div><p>Aucun équipement — créez votre parc machines</p></div>}
+          </div>
+        </div>
+      )}
+
+      {/* ══ ORDRES DE TRAVAIL ══ */}
+      {onglet==='ots' && (
+        <div>
+          <div style={{display:'flex',gap:8,marginBottom:16,flexWrap:'wrap',alignItems:'center'}}>
+            <div style={{display:'flex',gap:0}}>
+              {['','ouvert','planifie','en_cours','en_attente_pieces','termine'].map(s=>(
+                <button key={s} onClick={()=>{setFiltreStatut(s);setTimeout(()=>chargerOnglet('ots'),50);}} style={{
+                  padding:'7px 12px',border:'1px solid #e5e7eb',
+                  background:filtreStatut===s?'#059669':'#fff',
+                  color:filtreStatut===s?'#fff':'#6b7280',
+                  cursor:'pointer',fontSize:11,fontWeight:filtreStatut===s?700:400,
+                  borderRadius:s===''?'8px 0 0 8px':s==='termine'?'0 8px 8px 0':'0'
+                }}>{s||'Tous'}</button>
+              ))}
+            </div>
+            <button onClick={()=>ouvrir('ot',{type_ot:'curatif',priorite:'normale'})}
+              style={{background:'#059669',color:'#fff',border:'none',padding:'9px 18px',borderRadius:8,cursor:'pointer',fontWeight:700,marginLeft:'auto'}}>
+              + Nouvel OT
+            </button>
+          </div>
+          <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',overflow:'auto'}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:13,minWidth:800}}>
+              <thead>
+                <tr style={{background:'#f0fdf4'}}>
+                  {['N° OT','Type','Équipement','Titre','Priorité','Technicien','Date','Coût','Statut','Actions'].map(h=>(
+                    <th key={h} style={{padding:'10px 12px',textAlign:'left',fontWeight:700,color:'#059669',borderBottom:'2px solid #bbf7d0',whiteSpace:'nowrap'}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {ots.map((ot,i)=>{
+                  const pc=PRIORITE_COLORS[ot.priorite]||{bg:'#f3f4f6',tx:'#374151'};
+                  const sc=STATUT_OT[ot.statut]||{bg:'#f3f4f6',tx:'#374151'};
+                  return (
+                    <tr key={ot.id} style={{borderBottom:'1px solid #f0fdf4',background:i%2===0?'#fff':'#f9fefe'}}>
+                      <td style={{padding:'9px 12px',fontFamily:'monospace',fontWeight:800,color:'#059669',fontSize:11}}>{ot.numero_ot}</td>
+                      <td style={{padding:'9px 12px'}}><span style={{background:ot.type_ot==='urgence'?'#fee2e2':ot.type_ot==='preventif'?'#dbeafe':'#f3f4f6',color:ot.type_ot==='urgence'?'#dc2626':ot.type_ot==='preventif'?'#1d4ed8':'#374151',padding:'2px 6px',borderRadius:20,fontSize:10,fontWeight:700}}>{ot.type_ot}</span></td>
+                      <td style={{padding:'9px 12px',fontSize:11}}>
+                        <div style={{fontWeight:600,color:'#059669'}}>{ot.equipement_code||'—'}</div>
+                        <div style={{fontSize:10,color:'#9ca3af'}}>{ot.equipement_designation||''}</div>
+                      </td>
+                      <td style={{padding:'9px 12px',fontWeight:500,maxWidth:200}}>{ot.titre}</td>
+                      <td style={{padding:'9px 12px'}}><span style={{background:pc.bg,color:pc.tx,padding:'2px 6px',borderRadius:20,fontSize:10,fontWeight:700}}>{ot.priorite}</span></td>
+                      <td style={{padding:'9px 12px',fontSize:11,color:'#6b7280'}}>{ot.technicien_nom||'—'}</td>
+                      <td style={{padding:'9px 12px',fontSize:11,color:'#6b7280'}}>{ot.date_planifiee?new Date(ot.date_planifiee).toLocaleDateString('fr-FR'):new Date(ot.date_demande).toLocaleDateString('fr-FR')}</td>
+                      <td style={{padding:'9px 12px',fontSize:12,fontWeight:600}}>{ot.cout_total>0?`${parseFloat(ot.cout_total).toLocaleString('fr-FR')} FCFA`:'—'}</td>
+                      <td style={{padding:'9px 12px'}}><span style={{background:sc.bg,color:sc.tx,padding:'2px 8px',borderRadius:20,fontSize:10,fontWeight:700}}>{ot.statut}</span></td>
+                      <td style={{padding:'9px 12px'}}>
+                        <div style={{display:'flex',gap:4'}}>
+                          <button onClick={()=>ouvrir('ot',{...ot})}
+                            style={{background:'#fef3c7',color:'#92400e',border:'none',padding:'3px 7px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>✏</button>
+                          {ot.statut==='ouvert'&&<button onClick={()=>changerStatutOT(ot,'en_cours')}
+                            style={{background:'#dcfce7',color:'#15803d',border:'none',padding:'3px 7px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>▶</button>}
+                          {ot.statut==='en_cours'&&<button onClick={()=>ouvrir('ot',{...ot,statut:'termine'})}
+                            style={{background:'#dbeafe',color:'#1d4ed8',border:'none',padding:'3px 7px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>✓</button>}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {ots.length===0&&<div style={{textAlign:'center',padding:40,color:'#9ca3af'}}><div style={{fontSize:36,marginBottom:8}}>🔧</div><p>Aucun ordre de travail</p></div>}
+          </div>
+        </div>
+      )}
+
+      {/* ══ PLANS MAINTENANCE ══ */}
+      {onglet==='plans' && (
+        <div>
+          <div style={{display:'flex',justifyContent:'flex-end',marginBottom:16}}>
+            <button onClick={()=>ouvrir('plan',{periodicite_type:'jours',periodicite_valeur:'30',type_maintenance:'preventive'})}
+              style={{background:'#059669',color:'#fff',border:'none',padding:'9px 18px',borderRadius:8,cursor:'pointer',fontWeight:700}}>
+              + Nouveau plan MP
+            </button>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(320px,1fr))',gap:12}}>
+            {plans.map(pm=>{
+              const echeance = pm.prochaine_echeance ? new Date(pm.prochaine_echeance) : null;
+              const jours = echeance ? Math.ceil((echeance-new Date())/86400000) : null;
+              const urgent = jours!==null && jours<=7;
+              const proche = jours!==null && jours<=30;
+              return (
+                <div key={pm.id} style={{background:'#fff',borderRadius:12,border:`2px solid ${urgent?'#fca5a5':proche?'#fde68a':'#bbf7d0'}`,padding:16}}>
+                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:8}}>
+                    <div>
+                      <div style={{fontWeight:700,color:'#059669',fontSize:13}}>{pm.equipement_code}</div>
+                      <div style={{fontWeight:600,fontSize:14}}>{pm.titre}</div>
+                    </div>
+                    <span style={{background:urgent?'#fee2e2':proche?'#fef3c7':'#dcfce7',color:urgent?'#dc2626':proche?'#92400e':'#15803d',padding:'4px 10px',borderRadius:20,fontSize:11,fontWeight:800,whiteSpace:'nowrap'}}>
+                      {jours!==null?`J${jours>0?'+':''}${jours}`:'—'}
+                    </span>
+                  </div>
+                  <div style={{fontSize:11,color:'#6b7280',marginBottom:8}}>
+                    <div>⏱ Tous les {pm.periodicite_valeur} {pm.periodicite_type} | {pm.duree_estimee_h}h</div>
+                    <div>👤 {pm.technicien_nom||'Non assigné'}</div>
+                    <div>📅 Prochaine: {echeance?echeance.toLocaleDateString('fr-FR'):'—'}</div>
+                  </div>
+                  <div style={{display:'flex',gap:6}}>
+                    <button onClick={()=>genererOT(pm.id)}
+                      style={{background:'#059669',color:'#fff',border:'none',padding:'5px 10px',borderRadius:6,cursor:'pointer',fontSize:11,fontWeight:700}}>
+                      ▶ Générer OT
+                    </button>
+                    <button onClick={()=>ouvrir('plan',{...pm})}
+                      style={{background:'#f3f4f6',border:'none',padding:'5px 10px',borderRadius:6,cursor:'pointer',fontSize:11}}>
+                      ✏ Modifier
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+            {plans.length===0&&<div style={{textAlign:'center',padding:60,color:'#9ca3af',gridColumn:'1/-1'}}><div style={{fontSize:40,marginBottom:12}}>📅</div><p>Aucun plan de maintenance</p></div>}
+          </div>
+        </div>
+      )}
+
+      {/* ══ PIÈCES DÉTACHÉES ══ */}
+      {onglet==='pieces' && (
+        <div>
+          <div style={{display:'flex',gap:8,marginBottom:16,alignItems:'center'}}>
+            <button onClick={()=>ouvrir('piece',{unite:'pcs',qte_minimum:'2'})}
+              style={{background:'#059669',color:'#fff',border:'none',padding:'9px 18px',borderRadius:8,cursor:'pointer',fontWeight:700,marginLeft:'auto'}}>
+              + Nouvelle pièce
+            </button>
+          </div>
+          <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',overflow:'auto'}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:13,minWidth:600}}>
+              <thead>
+                <tr style={{background:'#f0fdf4'}}>
+                  {['Code','Désignation','Famille','Stock','Mini','Prix unit.','Valeur stock','Emplacement','Alerte'].map(h=>(
+                    <th key={h} style={{padding:'10px 12px',textAlign:'left',fontWeight:700,color:'#059669',borderBottom:'2px solid #bbf7d0'}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {pieces.map((p,i)=>{
+                  const alerte = p.qte_stock <= p.qte_minimum;
+                  const valeur = parseFloat(p.qte_stock||0) * parseFloat(p.prix_unitaire||0);
+                  return (
+                    <tr key={p.id} style={{borderBottom:'1px solid #f0fdf4',background:alerte?'#fff5f5':i%2===0?'#fff':'#f9fefe'}}>
+                      <td style={{padding:'9px 12px',fontFamily:'monospace',fontWeight:700,color:'#059669',fontSize:11}}>{p.code}</td>
+                      <td style={{padding:'9px 12px',fontWeight:500}}>{p.designation}</td>
+                      <td style={{padding:'9px 12px',fontSize:11,color:'#6b7280'}}>{p.famille||'—'}</td>
+                      <td style={{padding:'9px 12px',fontWeight:800,color:alerte?'#dc2626':'#15803d',fontSize:14}}>{p.qte_stock} {p.unite}</td>
+                      <td style={{padding:'9px 12px',color:'#6b7280'}}>{p.qte_minimum}</td>
+                      <td style={{padding:'9px 12px'}}>{parseFloat(p.prix_unitaire||0).toLocaleString('fr-FR')} FCFA</td>
+                      <td style={{padding:'9px 12px',fontWeight:600}}>{valeur.toLocaleString('fr-FR')} FCFA</td>
+                      <td style={{padding:'9px 12px',fontSize:11,color:'#6b7280'}}>{p.emplacement_magasin||'—'}</td>
+                      <td style={{padding:'9px 12px'}}>
+                        {alerte&&<span style={{background:'#fee2e2',color:'#dc2626',padding:'2px 8px',borderRadius:20,fontSize:10,fontWeight:700}}>⚠ Stock bas</span>}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {pieces.length===0&&<div style={{textAlign:'center',padding:40,color:'#9ca3af'}}><div style={{fontSize:36,marginBottom:8}}>🔩</div><p>Aucune pièce détachée</p></div>}
+          </div>
+        </div>
+      )}
+
+      {/* ══ HISTORIQUE PANNES ══ */}
+      {onglet==='pannes' && (
+        <div>
+          <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',overflow:'auto'}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:13,minWidth:700}}>
+              <thead>
+                <tr style={{background:'#fef2f2'}}>
+                  {['Date','Équipement','Symptômes','Cause','Arrêt (h)','MTTR (h)','Coût','OT'].map(h=>(
+                    <th key={h} style={{padding:'10px 12px',textAlign:'left',fontWeight:700,color:'#dc2626',borderBottom:'2px solid #fecaca',whiteSpace:'nowrap'}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {pannes.map((p,i)=>(
+                  <tr key={p.id} style={{borderBottom:'1px solid #fef2f2',background:i%2===0?'#fff':'#fff5f5'}}>
+                    <td style={{padding:'9px 12px',fontSize:11,color:'#6b7280'}}>{new Date(p.date_panne).toLocaleDateString('fr-FR')}</td>
+                    <td style={{padding:'9px 12px',fontWeight:600,color:'#059669'}}>{p.eq_code}</td>
+                    <td style={{padding:'9px 12px',maxWidth:200,fontSize:12}}>{p.symptomes}</td>
+                    <td style={{padding:'9px 12px',fontSize:12,color:'#6b7280'}}>{p.cause||'—'}</td>
+                    <td style={{padding:'9px 12px',fontWeight:700,color:'#dc2626'}}>{parseFloat(p.duree_arret_h||0).toFixed(1)}</td>
+                    <td style={{padding:'9px 12px',color:'#92400e'}}>{p.mttr?parseFloat(p.mttr).toFixed(1):'—'}</td>
+                    <td style={{padding:'9px 12px'}}>{p.cout_panne>0?`${parseFloat(p.cout_panne).toLocaleString('fr-FR')} FCFA`:'—'}</td>
+                    <td style={{padding:'9px 12px',fontFamily:'monospace',fontSize:11,color:'#059669'}}>{p.ot_id?'Lié':'—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {pannes.length===0&&<div style={{textAlign:'center',padding:40,color:'#9ca3af'}}><div style={{fontSize:36,marginBottom:8}}>⚡</div><p>Aucune panne enregistrée</p></div>}
+          </div>
+        </div>
+      )}
+
+      {/* ══ FORMULAIRES ══ */}
+      {showForm && (
+        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:60,overflowY:'auto'}}>
+          <div style={{background:'#fff',borderRadius:14,width:'95%',maxWidth:720,padding:24,maxHeight:'85vh',overflowY:'auto'}}>
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:20}}>
+              <h3 style={{margin:0,color:'#059669',fontSize:16,fontWeight:800}}>
+                {formType==='equipement'?'🏭 Équipement':formType==='ot'?'🔧 Ordre de travail':formType==='plan'?'📅 Plan de maintenance':'🔩 Pièce détachée'}
+              </h3>
+              <button onClick={()=>setShowForm(false)} style={{background:'none',border:'none',fontSize:20,cursor:'pointer',color:'#9ca3af'}}>✕</button>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:12,marginBottom:16}}>
+
+              {formType==='equipement' && <>
+                <F label="Code *" k="code" ph="EQ-001" required/>
+                <F label="Désignation *" k="designation" ph="Extrudeuse PP" required/>
+                <S label="Type" k="type_equipement" opts={[{v:'machine',l:'Machine'},{v:'installation',l:'Installation'},{v:'vehicule',l:'Véhicule'},{v:'outillage',l:'Outillage'},{v:'informatique',l:'Informatique'},{v:'autre',l:'Autre'}]}/>
+                <S label="Criticité" k="criticite" opts={[{v:'critique',l:'🔴 Critique'},{v:'importante',l:'🟠 Importante'},{v:'normale',l:'🔵 Normale'},{v:'faible',l:'⚪ Faible'}]}/>
+                <S label="Statut" k="statut" opts={[{v:'en_service',l:'✅ En service'},{v:'en_panne',l:'🔴 En panne'},{v:'en_maintenance',l:'🔧 En maintenance'},{v:'hors_service',l:'⛔ Hors service'}]}/>
+                <S label="Atelier" k="atelier_id" opts={ateliers.map(a=>({v:String(a.id),l:`${a.code} — ${a.libelle}`}))}/>
+                <F label="Localisation" k="localisation" ph="Zone A, Ligne 2..."/>
+                <F label="Marque" k="marque" ph="Battenfeld, Engel..."/>
+                <F label="Modèle" k="modele" ph="EM 80/350"/>
+                <F label="N° Série" k="numero_serie" ph="SN-2021-001"/>
+                <F label="Puissance" k="puissance" ph="55 kW"/>
+                <F label="Date acquisition" k="date_acquisition" type="date"/>
+                <F label="Date mise en service" k="date_mise_en_service" type="date"/>
+                <F label="Date fin garantie" k="date_fin_garantie" type="date"/>
+                <F label="Valeur acquisition (FCFA)" k="valeur_acquisition" type="number"/>
+                <F label="Compteur heures" k="compteur_heures" type="number" ph="0"/>
+                <S label="Responsable" k="responsable_id" opts={utilisateurs.map(u=>({v:u.id,l:`${u.prenom} ${u.nom}`}))}/>
+                <div style={{gridColumn:'1/-1'}}><F label="Notes" k="notes" ph="Informations complémentaires..."/></div>
+              </>}
+
+              {formType==='ot' && <>
+                <S label="Type OT *" k="type_ot" required opts={[{v:'curatif',l:'🔧 Curatif'},{v:'preventif',l:'📅 Préventif'},{v:'amelioratif',l:'⬆ Amélioratif'},{v:'urgence',l:'🚨 Urgence'}]}/>
+                <S label="Priorité" k="priorite" opts={[{v:'urgente',l:'🔴 Urgente'},{v:'haute',l:'🟠 Haute'},{v:'normale',l:'🟡 Normale'},{v:'basse',l:'⚪ Basse'}]}/>
+                <S label="Équipement" k="equipement_id" opts={equipements.map(e=>({v:e.id,l:`${e.code} — ${e.designation}`}))}/>
+                <F label="Titre *" k="titre" ph="Remplacement joint..." required/>
+                <F label="Date planifiée" k="date_planifiee" type="date"/>
+                <F label="Durée estimée (h)" k="duree_estimee_h" type="number" ph="1"/>
+                <S label="Technicien" k="technicien_id" opts={utilisateurs.map(u=>({v:u.id,l:`${u.prenom} ${u.nom}`}))}/>
+                <S label="Statut" k="statut" opts={[{v:'ouvert',l:'Ouvert'},{v:'planifie',l:'Planifié'},{v:'en_cours',l:'En cours'},{v:'en_attente_pieces',l:'Attente pièces'},{v:'termine',l:'Terminé'},{v:'annule',l:'Annulé'}]}/>
+                <div style={{gridColumn:'1/-1',display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+                  <div><label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>Symptômes</label>
+                    <textarea value={form.symptomes||''} onChange={e=>setForm({...form,symptomes:e.target.value})} rows={2}
+                      style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13,boxSizing:'border-box',resize:'vertical'}}/></div>
+                  <div><label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>Description</label>
+                    <textarea value={form.description||''} onChange={e=>setForm({...form,description:e.target.value})} rows={2}
+                      style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13,boxSizing:'border-box',resize:'vertical'}}/></div>
+                </div>
+                {form.statut==='termine'&&<>
+                  <div style={{gridColumn:'1/-1'}}><label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>Travaux réalisés</label>
+                    <textarea value={form.travaux_realises||''} onChange={e=>setForm({...form,travaux_realises:e.target.value})} rows={2}
+                      style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13,boxSizing:'border-box',resize:'vertical'}}/></div>
+                  <div style={{gridColumn:'1/-1'}}><label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>Cause de la panne</label>
+                    <textarea value={form.cause_panne||''} onChange={e=>setForm({...form,cause_panne:e.target.value})} rows={2}
+                      style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13,boxSizing:'border-box',resize:'vertical'}}/></div>
+                  <F label="Coût MO (FCFA)" k="cout_main_oeuvre" type="number" ph="0"/>
+                  <F label="Coût pièces (FCFA)" k="cout_pieces" type="number" ph="0"/>
+                  <F label="Durée arrêt (h)" k="duree_arret_h" type="number" ph="0"/>
+                </>}
+                <div style={{display:'flex',alignItems:'center',gap:8,gridColumn:'1/-1'}}>
+                  <input type="checkbox" id="arretMachine" checked={!!form.arret_machine}
+                    onChange={e=>setForm({...form,arret_machine:e.target.checked})}/>
+                  <label htmlFor="arretMachine" style={{fontSize:13,fontWeight:600,color:'#dc2626'}}>⚠ Arrêt machine (impact production)</label>
+                </div>
+              </>}
+
+              {formType==='plan' && <>
+                <S label="Équipement *" k="equipement_id" required opts={equipements.map(e=>({v:e.id,l:`${e.code} — ${e.designation}`}))}/>
+                <F label="Titre *" k="titre" ph="Vidange huile, Graissage..." required/>
+                <S label="Type" k="type_maintenance" opts={[{v:'preventive',l:'Préventive'},{v:'predictive',l:'Prédictive'},{v:'conditionnelle',l:'Conditionnelle'}]}/>
+                <S label="Périodicité" k="periodicite_type" opts={[{v:'jours',l:'Jours'},{v:'semaines',l:'Semaines'},{v:'mois',l:'Mois'},{v:'heures',l:'Heures compteur'}]}/>
+                <F label="Valeur période" k="periodicite_valeur" type="number" ph="30"/>
+                <F label="Durée estimée (h)" k="duree_estimee_h" type="number" ph="1"/>
+                <F label="Coût estimé (FCFA)" k="cout_estime" type="number" ph="0"/>
+                <S label="Technicien" k="technicien_id" opts={utilisateurs.map(u=>({v:u.id,l:`${u.prenom} ${u.nom}`}))}/>
+                <F label="Dernière réalisation" k="derniere_realisation" type="date"/>
+                <div style={{gridColumn:'1/-1'}}><F label="Description / Procédure" k="description" ph="Étapes à suivre..."/></div>
+              </>}
+
+              {formType==='piece' && <>
+                <F label="Code *" k="code" ph="PD-001" required/>
+                <F label="Désignation *" k="designation" ph="Joint torique 50x3" required/>
+                <F label="Famille" k="famille" ph="Joint, Roulement, Courroie..."/>
+                <S label="Unité" k="unite" opts={[{v:'pcs',l:'Pièces'},{v:'kg',l:'Kg'},{v:'m',l:'Mètre'},{v:'l',l:'Litre'},{v:'boite',l:'Boîte'}]}/>
+                <F label="Stock actuel" k="qte_stock" type="number" ph="0"/>
+                <F label="Stock minimum" k="qte_minimum" type="number" ph="2"/>
+                <F label="Prix unitaire (FCFA)" k="prix_unitaire" type="number" ph="0"/>
+                <F label="Emplacement magasin" k="emplacement_magasin" ph="Étagère A2, Case 3..."/>
+                <S label="Fournisseur" k="fournisseur_id" opts={fournisseurs.map(f=>({v:f.id,l:f.nom}))}/>
+                <F label="Réf. fournisseur" k="reference_fournisseur" ph="REF-FRN-001"/>
+                <F label="Délai livraison (j)" k="delai_livraison_jours" type="number" ph="7"/>
+              </>}
+
+            </div>
+            <div style={{display:'flex',gap:10,paddingTop:16,borderTop:'1px solid #f3f4f6'}}>
+              <button onClick={sauvegarder}
+                style={{background:'#059669',color:'#fff',border:'none',padding:'12px 32px',borderRadius:10,cursor:'pointer',fontWeight:800,fontSize:14}}>
                 ✓ Enregistrer
               </button>
               <button onClick={()=>setShowForm(false)}

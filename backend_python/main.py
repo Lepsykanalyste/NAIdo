@@ -26,6 +26,13 @@ app = FastAPI(title="NAIdo API", version="4.0", lifespan=lifespan)
 
 # Import stock routes module
 from stock_routes import inventaire_handler, resume_handler, mouvement_handler
+# Import GMAO routes module
+from gmao_routes import (
+    gmao_dashboard, get_equipements, create_equipement,
+    get_ots, create_ot, update_ot,
+    get_plans, create_plan, generer_ot_depuis_plan,
+    get_pieces, get_indicateurs_equipement
+)
 # Import RH routes module
 from rh_routes import (
     rh_dashboard, get_postes, get_employes, create_employe,
@@ -1084,6 +1091,195 @@ async def api_get_normes(user=Depends(get_current_user)):
         rows = await conn.fetch("SELECT * FROM normes_qhse WHERE actif=true ORDER BY code")
         return [dict(r) for r in rows]
 
+
+
+# ══════════════════════════════════════════════════════════════
+# ROUTES GMAO
+# ══════════════════════════════════════════════════════════════
+
+@app.get("/api/gmao/dashboard")
+async def api_gmao_dashboard(user=Depends(get_current_user)):
+    return await gmao_dashboard(pool)
+
+# ── ÉQUIPEMENTS ───────────────────────────────────────────────
+@app.get("/api/gmao/equipements")
+async def api_get_equipements(search: Optional[str]=None, statut: Optional[str]=None,
+                               atelier_id: Optional[str]=None, criticite: Optional[str]=None,
+                               user=Depends(get_current_user)):
+    return await get_equipements(pool, search, statut, atelier_id, criticite)
+
+@app.get("/api/gmao/equipements/{eq_id}")
+async def api_get_equipement(eq_id: str, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT * FROM equipements WHERE id=$1", eq_id)
+        if not row: raise HTTPException(404, "Équipement introuvable")
+        return dict(row)
+
+@app.post("/api/gmao/equipements")
+async def api_create_equipement(payload: dict, user=Depends(get_current_user)):
+    try: return await create_equipement(pool, payload, user.get("id"))
+    except ValueError as e: raise HTTPException(400, str(e))
+
+@app.put("/api/gmao/equipements/{eq_id}")
+async def api_update_equipement(eq_id: str, payload: dict, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        d = payload
+        row = await conn.fetchrow("""
+            UPDATE equipements SET
+                designation=$1, statut=$2, criticite=$3,
+                atelier_id=$4, localisation=$5,
+                responsable_id=$6, compteur_heures=$7, notes=$8
+            WHERE id=$9 RETURNING *
+        """,
+            d.get("designation"), d.get("statut","en_service"),
+            d.get("criticite","normale"),
+            int(d["atelier_id"]) if d.get("atelier_id") else None,
+            d.get("localisation"), d.get("responsable_id") or None,
+            float(d.get("compteur_heures",0) or 0),
+            d.get("notes"), eq_id
+        )
+        return dict(row)
+
+@app.get("/api/gmao/equipements/{eq_id}/indicateurs")
+async def api_indicateurs_equipement(eq_id: str, user=Depends(get_current_user)):
+    try: return await get_indicateurs_equipement(pool, eq_id)
+    except ValueError as e: raise HTTPException(404, str(e))
+
+@app.get("/api/gmao/disponibilite")
+async def api_disponibilite(user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("SELECT * FROM vue_disponibilite_equipements")
+        return [dict(r) for r in rows]
+
+# ── ORDRES DE TRAVAIL ─────────────────────────────────────────
+@app.get("/api/gmao/ots")
+async def api_get_ots(statut: Optional[str]=None, type_ot: Optional[str]=None,
+                       equipement_id: Optional[str]=None, priorite: Optional[str]=None,
+                       user=Depends(get_current_user)):
+    return await get_ots(pool, statut, type_ot, equipement_id, priorite)
+
+@app.get("/api/gmao/ots/{ot_id}")
+async def api_get_ot(ot_id: str, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("""
+            SELECT ot.*, e.code AS equipement_code, e.designation AS equipement_designation,
+                u.nom||' '||u.prenom AS technicien_nom
+            FROM ordres_travail ot
+            LEFT JOIN equipements e ON e.id=ot.equipement_id
+            LEFT JOIN utilisateurs u ON u.id=ot.technicien_id
+            WHERE ot.id=$1
+        """, ot_id)
+        if not row: raise HTTPException(404, "OT introuvable")
+        return dict(row)
+
+@app.post("/api/gmao/ots")
+async def api_create_ot(payload: dict, user=Depends(get_current_user)):
+    try: return await create_ot(pool, payload, user.get("id"))
+    except Exception as e: raise HTTPException(400, str(e))
+
+@app.put("/api/gmao/ots/{ot_id}")
+async def api_update_ot(ot_id: str, payload: dict, user=Depends(get_current_user)):
+    try: return await update_ot(pool, ot_id, payload, user.get("id"))
+    except Exception as e: raise HTTPException(400, str(e))
+
+# ── PLANS DE MAINTENANCE ──────────────────────────────────────
+@app.get("/api/gmao/plans")
+async def api_get_plans(equipement_id: Optional[str]=None, echeance_proche: bool=False,
+                         user=Depends(get_current_user)):
+    return await get_plans(pool, equipement_id, echeance_proche)
+
+@app.post("/api/gmao/plans")
+async def api_create_plan(payload: dict, user=Depends(get_current_user)):
+    try: return await create_plan(pool, payload, user.get("id"))
+    except Exception as e: raise HTTPException(400, str(e))
+
+@app.post("/api/gmao/plans/{plan_id}/generer-ot")
+async def api_generer_ot(plan_id: str, user=Depends(get_current_user)):
+    try: return await generer_ot_depuis_plan(pool, plan_id, user.get("id"))
+    except ValueError as e: raise HTTPException(400, str(e))
+
+@app.put("/api/gmao/plans/{plan_id}/realiser")
+async def api_realiser_plan(plan_id: str, payload: dict, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        date_real = payload.get("date_realisation") or date.today().isoformat()
+        plan = await conn.fetchrow("SELECT * FROM plans_maintenance WHERE id=$1", plan_id)
+        if not plan: raise HTTPException(404, "Plan introuvable")
+        from datetime import timedelta
+        p, pt = plan["periodicite_valeur"], plan["periodicite_type"]
+        d = date.fromisoformat(date_real)
+        if pt=="jours": prochaine = d+timedelta(days=p)
+        elif pt=="semaines": prochaine = d+timedelta(weeks=p)
+        else: prochaine = d+timedelta(days=p*30)
+        row = await conn.fetchrow(
+            "UPDATE plans_maintenance SET derniere_realisation=$1, prochaine_echeance=$2 WHERE id=$3 RETURNING *",
+            date_real, prochaine.isoformat(), plan_id
+        )
+        return dict(row)
+
+# ── PIÈCES DÉTACHÉES ──────────────────────────────────────────
+@app.get("/api/gmao/pieces")
+async def api_get_pieces(search: Optional[str]=None, alerte_stock: bool=False,
+                          user=Depends(get_current_user)):
+    return await get_pieces(pool, search, alerte_stock)
+
+@app.post("/api/gmao/pieces")
+async def api_create_piece(payload: dict, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        d = payload
+        try:
+            row = await conn.fetchrow("""
+                INSERT INTO pieces_detachees (
+                    code, designation, famille, unite,
+                    qte_stock, qte_minimum, qte_maximum, prix_unitaire,
+                    fournisseur_id, reference_fournisseur,
+                    delai_livraison_jours, emplacement_magasin
+                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+                RETURNING *
+            """,
+                d["code"].upper(), d["designation"], d.get("famille"), d.get("unite","pcs"),
+                int(d.get("qte_stock",0) or 0), int(d.get("qte_minimum",0) or 0),
+                int(d.get("qte_maximum",100) or 100), float(d.get("prix_unitaire",0) or 0),
+                d.get("fournisseur_id") or None, d.get("reference_fournisseur"),
+                int(d.get("delai_livraison_jours",7) or 7), d.get("emplacement_magasin")
+            )
+            return dict(row)
+        except Exception as e:
+            raise HTTPException(400, str(e))
+
+@app.put("/api/gmao/pieces/{piece_id}/stock")
+async def api_update_stock_piece(piece_id: str, payload: dict, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        mouvement = payload.get("mouvement","entree")
+        qte = int(payload.get("qte",0))
+        if mouvement == "entree":
+            row = await conn.fetchrow(
+                "UPDATE pieces_detachees SET qte_stock=qte_stock+$1 WHERE id=$2 RETURNING *",
+                qte, piece_id
+            )
+        else:
+            row = await conn.fetchrow(
+                "UPDATE pieces_detachees SET qte_stock=GREATEST(0,qte_stock-$1) WHERE id=$2 RETURNING *",
+                qte, piece_id
+            )
+        return dict(row)
+
+# ── HISTORIQUE PANNES ─────────────────────────────────────────
+@app.get("/api/gmao/pannes")
+async def api_get_pannes(equipement_id: Optional[str]=None, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        q = """
+            SELECT hp.*, e.code AS eq_code, e.designation AS eq_designation
+            FROM historique_pannes hp
+            JOIN equipements e ON e.id=hp.equipement_id
+            WHERE 1=1
+        """
+        params = []
+        if equipement_id:
+            params.append(equipement_id)
+            q += f" AND hp.equipement_id=${len(params)}"
+        q += " ORDER BY hp.date_panne DESC LIMIT 100"
+        rows = await conn.fetch(q, *params)
+        return [dict(r) for r in rows]
 
 # ══════════════════════════════════════════════════════════════
 # ROUTES RH
