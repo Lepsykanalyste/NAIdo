@@ -154,3 +154,22 @@ ON CONFLICT (nom) DO NOTHING;
 UPDATE utilisateurs SET role_id = (SELECT id FROM roles WHERE nom='super_admin') WHERE login='admin';
 
 SELECT 'Migration corrective v3 terminée avec succès' AS statut;
+
+-- Colonnes spécifiques aux matières premières
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS fournisseur VARCHAR(200);
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS reference_fournisseur VARCHAR(100);
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS densite NUMERIC(8,4);
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS temperature_fusion NUMERIC(6,1);
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS temperature_traitement NUMERIC(6,1);
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS conditions_stockage TEXT;
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS risques_securite TEXT;
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS epi_requis TEXT;
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS certifications TEXT;
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS dluo_jours INTEGER;
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS fiche_securite_path VARCHAR(255);
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS format_lot VARCHAR(100) DEFAULT 'LOT-YYYYMMDD-001';
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS notes TEXT;
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS composition JSONB DEFAULT '[]';
+ALTER TABLE articles ADD COLUMN IF NOT EXISTS matieres_principales JSONB DEFAULT '[]';
+
+SELECT 'Migration matières premières OK' AS statut;

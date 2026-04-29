@@ -39,7 +39,8 @@ const MENU = [
   { id:'planning',    label:'Planning Machines',   icon:'planning',    color:'#0369a1' },
   { id:'rapportjour', label:'Rapports Journaliers',icon:'rapport',     color:'#0f766e' },
   { id:'separator2',  label:'STOCKS & ARTICLES',   separator:true },
-  { id:'articles',    label:'Articles',            icon:'articles',    color:'#7e22ce' },
+  { id:'articles',    label:'Articles (Produits)',  icon:'articles',    color:'#7e22ce' },
+  { id:'matieres',    label:'Matières Premières',   icon:'articles',    color:'#1d4ed8' },
   { id:'stock',       label:'Stock',               icon:'stock',       color:'#6d28d9' },
   { id:'cession',     label:'Bons de Cession',     icon:'cession',     color:'#4338ca' },
   { id:'separator3',  label:'QHSE & MAINTENANCE',  separator:true },
@@ -939,6 +940,386 @@ function Articles() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function MatieresPremières() {
+  const [mps, setMps] = useState([]);
+  const [familles, setFamilles] = useState([]);
+  const [unites, setUnites] = useState([]);
+  const [search, setSearch] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [detail, setDetail] = useState(null);
+  const [files, setFiles] = useState({ fiche_technique: null, fiche_securite: null, photo: null });
+  const [form, setForm] = useState({
+    code:'', designation:'', famille_id:'', unite_mesure_id:'',
+    type_article:'matiere_premiere',
+    fournisseur:'', reference_fournisseur:'',
+    couleur:'', epaisseur_mm:'',
+    poids_theorique_kg:'', densite:'',
+    temperature_fusion:'', temperature_traitement:'',
+    prix_achat:'0', devise:'DZD',
+    stock_mini:'0', stock_maxi:'', delai_appro_jours:'14',
+    dlc_jours:'', dluo_jours:'',
+    temperature_stockage_min:'', temperature_stockage_max:'',
+    conditions_stockage:'',
+    allergenes:'', points_ccp:false,
+    normes_iso:'', certifications:'',
+    risques_securite:'', epi_requis:'',
+    tracabilite_type:'lot', format_lot:'LOT-YYYYMMDD-001',
+    notes:'',
+  });
+
+  const chargerRefs = async () => {
+    try {
+      const [f, u] = await Promise.all([
+        axios.get(`${API}/referentiels/familles`),
+        axios.get(`${API}/referentiels/unites`),
+      ]);
+      setFamilles(f.data);
+      setUnites(u.data);
+    } catch {}
+  };
+
+  const charger = async () => {
+    try {
+      const { data } = await axios.get(`${API}/articles?type_article=matiere_premiere${search ? `&search=${search}` : ''}`);
+      setMps(data);
+    } catch {}
+  };
+
+  useEffect(() => { chargerRefs(); charger(); }, [search]);
+
+  const ouvrir = async () => {
+    await chargerRefs();
+    setFiles({ fiche_technique: null, fiche_securite: null, photo: null });
+    setForm({ code:'', designation:'', famille_id:'', unite_mesure_id:'', type_article:'matiere_premiere', fournisseur:'', reference_fournisseur:'', couleur:'', epaisseur_mm:'', poids_theorique_kg:'', densite:'', temperature_fusion:'', temperature_traitement:'', prix_achat:'0', devise:'DZD', stock_mini:'0', stock_maxi:'', delai_appro_jours:'14', dlc_jours:'', dluo_jours:'', temperature_stockage_min:'', temperature_stockage_max:'', conditions_stockage:'', allergenes:'', points_ccp:false, normes_iso:'', certifications:'', risques_securite:'', epi_requis:'', tracabilite_type:'lot', format_lot:'LOT-YYYYMMDD-001', notes:'' });
+    setShowForm(true);
+  };
+
+  const creer = async () => {
+    if (!form.code.trim()) return toast.error('Code obligatoire');
+    if (!form.designation.trim()) return toast.error('Désignation obligatoire');
+    try {
+      const fd = new FormData();
+      Object.entries(form).forEach(([k, v]) => { if (v !== '' && v !== null && v !== undefined) fd.append(k, v); });
+      if (files.fiche_technique) fd.append('fiche_technique', files.fiche_technique);
+      if (files.fiche_securite) fd.append('fiche_securite', files.fiche_securite);
+      if (files.photo) fd.append('photo', files.photo);
+      await axios.post(`${API}/articles`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      toast.success(`✓ Matière première ${form.code} créée`);
+      setShowForm(false);
+      charger();
+    } catch (err) { toast.error(err.response?.data?.error || 'Erreur création'); }
+  };
+
+  const F = ({ label, k, type='text', ph='', note='' }) => (
+    <div>
+      <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>
+        {label}
+        {note && <span style={{ fontSize:10, color:'#9ca3af', marginLeft:5 }}>{note}</span>}
+      </label>
+      <input type={type} value={form[k]||''} placeholder={ph}
+        onChange={e => setForm({...form,[k]:e.target.value})}
+        style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'9px', fontSize:13,
+          boxSizing:'border-box', textAlign:type==='number'?'center':'left' }}/>
+    </div>
+  );
+
+  const S = ({ label, k, opts }) => (
+    <div>
+      <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>{label}</label>
+      <select value={form[k]||''} onChange={e => setForm({...form,[k]:e.target.value})}
+        style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'9px', fontSize:13 }}>
+        <option value="">-- Sélectionner --</option>
+        {opts.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+      </select>
+    </div>
+  );
+
+  const Fichier = ({ label, key_name, accept, icon }) => (
+    <div>
+      <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>{icon} {label}</label>
+      <label style={{ display:'block', border:`2px dashed ${files[key_name] ? '#16a34a' : '#d1d5db'}`,
+        borderRadius:8, padding:'10px 14px', cursor:'pointer', background: files[key_name] ? '#f0fdf4' : '#fafafa',
+        fontSize:12, color: files[key_name] ? '#15803d' : '#6b7280', textAlign:'center' }}>
+        {files[key_name] ? `✓ ${files[key_name].name}` : `Cliquez pour choisir (${accept})`}
+        <input type="file" accept={accept} style={{ display:'none' }}
+          onChange={e => setFiles({...files, [key_name]: e.target.files[0]})}/>
+      </label>
+    </div>
+  );
+
+  const TYPES_MP = {
+    plastique:   { bg:'#dbeafe', tx:'#1d4ed8' },
+    colorant:    { bg:'#fce7f3', tx:'#9d174d' },
+    additif:     { bg:'#fef3c7', tx:'#92400e' },
+    chimique:    { bg:'#fee2e2', tx:'#dc2626' },
+    emballage:   { bg:'#f3e8ff', tx:'#7e22ce' },
+    autre:       { bg:'#f3f4f6', tx:'#374151' },
+  };
+
+  return (
+    <div>
+      <div style={{ display:'flex', gap:10, marginBottom:16, alignItems:'center' }}>
+        <input value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="🔍 Code, désignation, fournisseur..."
+          style={{ flex:1, border:'1px solid #d1d5db', borderRadius:8, padding:'9px 14px', fontSize:13 }}/>
+        <button onClick={ouvrir}
+          style={{ background:'#1d4ed8', color:'#fff', border:'none', padding:'9px 20px', borderRadius:8, cursor:'pointer', fontWeight:700, whiteSpace:'nowrap' }}>
+          + Nouvelle matière première
+        </button>
+      </div>
+
+      {/* ══ FORMULAIRE ══ */}
+      {showForm && (
+        <div style={{ background:'#fff', borderRadius:14, border:'2px solid #93c5fd', marginBottom:20 }}>
+          <div style={{ background:'linear-gradient(135deg,#1d4ed8,#0369a1)', padding:'14px 24px', borderRadius:'12px 12px 0 0', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <span style={{ color:'#fff', fontWeight:800, fontSize:15 }}>🧪 Fiche Matière Première — Création</span>
+            <button onClick={() => setShowForm(false)} style={{ background:'rgba(255,255,255,0.2)', border:'none', color:'#fff', borderRadius:6, padding:'4px 12px', cursor:'pointer' }}>✕</button>
+          </div>
+
+          <div style={{ padding:24, display:'flex', flexDirection:'column', gap:20 }}>
+
+            {/* BLOC 1 — Identification */}
+            <div>
+              <div style={{ fontSize:11, fontWeight:700, color:'#1d4ed8', letterSpacing:1, textTransform:'uppercase', borderBottom:'2px solid #bfdbfe', paddingBottom:6, marginBottom:14 }}>
+                1 · Identification & Fournisseur
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(155px,1fr))', gap:12 }}>
+                <F label="Code *" k="code" ph="MP-PP-001"/>
+                <F label="Désignation *" k="designation" ph="Granulés PP Homopolymère"/>
+                <S label="Famille" k="famille_id" opts={familles.map(f => ({ v:String(f.id), l:f.libelle }))}/>
+                <S label="Unité de mesure" k="unite_mesure_id" opts={unites.map(u => ({ v:String(u.id), l:`${u.code} — ${u.libelle}` }))}/>
+                <F label="Fournisseur" k="fournisseur" ph="Nom du fournisseur"/>
+                <F label="Réf. fournisseur" k="reference_fournisseur" ph="REF-FOUR-001"/>
+                <S label="Traçabilité" k="tracabilite_type" opts={[
+                  { v:'lot', l:'Par numéro de lot' },
+                  { v:'serie', l:'Par numéro de série' },
+                  { v:'aucune', l:'Aucune' },
+                ]}/>
+                <F label="Format n° lot" k="format_lot" ph="LOT-YYYYMMDD-001"/>
+              </div>
+            </div>
+
+            {/* BLOC 2 — Caractéristiques techniques */}
+            <div>
+              <div style={{ fontSize:11, fontWeight:700, color:'#0369a1', letterSpacing:1, textTransform:'uppercase', borderBottom:'2px solid #bae6fd', paddingBottom:6, marginBottom:14 }}>
+                2 · Caractéristiques techniques
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:12 }}>
+                <F label="Couleur / Aspect" k="couleur" ph="Naturel, Blanc..."/>
+                <F label="Densité (g/cm³)" k="densite" type="number" ph="0.900"/>
+                <F label="Poids unitaire (kg)" k="poids_theorique_kg" type="number" ph="0.000"/>
+                <F label="Épaisseur (mm)" k="epaisseur_mm" type="number" ph="0.00"/>
+                <F label="Temp. fusion (°C)" k="temperature_fusion" type="number" ph="165"/>
+                <F label="Temp. traitement (°C)" k="temperature_traitement" type="number" ph="220"/>
+              </div>
+            </div>
+
+            {/* BLOC 3 — Stockage & Qualité */}
+            <div>
+              <div style={{ fontSize:11, fontWeight:700, color:'#15803d', letterSpacing:1, textTransform:'uppercase', borderBottom:'2px solid #bbf7d0', paddingBottom:6, marginBottom:14 }}>
+                3 · Stockage, Conservation & Qualité
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:12 }}>
+                <F label="Prix achat (DZD/unité)" k="prix_achat" type="number" ph="0"/>
+                <F label="Stock minimum" k="stock_mini" type="number" ph="0"/>
+                <F label="Stock maximum" k="stock_maxi" type="number" ph=""/>
+                <F label="Délai appro. (jours)" k="delai_appro_jours" type="number" ph="14"/>
+                <F label="DLC (jours)" k="dlc_jours" type="number" ph="" note="si périssable"/>
+                <F label="DLUO (jours)" k="dluo_jours" type="number" ph="" note="date limite utilisation"/>
+                <F label="Temp. stockage min (°C)" k="temperature_stockage_min" type="number" ph=""/>
+                <F label="Temp. stockage max (°C)" k="temperature_stockage_max" type="number" ph=""/>
+              </div>
+              <div style={{ marginTop:12 }}>
+                <F label="Conditions de stockage" k="conditions_stockage" ph="À l'abri de l'humidité, à l'ombre..."/>
+              </div>
+              <div style={{ marginTop:12, display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                <F label="Normes / Certifications" k="normes_iso" ph="ISO 9001, REACH, RoHS..."/>
+                <F label="Certifications qualité" k="certifications" ph="COA, COC, FDA..."/>
+              </div>
+            </div>
+
+            {/* BLOC 4 — Sécurité (QHSE) */}
+            <div>
+              <div style={{ fontSize:11, fontWeight:700, color:'#dc2626', letterSpacing:1, textTransform:'uppercase', borderBottom:'2px solid #fecaca', paddingBottom:6, marginBottom:14 }}>
+                4 · Sécurité & QHSE
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                <div>
+                  <F label="Risques sécurité / Mentions H" k="risques_securite" ph="H351: Susceptible de provoquer le cancer..."/>
+                </div>
+                <div>
+                  <F label="EPI requis" k="epi_requis" ph="Gants nitrile, lunettes, masque FFP2..."/>
+                </div>
+                <div>
+                  <F label="Allergènes (alimentaire)" k="allergenes" ph="Gluten, Lait, Arachides..."/>
+                </div>
+                <div style={{ display:'flex', alignItems:'center', gap:8, paddingTop:20 }}>
+                  <input type="checkbox" id="chk-mp-ccp" checked={!!form.points_ccp}
+                    onChange={e => setForm({...form, points_ccp:e.target.checked})}
+                    style={{ width:16, height:16, cursor:'pointer' }}/>
+                  <label htmlFor="chk-mp-ccp" style={{ fontSize:13, cursor:'pointer' }}>
+                    Point Critique de Contrôle (CCP) — HACCP
+                  </label>
+                </div>
+              </div>
+              <div style={{ marginTop:12 }}>
+                <F label="Notes / Observations" k="notes" ph="Informations complémentaires..."/>
+              </div>
+            </div>
+
+            {/* BLOC 5 — Documents */}
+            <div>
+              <div style={{ fontSize:11, fontWeight:700, color:'#374151', letterSpacing:1, textTransform:'uppercase', borderBottom:'2px solid #e5e7eb', paddingBottom:6, marginBottom:14 }}>
+                5 · Documents techniques
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
+                <Fichier label="Fiche Technique (TDS)" key_name="fiche_technique" accept=".pdf,.doc,.docx" icon="📄"/>
+                <Fichier label="Fiche de Sécurité (FDS/SDS)" key_name="fiche_securite" accept=".pdf,.doc,.docx" icon="⚠"/>
+                <Fichier label="Photo / Image" key_name="photo" accept=".jpg,.jpeg,.png,.webp" icon="🖼"/>
+              </div>
+              <div style={{ marginTop:10, background:'#f0fdf4', borderRadius:8, padding:'10px 14px', fontSize:12, color:'#15803d' }}>
+                💡 La fiche de sécurité (FDS) est obligatoire pour les matières dangereuses — REACH, CLP. La fiche technique (TDS) contient les paramètres de mise en œuvre.
+              </div>
+            </div>
+
+            {/* Boutons */}
+            <div style={{ display:'flex', gap:12, paddingTop:16, borderTop:'2px solid #f3f4f6' }}>
+              <button onClick={creer}
+                style={{ background:'#1d4ed8', color:'#fff', border:'none', padding:'13px 36px', borderRadius:10, cursor:'pointer', fontWeight:800, fontSize:15 }}>
+                ✓ Créer la matière première
+              </button>
+              <button onClick={() => setShowForm(false)}
+                style={{ background:'#f3f4f6', color:'#374151', border:'none', padding:'13px 24px', borderRadius:10, cursor:'pointer', fontWeight:600 }}>
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ LISTE MATIÈRES ══ */}
+      <div style={{ background:'#fff', borderRadius:14, border:'1px solid #e5e7eb', overflow:'auto' }}>
+        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13, minWidth:700 }}>
+          <thead>
+            <tr style={{ background:'#eff6ff' }}>
+              {['Code','Désignation','Fournisseur','Unité','Prix achat','Stock','Temp. fusion','Docs','Détail'].map(h => (
+                <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:700, color:'#1d4ed8', borderBottom:'2px solid #bfdbfe', whiteSpace:'nowrap' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {mps.map((m, i) => (
+              <tr key={m.id}
+                style={{ borderBottom:'1px solid #eff6ff', background: detail?.id===m.id ? '#eff6ff' : i%2===0?'#fff':'#f8faff', cursor:'pointer' }}
+                onClick={() => setDetail(detail?.id === m.id ? null : m)}>
+                <td style={{ padding:'9px 14px', fontFamily:'monospace', fontWeight:800, color:'#1d4ed8', fontSize:12 }}>{m.code}</td>
+                <td style={{ padding:'9px 14px', fontWeight:500 }}>{m.designation}</td>
+                <td style={{ padding:'9px 14px', color:'#6b7280', fontSize:12 }}>{m.fournisseur||'—'}</td>
+                <td style={{ padding:'9px 14px' }}>
+                  <span style={{ fontFamily:'monospace', background:'#dbeafe', color:'#1d4ed8', padding:'2px 6px', borderRadius:4, fontSize:12, fontWeight:700 }}>
+                    {m.unite_code||'—'}
+                  </span>
+                </td>
+                <td style={{ padding:'9px 14px', fontWeight:600 }}>{m.prix_achat ? `${m.prix_achat} DZD` : '—'}</td>
+                <td style={{ padding:'9px 14px', fontWeight:700,
+                  color: parseFloat(m.stock_mini||0) > 0 && parseFloat(m.stock_total||0) <= parseFloat(m.stock_mini||0) ? '#dc2626' : '#15803d' }}>
+                  {parseFloat(m.stock_total||0).toFixed(1)}
+                </td>
+                <td style={{ padding:'9px 14px', color:'#6b7280' }}>
+                  {m.temperature_fusion ? `${m.temperature_fusion}°C` : '—'}
+                </td>
+                <td style={{ padding:'9px 14px' }}>
+                  <div style={{ display:'flex', gap:4 }}>
+                    {m.fiche_technique_path && (
+                      <a href={m.fiche_technique_path} target="_blank" rel="noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        style={{ background:'#dbeafe', color:'#1d4ed8', padding:'2px 8px', borderRadius:6, fontSize:11, textDecoration:'none', fontWeight:600 }}>
+                        📄 TDS
+                      </a>
+                    )}
+                    {m.fiche_securite_path && (
+                      <a href={m.fiche_securite_path} target="_blank" rel="noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        style={{ background:'#fee2e2', color:'#dc2626', padding:'2px 8px', borderRadius:6, fontSize:11, textDecoration:'none', fontWeight:600 }}>
+                        ⚠ FDS
+                      </a>
+                    )}
+                  </div>
+                </td>
+                <td style={{ padding:'9px 14px', fontSize:11, color:'#9ca3af' }}>
+                  {detail?.id === m.id ? '▲ Fermer' : '▼ Voir'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+        {mps.length === 0 && (
+          <div style={{ textAlign:'center', padding:56, color:'#9ca3af' }}>
+            <div style={{ fontSize:40, marginBottom:12 }}>🧪</div>
+            <p style={{ fontWeight:600, color:'#6b7280' }}>Aucune matière première</p>
+            <p style={{ fontSize:12 }}>Créez vos matières premières : granulés, colorants, additifs, emballages...</p>
+            <button onClick={ouvrir} style={{ background:'#1d4ed8', color:'#fff', border:'none', padding:'10px 24px', borderRadius:8, cursor:'pointer', marginTop:12, fontWeight:600 }}>
+              + Créer la première
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Détail matière */}
+      {detail && (
+        <div style={{ background:'#fff', borderRadius:12, padding:20, border:'2px solid #93c5fd', marginTop:12 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+            <div>
+              <span style={{ fontFamily:'monospace', fontWeight:800, fontSize:16, color:'#1d4ed8' }}>{detail.code}</span>
+              <span style={{ marginLeft:12, fontSize:14, fontWeight:500 }}>{detail.designation}</span>
+            </div>
+            <button onClick={() => setDetail(null)} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'#9ca3af' }}>✕</button>
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))', gap:10, marginBottom:14 }}>
+            {[
+              ['Fournisseur', detail.fournisseur],
+              ['Réf. fournisseur', detail.reference_fournisseur],
+              ['Unité', detail.unite_code],
+              ['Densité', detail.densite ? detail.densite+' g/cm³' : null],
+              ['Poids unitaire', detail.poids_theorique_kg ? detail.poids_theorique_kg+' kg' : null],
+              ['Temp. fusion', detail.temperature_fusion ? detail.temperature_fusion+'°C' : null],
+              ['Temp. traitement', detail.temperature_traitement ? detail.temperature_traitement+'°C' : null],
+              ['Couleur', detail.couleur],
+              ['Prix achat', detail.prix_achat ? detail.prix_achat+' DZD' : null],
+              ['Stock mini', detail.stock_mini||'0'],
+              ['Délai appro.', detail.delai_appro_jours ? detail.delai_appro_jours+' j' : null],
+              ['DLC', detail.dlc_jours ? detail.dlc_jours+' j' : null],
+              ['Temp. stockage', detail.temperature_stockage_min ? `${detail.temperature_stockage_min}→${detail.temperature_stockage_max}°C` : null],
+              ['Normes', detail.normes_iso],
+              ['Certifications', detail.certifications],
+              ['EPI requis', detail.epi_requis],
+              ['CCP HACCP', detail.points_ccp ? '✓ Oui' : 'Non'],
+              ['Traçabilité', detail.tracabilite_type],
+            ].filter(([,v]) => v).map(([l, v]) => (
+              <div key={l} style={{ background:'#eff6ff', borderRadius:8, padding:'8px 12px' }}>
+                <div style={{ fontSize:10, color:'#93c5fd', marginBottom:2 }}>{l}</div>
+                <div style={{ fontWeight:600, fontSize:12, color:'#1d4ed8' }}>{v}</div>
+              </div>
+            ))}
+          </div>
+          {detail.risques_securite && (
+            <div style={{ background:'#fef2f2', borderRadius:8, padding:'10px 14px', fontSize:12, color:'#dc2626', marginBottom:10 }}>
+              <strong>⚠ Risques sécurité :</strong> {detail.risques_securite}
+            </div>
+          )}
+          {detail.conditions_stockage && (
+            <div style={{ background:'#f0fdf4', borderRadius:8, padding:'10px 14px', fontSize:12, color:'#15803d' }}>
+              <strong>📦 Conditions stockage :</strong> {detail.conditions_stockage}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -1966,6 +2347,7 @@ export default function ChefAtelier() {
     planning:    <PlanningMachines />,
     rapportjour: <RapportsJournaliers />,
     articles:    <Articles />,
+    matieres:    <MatieresPremières />,
     stock:       <Stock />,
     cession:     <BonsCession />,
     qhse:        <QHSE />,
