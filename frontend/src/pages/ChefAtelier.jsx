@@ -59,7 +59,7 @@ const MENU = [
 // ══════════════════════════════════════════════════════════════
 
 function Dashboard() {
-  const [data, setData] = useState(null);
+  const [data, setData] = useState({ sessions_actives:0, trs_moyen:0, poids_net_total:0, poids_dechets_total:0, nb_tickets:0, arrets_actifs:0, alertes_rebus:[] });
   const [trs, setTrs] = useState([]);
   const [rebus, setRebus] = useState([]);
 
@@ -83,7 +83,6 @@ function Dashboard() {
 
   const couleurTRS = (v) => v >= 80 ? '#16a34a' : v >= 60 ? '#d97706' : '#dc2626';
 
-  if (!data) return <div style={{ padding:40, textAlign:'center', color:'#9ca3af' }}>Chargement...</div>;
 
   return (
     <div>
@@ -1144,27 +1143,67 @@ function Referentiels() {
 
       {onglet === 'unites' && (
         <div>
-          <div style={{ background:'#fff', borderRadius:12, padding:16, border:'1px solid #e5e7eb', marginBottom:14, display:'flex', gap:10, alignItems:'flex-end' }}>
-            {[['Code','code'],['Libellé','libelle']].map(([label,key]) => (
-              <div key={key} style={{ flex:1 }}>
-                <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>{label}</label>
-                <input value={formU[key]} onChange={e => setFormU({...formU,[key]:e.target.value})} style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13, boxSizing:'border-box' }}/>
+          <div style={{ background:'#fff', borderRadius:12, padding:16, border:'1px solid #e5e7eb', marginBottom:14 }}>
+            <div style={{ fontSize:13, fontWeight:700, color:'#374151', marginBottom:10 }}>Ajouter une unité de mesure</div>
+            <div style={{ display:'flex', gap:10, flexWrap:'wrap', alignItems:'flex-end' }}>
+              <div style={{ flex:'0 0 100px' }}>
+                <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Code *</label>
+                <input value={formU.code} onChange={e => setFormU({...formU,code:e.target.value})} placeholder="KG" style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13, boxSizing:'border-box', textTransform:'uppercase' }}/>
               </div>
-            ))}
-            <div>
-              <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Type</label>
-              <select value={formU.type} onChange={e => setFormU({...formU,type:e.target.value})} style={{ border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13 }}>
-                {['masse','volume','longueur','surface','piece','temps'].map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
+              <div style={{ flex:'1 1 180px' }}>
+                <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Libellé *</label>
+                <input value={formU.libelle} onChange={e => setFormU({...formU,libelle:e.target.value})} placeholder="Kilogramme" style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13, boxSizing:'border-box' }}/>
+              </div>
+              <div style={{ flex:'0 0 180px' }}>
+                <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Type *</label>
+                <select value={formU.type} onChange={e => setFormU({...formU,type:e.target.value})} style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13 }}>
+                  <option value="masse">Masse (kg, g, t...)</option>
+                  <option value="longueur">Longueur (m, ml, cm...)</option>
+                  <option value="surface">Surface (m², cm²...)</option>
+                  <option value="volume">Volume (l, m³...)</option>
+                  <option value="piece">Pièce (pc, sac, bob...)</option>
+                  <option value="temps">Temps (h, min...)</option>
+                </select>
+              </div>
+              <button onClick={creerUnite} style={{ background:'#14532d', color:'#fff', border:'none', padding:'9px 18px', borderRadius:8, cursor:'pointer', fontWeight:600, flexShrink:0 }}>+ Ajouter</button>
             </div>
-            <button onClick={creerUnite} style={{ background:'#14532d', color:'#fff', border:'none', padding:'9px 18px', borderRadius:8, cursor:'pointer', fontWeight:600, flexShrink:0 }}>+ Ajouter</button>
+            <div style={{ marginTop:12, padding:'10px 14px', background:'#f0fdf4', borderRadius:8, fontSize:12, color:'#374151' }}>
+              <strong style={{ color:'#14532d' }}>Exemples :</strong> KG=Kilogramme (masse) · ML=Mètre linéaire (longueur) · M2=Mètre carré (surface) · PC=Pièce (pièce) · SAC=Sac (pièce) · BOB=Bobine (pièce) · L=Litre (volume) · H=Heure (temps)
+            </div>
           </div>
-          <div style={{ background:'#fff', borderRadius:12, border:'1px solid #e5e7eb', overflow:'hidden' }}>
-            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
-              <thead><tr style={{ background:'#f0fdf4' }}>{['Code','Libellé','Type'].map(h => <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:600, color:'#14532d', borderBottom:'2px solid #dcfce7' }}>{h}</th>)}</tr></thead>
-              <tbody>{unites.map((u,i) => <tr key={u.id} style={{ borderBottom:'1px solid #f0fdf4', background:i%2===0?'#fff':'#f9fefb' }}><td style={{ padding:'10px 14px', fontFamily:'monospace', fontWeight:700 }}>{u.code}</td><td style={{ padding:'10px 14px' }}>{u.libelle}</td><td style={{ padding:'10px 14px', color:'#6b7280' }}>{u.type}</td></tr>)}</tbody>
-            </table>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))', gap:12, marginBottom:14 }}>
+            {['masse','longueur','surface','volume','piece','temps'].map(type => {
+              const couleurs = { masse:'#dbeafe', longueur:'#dcfce7', surface:'#fef3c7', volume:'#e0e7ff', piece:'#fce7f3', temps:'#f0fdf4' };
+              const textes  = { masse:'#1d4ed8', longueur:'#15803d', surface:'#92400e', volume:'#4338ca', piece:'#9d174d', temps:'#14532d' };
+              const unitesType = unites.filter(u => u.type === type);
+              if (!unitesType.length) return null;
+              return (
+                <div key={type} style={{ background:'#fff', borderRadius:10, border:'1px solid #e5e7eb', overflow:'hidden' }}>
+                  <div style={{ background:couleurs[type], padding:'8px 14px', fontWeight:700, fontSize:12, color:textes[type], textTransform:'uppercase', letterSpacing:1 }}>
+                    {type === 'masse' ? '⚖️ Masse' : type === 'longueur' ? '📏 Longueur' : type === 'surface' ? '📐 Surface' : type === 'volume' ? '🧴 Volume' : type === 'piece' ? '📦 Pièce/Colis' : '⏱ Temps'}
+                  </div>
+                  <div style={{ padding:'8px 0' }}>
+                    {unitesType.map(u => (
+                      <div key={u.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'6px 14px', borderBottom:'1px solid #f9fafb' }}>
+                        <div style={{ display:'flex', gap:10, alignItems:'center' }}>
+                          <span style={{ fontFamily:'monospace', fontWeight:700, color:textes[type], fontSize:13, minWidth:50 }}>{u.code}</span>
+                          <span style={{ fontSize:13, color:'#374151' }}>{u.libelle}</span>
+                        </div>
+                        <button onClick={() => axios.put(`${API}/referentiels/unites/${u.id}`, {...u, actif:false}).then(() => { toast.success('Désactivée'); axios.get(`${API}/referentiels/unites`).then(({data}) => setUnites(data)); }).catch(() => {})}
+                          style={{ background:'#fee2e2', color:'#dc2626', border:'none', padding:'2px 8px', borderRadius:6, cursor:'pointer', fontSize:10 }}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
+          {unites.length === 0 && (
+            <div style={{ background:'#fff', borderRadius:12, padding:32, textAlign:'center', color:'#9ca3af', border:'1px solid #e5e7eb' }}>
+              <div style={{ fontSize:32, marginBottom:8 }}>📏</div>
+              <p>Aucune unité — commencez par créer KG, ML, M2, PC...</p>
+            </div>
+          )}
         </div>
       )}
 
