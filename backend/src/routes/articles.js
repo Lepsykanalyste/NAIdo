@@ -134,7 +134,7 @@ router.post('/', auth, handleUploadOrJSON, async (req, res) => {
       ) RETURNING id,code,designation,type_article
     `, [
       d.code?.toUpperCase()?.trim(), d.code_barre||null, d.designation?.trim(),
-      d.famille_id||null, d.unite_mesure_id||null,
+      (d.famille_id&&d.famille_id!=='')?parseInt(d.famille_id)||null:null, (d.unite_mesure_id&&d.unite_mesure_id!=='')?parseInt(d.unite_mesure_id)||null:null,
       d.type_article||'produit_fini', d.tracabilite_type||'lot', d.format_lot||'LOT-YYYYMMDD-001',
       num(d.longueur_mm), num(d.largeur_mm), num(d.hauteur_mm),
       num(d.poids_theorique_kg), num(d.poids_reel_kg), num(d.poids_mandrin_kg),
@@ -151,7 +151,7 @@ router.post('/', auth, handleUploadOrJSON, async (req, res) => {
       d.risques_securite||null, d.epi_requis||null,
       (() => { const v = safeJSON(d.composition,[]); return Array.isArray(v)?v:[]; })(),
       d.notes||null,
-      d.atelier_production_id||null,
+      (d.atelier_production_id && d.atelier_production_id !== '') ? (parseInt(d.atelier_production_id)||null) : null,
       fp(req,'fiche_technique'), fp(req,'fiche_securite'), fp(req,'plan'), fp(req,'photo'),
       true
     ]);
@@ -172,8 +172,7 @@ router.put('/:id', auth, handleUploadOrJSON, async (req, res) => {
     const addIf = (col,val,transform=v=>v) => { if(val!==undefined) add(col,transform(val)); };
 
     addIf('designation',d.designation);
-    addIf('famille_id',d.famille_id,v=>v||null);
-    addIf('unite_mesure_id',d.unite_mesure_id,v=>v||null);
+    // famille_id et unite_mesure_id gérés plus bas avec parseInt
     addIf('type_article',d.type_article);
     addIf('couleur',d.couleur,v=>v||null);
     addIf('fournisseur',d.fournisseur,v=>v||null);
@@ -192,6 +191,9 @@ router.put('/:id', auth, handleUploadOrJSON, async (req, res) => {
     addIf('epi_requis',d.epi_requis,v=>v||null);
     addIf('conditions_stockage',d.conditions_stockage,v=>v||null);
     addIf('notes',d.notes,v=>v||null);
+    addIf('atelier_production_id',d.atelier_production_id,v=>v===''||v===null||v===undefined?null:parseInt(v)||null);
+    addIf('famille_id',d.famille_id,v=>v===''||v===null?null:parseInt(v)||null);
+    addIf('unite_mesure_id',d.unite_mesure_id,v=>v===''||v===null?null:parseInt(v)||null);
     // composition + matieres_principales : forcer en objet JS (JSONB)
     const compoVal = safeJSON(d.composition, []);
     add('composition', compoVal);
