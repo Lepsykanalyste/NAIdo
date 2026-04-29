@@ -1685,7 +1685,7 @@ function BonsCession() {
       <div style={{ display:'flex', gap:10, marginBottom:16, flexWrap:'wrap', alignItems:'center' }}>
         <div style={{ display:'flex', gap:0 }}>
           {['','brouillon','valide','receptionne','annule'].map(s => (
-            <button key={s} onClick={() => setFiltreStatut(s)} style={{
+            <button key={s} onClick={() => { setFiltreStatut(s); setDetail(null); }} style={{
               padding:'7px 14px', border:'1px solid #e5e7eb',
               background: filtreStatut===s ? '#4338ca' : '#fff',
               color: filtreStatut===s ? '#fff' : '#6b7280',
@@ -1869,7 +1869,7 @@ function BonsCession() {
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
               <thead>
                 <tr style={{ background:'#eef2ff' }}>
-                  {['Code','Article','Quantité','Poids (kg)','Obs.'].map(h => (
+                  {['Code','Article','Unité','Quantité','Obs.'].map(h => (
                     <th key={h} style={{ padding:'8px 12px', textAlign:'left', fontWeight:700, color:'#4338ca', borderBottom:'2px solid #c7d2fe' }}>{h}</th>
                   ))}
                 </tr>
@@ -1877,10 +1877,10 @@ function BonsCession() {
               <tbody>
                 {detail.lignes.map((l, i) => (
                   <tr key={i} style={{ borderBottom:'1px solid #eef2ff', background: i%2===0?'#fff':'#f8f9ff' }}>
-                    <td style={{ padding:'8px 12px', fontFamily:'monospace', color:'#4338ca' }}>{l.article_code || '—'}</td>
+                    <td style={{ padding:'8px 12px', fontFamily:'monospace', color:'#4338ca', fontWeight:700 }}>{l.article_code || '—'}</td>
                     <td style={{ padding:'8px 12px' }}>{l.designation || l.article_designation || '—'}</td>
-                    <td style={{ padding:'8px 12px', textAlign:'center', fontWeight:700 }}>{parseFloat(l.qte_prevue||0).toFixed(3)}</td>
-                    <td style={{ padding:'8px 12px', textAlign:'center' }}>{parseFloat(l.poids_reel_kg||l.poids_theorique_kg||0).toFixed(3)}</td>
+                    <td style={{ padding:'8px 12px', textAlign:'center' }}>{l.unite_code || l.unite || '—'}</td>
+                    <td style={{ padding:'8px 12px', textAlign:'center', fontWeight:700, fontSize:14 }}>{parseFloat(l.qte_prevue||0).toFixed(3)}</td>
                     <td style={{ padding:'8px 12px', color:'#6b7280' }}>{l.notes||'—'}</td>
                   </tr>
                 ))}
