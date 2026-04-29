@@ -1577,6 +1577,150 @@ async def calcul_temps_production(
             "formule": f"({quantite} / {cadence}) + {temps_reglage:.2f}h = {round(temps_prod,2) if temps_prod else '?'}h",
         }
 
+
+# ══════════════════════════════════════════════════════════════
+# GESTION UTILISATEURS (liée aux RH)
+# ══════════════════════════════════════════════════════════════
+
+ROLES_PERMISSIONS = {
+    "super_admin":       {"label": "Super Administrateur", "acces": ["*"]},
+    "directeur":         {"label": "Directeur", "acces": ["dashboard","production","stock","vente","achat","qhse","rh","gmao","kpi","ia"]},
+    "chef_atelier":      {"label": "Chef d'Atelier", "acces": ["dashboard","production","stock","bons_cession","qhse","gmao"]},
+    "responsable_qhse":  {"label": "Responsable QHSE", "acces": ["dashboard","qhse","gmao","kpi"]},
+    "responsable_rh":    {"label": "Responsable RH", "acces": ["dashboard","rh","utilisateurs"]},
+    "technicien_regleur":{"label": "Technicien Régleur", "acces": ["dashboard","production","gmao"]},
+    "operateur":         {"label": "Opérateur Machine", "acces": ["dashboard","production"]},
+    "controleur_qualite":{"label": "Contrôleur Qualité", "acces": ["dashboard","qhse","production"]},
+    "comptable":         {"label": "Comptable", "acces": ["dashboard","vente","achat","stock","kpi"]},
+    "responsable_stock": {"label": "Responsable Stock", "acces": ["dashboard","stock","bons_cession","articles"]},
+    "commercial":        {"label": "Commercial", "acces": ["dashboard","vente","clients","articles"]},
+    "technicien_gmao":   {"label": "Technicien GMAO", "acces": ["dashboard","gmao"]},
+    "emballeur":         {"label": "Emballeur", "acces": ["dashboard","production"]},
+}
+
+@app.get("/api/utilisateurs")
+async def get_utilisateurs(search: Optional[str]=None, role: Optional[str]=None,
+                            user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        q = """
+            SELECT u.id, u.login, u.nom, u.prenom, u.email, u.role,
+                u.actif, u.created_at, u.atelier_id,
+                u.derniere_connexion,
+                at.libelle AS atelier_libelle, at.code AS atelier_code,
+                e.matricule, e.id AS employe_id,
+                p.intitule AS poste_libelle
+            FROM utilisateurs u
+            LEFT JOIN ateliers at ON at.id=u.atelier_id
+            LEFT JOIN employes e ON e.user_id=u.id
+            LEFT JOIN postes p ON p.id=e.poste_id
+            WHERE 1=1
+        """
+        params = []
+        if search:
+            params.append(f"%{search}%")
+            q += f" AND (u.nom ILIKE ${len(params)} OR u.prenom ILIKE ${len(params)} OR u.login ILIKE ${len(params)})"
+        if role:
+            params.append(role)
+            q += f" AND u.role = ${len(params)}"
+        q += " ORDER BY u.nom, u.prenom"
+        rows = await conn.fetch(q, *params)
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["permissions"] = ROLES_PERMISSIONS.get(d["role"], {})
+            result.append(d)
+        return result
+
+@app.post("/api/utilisateurs")
+async def create_utilisateur(payload: dict, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        d = payload
+        if not d.get("login") or not d.get("password"):
+            raise HTTPException(400, "Login et mot de passe requis")
+        
+        # Vérifier login unique
+        existing = await conn.fetchval("SELECT id FROM utilisateurs WHERE login=$1", d["login"])
+        if existing:
+            raise HTTPException(400, f"Login '{d['login']}' déjà utilisé")
+        
+        import bcrypt
+        pwd_hash = bcrypt.hashpw(d["password"].encode(), bcrypt.gensalt()).decode()
+        
+        try:
+            row = await conn.fetchrow("""
+                INSERT INTO utilisateurs (login, password_hash, nom, prenom, email, role, actif, atelier_id)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+                RETURNING id, login, nom, prenom, email, role, actif, created_at
+            """,
+                d["login"].lower().strip(),
+                pwd_hash,
+                d.get("nom","").upper(),
+                d.get("prenom",""),
+                d.get("email"),
+                d.get("role","operateur"),
+                True,
+                int(d["atelier_id"]) if d.get("atelier_id") else None
+            )
+            user_id = str(row["id"])
+            
+            # Lier à l'employé si fourni
+            if d.get("employe_id"):
+                await conn.execute(
+                    "UPDATE employes SET user_id=$1 WHERE id=$2",
+                    user_id, d["employe_id"]
+                )
+            
+            return dict(row)
+        except Exception as e:
+            raise HTTPException(400, str(e))
+
+@app.put("/api/utilisateurs/{user_id}")
+async def update_utilisateur(user_id: str, payload: dict, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        d = payload
+        sets, vals = ["role=$1","actif=$2","atelier_id=$3"], [
+            d.get("role"), bool(d.get("actif",True)),
+            int(d["atelier_id"]) if d.get("atelier_id") else None
+        ]
+        if d.get("email"):
+            vals.append(d["email"]); sets.append(f"email=${len(vals)}")
+        if d.get("nom"):
+            vals.append(d["nom"].upper()); sets.append(f"nom=${len(vals)}")
+        if d.get("prenom"):
+            vals.append(d["prenom"]); sets.append(f"prenom=${len(vals)}")
+        vals.append(user_id)
+        row = await conn.fetchrow(
+            f"UPDATE utilisateurs SET {','.join(sets)} WHERE id=${len(vals)} RETURNING *",
+            *vals
+        )
+        return dict(row)
+
+@app.post("/api/utilisateurs/{user_id}/reset-password")
+async def reset_password(user_id: str, payload: dict, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        import bcrypt
+        new_pwd = payload.get("password")
+        if not new_pwd or len(new_pwd) < 6:
+            raise HTTPException(400, "Mot de passe trop court (min 6 caractères)")
+        pwd_hash = bcrypt.hashpw(new_pwd.encode(), bcrypt.gensalt()).decode()
+        await conn.execute(
+            "UPDATE utilisateurs SET password_hash=$1 WHERE id=$2",
+            pwd_hash, user_id
+        )
+        return {"success": True, "message": "Mot de passe réinitialisé"}
+
+@app.get("/api/utilisateurs/roles")
+async def get_roles(user=Depends(get_current_user)):
+    return [{"code": k, **v} for k,v in ROLES_PERMISSIONS.items()]
+
+@app.get("/api/utilisateurs/{user_id}/acces")
+async def get_acces_utilisateur(user_id: str, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT role FROM utilisateurs WHERE id=$1", user_id)
+        if not row: raise HTTPException(404)
+        role = row["role"]
+        return {"role": role, "permissions": ROLES_PERMISSIONS.get(role,{})}
+
 # ── HEALTH CHECK ───────────────────────────────────────────────
 @app.get("/api/health")
 async def health():

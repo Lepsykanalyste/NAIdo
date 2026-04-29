@@ -3033,86 +3033,322 @@ function AssistantIA() {
 
 function Utilisateurs() {
   const [users, setUsers] = useState([]);
+  const [employes, setEmployes] = useState([]);
+  const [postes, setPostes] = useState([]);
+  const [ateliers, setAteliers] = useState([]);
+  const [roles, setRoles] = useState([]);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ nom:'', prenom:'', login:'', password:'', role_nom:'operateur', badge_qr:'' });
+  const [showReset, setShowReset] = useState(null);
+  const [form, setForm] = useState({});
+  const [newPwd, setNewPwd] = useState('');
+  const [search, setSearch] = useState('');
+  const [filtreRole, setFiltreRole] = useState('');
 
-  useEffect(() => {
-    axios.get(`${API}/users`).then(({data}) => setUsers(data)).catch(() => {});
-  }, []);
-
-  const creer = async () => {
+  const charger = async () => {
     try {
-      await axios.post(`${API}/users`, form);
-      toast.success('Utilisateur créé');
-      setShowForm(false);
-      const { data } = await axios.get(`${API}/users`);
-      setUsers(data);
-    } catch (err) { toast.error(err.response?.data?.error || 'Erreur'); }
+      const [u, e, p, at, r] = await Promise.all([
+        axios.get(`${API}/utilisateurs`),
+        axios.get(`${API}/rh/employes`),
+        axios.get(`${API}/rh/postes`),
+        axios.get(`${API}/ateliers`),
+        axios.get(`${API}/utilisateurs/roles`),
+      ]);
+      setUsers(u.data); setEmployes(e.data); setPostes(p.data);
+      setAteliers(at.data); setRoles(r.data);
+    } catch(e) { toast.error('Erreur chargement'); }
   };
 
-  const ROLE_COLOR = { operateur:'#dbeafe', regleur:'#fef9c3', qualite:'#f3e8ff', chef_atelier:'#dcfce7', super_admin:'#fce7f3' };
-  const ROLE_TEXT  = { operateur:'#1d4ed8', regleur:'#a16207', qualite:'#7e22ce', chef_atelier:'#15803d', super_admin:'#9d174d' };
+  useEffect(() => { charger(); }, []);
+
+  // Quand on sélectionne un employé, on prérempli
+  const selectionnerEmploye = (empId) => {
+    const emp = employes.find(e => e.id === empId);
+    if (!emp) return setForm({...form, employe_id:''});
+    // Déduire le rôle depuis le poste
+    const poste = postes.find(p => p.id === emp.poste_id);
+    const roleDevine = deduireRole(poste?.intitule || '');
+    const loginAuto = `${emp.prenom.toLowerCase().replace(/\s/g,'.')}.${emp.nom.toLowerCase().replace(/\s/g,'').substring(0,8)}`;
+    setForm({
+      ...form,
+      employe_id: empId,
+      nom: emp.nom,
+      prenom: emp.prenom,
+      email: emp.email || '',
+      atelier_id: emp.atelier_id ? String(emp.atelier_id) : '',
+      role: roleDevine,
+      login: loginAuto,
+    });
+  };
+
+  const deduireRole = (intitule) => {
+    const i = intitule.toLowerCase();
+    if (i.includes('directeur') || i.includes('dg')) return 'directeur';
+    if (i.includes('chef') && i.includes('atelier')) return 'chef_atelier';
+    if (i.includes('qhse') || i.includes('qualité')) return 'responsable_qhse';
+    if (i.includes('rh') || i.includes('ressources humaines')) return 'responsable_rh';
+    if (i.includes('régleur') || i.includes('regleur')) return 'technicien_regleur';
+    if (i.includes('contrôleur') || i.includes('qualit')) return 'controleur_qualite';
+    if (i.includes('comptable') || i.includes('finance')) return 'comptable';
+    if (i.includes('gmao') || i.includes('maintenance')) return 'technicien_gmao';
+    if (i.includes('commercial') || i.includes('vente')) return 'commercial';
+    if (i.includes('emballeur')) return 'emballeur';
+    if (i.includes('opérateur') || i.includes('operateur')) return 'operateur';
+    return 'operateur';
+  };
+
+  const sauvegarder = async () => {
+    try {
+      if (form.id) {
+        await axios.put(`${API}/utilisateurs/${form.id}`, form);
+        toast.success('Utilisateur modifié ✓');
+      } else {
+        if (!form.password || form.password.length < 6)
+          return toast.error('Mot de passe min. 6 caractères');
+        await axios.post(`${API}/utilisateurs`, form);
+        toast.success('Utilisateur créé ✓');
+      }
+      setShowForm(false); charger();
+    } catch(e) { toast.error(e.response?.data?.detail || e.response?.data?.error || 'Erreur'); }
+  };
+
+  const resetPwd = async () => {
+    if (!newPwd || newPwd.length < 6) return toast.error('Mot de passe trop court');
+    try {
+      await axios.post(`${API}/utilisateurs/${showReset}/reset-password`, {password:newPwd});
+      toast.success('Mot de passe réinitialisé ✓');
+      setShowReset(null); setNewPwd('');
+    } catch { toast.error('Erreur'); }
+  };
+
+  const ROLE_COLORS = {
+    super_admin:'#7f1d1d', directeur:'#1e3a5f', chef_atelier:'#1d4ed8',
+    responsable_qhse:'#92400e', responsable_rh:'#0891b2', technicien_regleur:'#059669',
+    operateur:'#374151', controleur_qualite:'#6d28d9', comptable:'#9d174d',
+    responsable_stock:'#065f46', commercial:'#b45309', technicien_gmao:'#7c3aed',
+    emballeur:'#6b7280',
+  };
+
+  const usersFiltres = users.filter(u =>
+    (!filtreRole || u.role === filtreRole) &&
+    (!search || `${u.nom} ${u.prenom} ${u.login}`.toLowerCase().includes(search.toLowerCase()))
+  );
+
+  const F = ({label,k,type='text',ph='',required=false}) => (
+    <div>
+      <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>{label}{required&&<span style={{color:'#dc2626'}}> *</span>}</label>
+      <input type={type} value={form[k]||''} onChange={e=>setForm({...form,[k]:e.target.value})} placeholder={ph}
+        style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13,boxSizing:'border-box'}}/>
+    </div>
+  );
 
   return (
     <div>
-      <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:20 }}>
-        <button onClick={() => setShowForm(true)} style={{ background:'#374151', color:'#fff', border:'none', padding:'8px 16px', borderRadius:8, cursor:'pointer', fontWeight:600 }}>+ Nouvel utilisateur</button>
+      {/* Header */}
+      <div style={{display:'flex',gap:10,marginBottom:16,flexWrap:'wrap',alignItems:'center'}}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Nom, prénom, login..."
+          style={{flex:1,minWidth:200,border:'1px solid #d1d5db',borderRadius:8,padding:'9px 14px',fontSize:13}}/>
+        <select value={filtreRole} onChange={e=>setFiltreRole(e.target.value)}
+          style={{border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:12}}>
+          <option value="">Tous les rôles</option>
+          {roles.map(r=><option key={r.code} value={r.code}>{r.label}</option>)}
+        </select>
+        <button onClick={()=>{setForm({role:'operateur',actif:true});setShowForm(true);}}
+          style={{background:'#1d4ed8',color:'#fff',border:'none',padding:'9px 20px',borderRadius:8,cursor:'pointer',fontWeight:700}}>
+          + Nouvel utilisateur
+        </button>
       </div>
 
-      {showForm && (
-        <div style={{ background:'#fff', borderRadius:14, padding:24, border:'1px solid #d1d5db', marginBottom:16 }}>
-          <h4 style={{ margin:'0 0 16px', fontSize:15, fontWeight:700 }}>Créer un utilisateur</h4>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:14 }}>
-            {[['Nom','nom'],['Prénom','prenom'],['Login','login'],['Mot de passe','password'],['Badge QR (optionnel)','badge_qr']].map(([label,key]) => (
-              <div key={key}>
-                <label style={{ fontSize:12, fontWeight:600, display:'block', marginBottom:4 }}>{label}</label>
-                <input type={key==='password'?'password':'text'} value={form[key]} onChange={e => setForm({...form,[key]:e.target.value})}
-                  style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'10px 12px', fontSize:14, boxSizing:'border-box' }}/>
-              </div>
-            ))}
-            <div>
-              <label style={{ fontSize:12, fontWeight:600, display:'block', marginBottom:4 }}>Rôle</label>
-              <select value={form.role_nom} onChange={e => setForm({...form,role_nom:e.target.value})} style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'10px 12px', fontSize:14 }}>
-                <option value="operateur">Opérateur</option>
-                <option value="regleur">Régleur</option>
-                <option value="qualite">Contrôleur Qualité</option>
-                <option value="chef_atelier">Chef Atelier</option>
-              </select>
+      {/* Stats par rôle */}
+      <div style={{display:'flex',gap:8,marginBottom:16,flexWrap:'wrap'}}>
+        {roles.slice(0,6).map(r=>{
+          const count = users.filter(u=>u.role===r.code).length;
+          if (!count) return null;
+          return (
+            <div key={r.code} style={{background:'#f8fafc',border:'1px solid #e5e7eb',borderRadius:8,padding:'6px 12px',fontSize:11,fontWeight:600,cursor:'pointer',borderLeft:`4px solid ${ROLE_COLORS[r.code]||'#374151'}`}}
+              onClick={()=>setFiltreRole(filtreRole===r.code?'':r.code)}>
+              <span style={{color:ROLE_COLORS[r.code]||'#374151'}}>{r.label}</span>
+              <span style={{marginLeft:6,background:'#e5e7eb',borderRadius:20,padding:'1px 6px'}}>{count}</span>
             </div>
-          </div>
-          <div style={{ display:'flex', gap:10 }}>
-            <button onClick={creer} style={{ background:'#374151', color:'#fff', border:'none', padding:'10px 24px', borderRadius:10, cursor:'pointer', fontWeight:600 }}>Créer</button>
-            <button onClick={() => setShowForm(false)} style={{ background:'#f3f4f6', border:'none', padding:'10px 16px', borderRadius:10, cursor:'pointer' }}>Annuler</button>
-          </div>
-        </div>
-      )}
+          );
+        })}
+      </div>
 
-      <div style={{ background:'#fff', borderRadius:14, border:'1px solid #e5e7eb', overflow:'hidden' }}>
-        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
+      {/* Tableau */}
+      <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',overflow:'auto'}}>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:13,minWidth:800}}>
           <thead>
-            <tr style={{ background:'#f9fafb' }}>
-              {['Nom','Login','Rôle','Badge QR','Statut'].map(h => (
-                <th key={h} style={{ padding:'12px 16px', textAlign:'left', fontWeight:600, color:'#374151', borderBottom:'2px solid #e5e7eb' }}>{h}</th>
+            <tr style={{background:'#f0f4ff'}}>
+              {['Login','Nom Prénom','Employé lié','Poste','Rôle','Atelier','Dernière connexion','Statut','Actions'].map(h=>(
+                <th key={h} style={{padding:'10px 14px',textAlign:'left',fontWeight:700,color:'#1d4ed8',borderBottom:'2px solid #c7d2fe',whiteSpace:'nowrap'}}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {users.map((u,i) => (
-              <tr key={u.id} style={{ borderBottom:'1px solid #f3f4f6', background:i%2===0?'#fff':'#fafafa' }}>
-                <td style={{ padding:'12px 16px', fontWeight:600 }}>{u.prenom} {u.nom}</td>
-                <td style={{ padding:'12px 16px', fontFamily:'monospace', color:'#6b7280' }}>{u.login}</td>
-                <td style={{ padding:'12px 16px' }}>
-                  <span style={{ background:ROLE_COLOR[u.role]||'#f3f4f6', color:ROLE_TEXT[u.role]||'#374151', padding:'3px 10px', borderRadius:20, fontSize:12, fontWeight:600 }}>{u.role}</span>
+            {usersFiltres.map((u,i)=>(
+              <tr key={u.id} style={{borderBottom:'1px solid #f0f4ff',background:i%2===0?'#fff':'#f8f9ff'}}>
+                <td style={{padding:'9px 14px',fontFamily:'monospace',fontWeight:700,color:'#1d4ed8',fontSize:12}}>{u.login}</td>
+                <td style={{padding:'9px 14px',fontWeight:600}}>{u.nom} {u.prenom}</td>
+                <td style={{padding:'9px 14px',fontSize:11}}>
+                  {u.matricule ? (
+                    <span style={{background:'#e0f2fe',color:'#0891b2',padding:'2px 8px',borderRadius:20,fontWeight:700,fontFamily:'monospace'}}>{u.matricule}</span>
+                  ) : <span style={{color:'#d1d5db'}}>—</span>}
                 </td>
-                <td style={{ padding:'12px 16px', fontFamily:'monospace', fontSize:12, color:'#9ca3af' }}>{u.badge_qr||'—'}</td>
-                <td style={{ padding:'12px 16px' }}>
-                  <span style={{ color:u.actif?'#16a34a':'#dc2626', fontWeight:600 }}>{u.actif?'Actif':'Inactif'}</span>
+                <td style={{padding:'9px 14px',fontSize:11,color:'#6b7280'}}>{u.poste_libelle||'—'}</td>
+                <td style={{padding:'9px 14px'}}>
+                  <span style={{background:(ROLE_COLORS[u.role]||'#374151')+'20',color:ROLE_COLORS[u.role]||'#374151',padding:'3px 10px',borderRadius:20,fontSize:11,fontWeight:700,whiteSpace:'nowrap'}}>
+                    {roles.find(r=>r.code===u.role)?.label || u.role}
+                  </span>
+                </td>
+                <td style={{padding:'9px 14px',fontSize:11,color:'#6b7280'}}>{u.atelier_code||'—'}</td>
+                <td style={{padding:'9px 14px',fontSize:11,color:'#9ca3af'}}>
+                  {u.derniere_connexion ? new Date(u.derniere_connexion).toLocaleDateString('fr-FR') : 'Jamais'}
+                </td>
+                <td style={{padding:'9px 14px'}}>
+                  <span style={{background:u.actif?'#dcfce7':'#fee2e2',color:u.actif?'#15803d':'#dc2626',padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:700}}>
+                    {u.actif?'Actif':'Inactif'}
+                  </span>
+                </td>
+                <td style={{padding:'9px 14px'}}>
+                  <div style={{display:'flex',gap:5}}>
+                    <button onClick={()=>{setForm({...u,atelier_id:u.atelier_id?String(u.atelier_id):'',employe_id:u.employe_id||''});setShowForm(true);}}
+                      style={{background:'#fef3c7',color:'#92400e',border:'none',padding:'3px 8px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>✏</button>
+                    <button onClick={()=>setShowReset(u.id)}
+                      style={{background:'#fee2e2',color:'#dc2626',border:'none',padding:'3px 8px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>🔑</button>
+                    <button onClick={async()=>{await axios.put(`${API}/utilisateurs/${u.id}`,{...u,actif:!u.actif,atelier_id:u.atelier_id?String(u.atelier_id):''}); charger(); toast.success(u.actif?'Désactivé':'Activé');}}
+                      style={{background:u.actif?'#f3f4f6':'#dcfce7',color:u.actif?'#6b7280':'#15803d',border:'none',padding:'3px 8px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>
+                      {u.actif?'Désactiver':'Activer'}
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+        {usersFiltres.length===0&&(
+          <div style={{textAlign:'center',padding:40,color:'#9ca3af'}}>
+            <div style={{fontSize:36,marginBottom:8}}>👥</div>
+            <p>Aucun utilisateur trouvé</p>
+          </div>
+        )}
       </div>
+
+      {/* Formulaire création/édition */}
+      {showForm && (
+        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:40,overflowY:'auto'}}>
+          <div style={{background:'#fff',borderRadius:14,width:'95%',maxWidth:700,padding:24,maxHeight:'90vh',overflowY:'auto'}}>
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:20}}>
+              <h3 style={{margin:0,color:'#1d4ed8',fontSize:16,fontWeight:800}}>
+                {form.id ? '✏ Modifier utilisateur' : '+ Nouvel utilisateur'}
+              </h3>
+              <button onClick={()=>setShowForm(false)} style={{background:'none',border:'none',fontSize:20,cursor:'pointer'}}>✕</button>
+            </div>
+
+            {/* Sélection employé → préremplissage automatique */}
+            {!form.id && (
+              <div style={{background:'#eff6ff',borderRadius:10,padding:14,marginBottom:16,border:'2px solid #bfdbfe'}}>
+                <div style={{fontWeight:700,color:'#1d4ed8',marginBottom:8,fontSize:13}}>👤 Lier à un employé existant (recommandé)</div>
+                <select value={form.employe_id||''} onChange={e=>selectionnerEmploye(e.target.value)}
+                  style={{width:'100%',border:'1px solid #bfdbfe',borderRadius:8,padding:'10px',fontSize:13}}>
+                  <option value="">-- Sélectionner un employé --</option>
+                  {employes.filter(e=>!users.find(u=>u.employe_id===e.id)).map(e=>(
+                    <option key={e.id} value={e.id}>
+                      {e.matricule} — {e.nom} {e.prenom} ({e.poste_libelle||'Sans poste'})
+                    </option>
+                  ))}
+                </select>
+                <div style={{fontSize:11,color:'#6b7280',marginTop:6}}>
+                  💡 Seuls les employés sans compte utilisateur sont listés. La sélection prérempli automatiquement les champs ci-dessous.
+                </div>
+              </div>
+            )}
+
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:12,marginBottom:16}}>
+              <F label="Nom *" k="nom" ph="NOM" required/>
+              <F label="Prénom *" k="prenom" ph="Prénom" required/>
+              <F label="Login *" k="login" ph="ali.kone" required/>
+              {!form.id && <F label="Mot de passe *" k="password" type="password" ph="Min. 6 caractères" required/>}
+              <F label="Email" k="email" type="email" ph="ali.kone@nai.ci"/>
+              <div>
+                <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>Rôle *</label>
+                <select value={form.role||'operateur'} onChange={e=>setForm({...form,role:e.target.value})}
+                  style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13}}>
+                  {roles.map(r=><option key={r.code} value={r.code}>{r.label}</option>)}
+                </select>
+                {form.role && (
+                  <div style={{marginTop:6,fontSize:10,color:'#6b7280'}}>
+                    Accès : {(roles.find(r=>r.code===form.role)?.acces||[]).join(', ')}
+                  </div>
+                )}
+              </div>
+              <div>
+                <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>Atelier</label>
+                <select value={form.atelier_id||''} onChange={e=>setForm({...form,atelier_id:e.target.value})}
+                  style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13}}>
+                  <option value="">-- Tous ateliers --</option>
+                  {ateliers.map(a=><option key={a.id} value={String(a.id)}>{a.code} — {a.libelle}</option>)}
+                </select>
+              </div>
+              {form.id && (
+                <div style={{display:'flex',alignItems:'center',gap:8}}>
+                  <input type="checkbox" id="actifCheck" checked={!!form.actif}
+                    onChange={e=>setForm({...form,actif:e.target.checked})}/>
+                  <label htmlFor="actifCheck" style={{fontSize:13,fontWeight:600}}>Compte actif</label>
+                </div>
+              )}
+            </div>
+
+            {/* Prévisualisation rôle */}
+            {form.role && (
+              <div style={{background:'#f0f4ff',borderRadius:10,padding:12,marginBottom:16,border:'1px solid #c7d2fe'}}>
+                <div style={{fontSize:12,color:'#1d4ed8',fontWeight:700,marginBottom:4}}>
+                  🔐 Permissions du rôle : {roles.find(r=>r.code===form.role)?.label}
+                </div>
+                <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                  {(roles.find(r=>r.code===form.role)?.acces||[]).map(a=>(
+                    <span key={a} style={{background:'#dbeafe',color:'#1d4ed8',padding:'2px 8px',borderRadius:20,fontSize:10,fontWeight:700}}>{a}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div style={{display:'flex',gap:10,paddingTop:16,borderTop:'1px solid #f3f4f6'}}>
+              <button onClick={sauvegarder}
+                style={{background:'#1d4ed8',color:'#fff',border:'none',padding:'12px 32px',borderRadius:10,cursor:'pointer',fontWeight:800,fontSize:14}}>
+                ✓ Enregistrer
+              </button>
+              <button onClick={()=>setShowForm(false)}
+                style={{background:'#f3f4f6',border:'none',padding:'12px 20px',borderRadius:10,cursor:'pointer'}}>
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal reset mot de passe */}
+      {showReset && (
+        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',zIndex:1001,display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <div style={{background:'#fff',borderRadius:14,padding:24,width:380,boxShadow:'0 20px 60px rgba(0,0,0,0.3)'}}>
+            <h3 style={{margin:'0 0 16px',color:'#dc2626',fontSize:15,fontWeight:800}}>🔑 Réinitialiser le mot de passe</h3>
+            <p style={{fontSize:13,color:'#6b7280',marginBottom:12}}>
+              Utilisateur : <strong>{users.find(u=>u.id===showReset)?.login}</strong>
+            </p>
+            <input type="password" value={newPwd} onChange={e=>setNewPwd(e.target.value)}
+              placeholder="Nouveau mot de passe (min. 6 caractères)"
+              style={{width:'100%',border:'2px solid #fecdd3',borderRadius:8,padding:'10px',fontSize:13,boxSizing:'border-box',marginBottom:12}}/>
+            <div style={{display:'flex',gap:8}}>
+              <button onClick={resetPwd}
+                style={{background:'#dc2626',color:'#fff',border:'none',padding:'10px 24px',borderRadius:8,cursor:'pointer',fontWeight:700,flex:1}}>
+                Confirmer
+              </button>
+              <button onClick={()=>{setShowReset(null);setNewPwd('');}}
+                style={{background:'#f3f4f6',border:'none',padding:'10px 16px',borderRadius:8,cursor:'pointer'}}>
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
