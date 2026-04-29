@@ -28,7 +28,7 @@ const uploadFields = upload.fields([
 // GET /api/articles
 router.get('/', auth, async (req, res) => {
   try {
-    const { famille_id, type_article, search } = req.query;
+    const { famille_id, type_article, search, exclure_mp } = req.query;
     let q = `
       SELECT a.id, a.code, a.code_barre, a.designation, a.couleur,
         a.poids_theorique_kg, a.poids_reel_kg, a.cadence_theorique_kg_h,
@@ -54,6 +54,8 @@ router.get('/', auth, async (req, res) => {
     const params = [];
     if (famille_id) { params.push(famille_id); q += ` AND a.famille_id = $${params.length}`; }
     if (type_article) { params.push(type_article); q += ` AND a.type_article = $${params.length}`; }
+    // Exclure les matières premières de la liste Articles (elles ont leur propre module)
+    if (exclure_mp === 'true') { q += ` AND a.type_article != 'matiere_premiere'`; }
     if (search) {
       params.push(`%${search}%`);
       q += ` AND (a.code ILIKE $${params.length} OR a.designation ILIKE $${params.length} OR COALESCE(a.fournisseur,'') ILIKE $${params.length})`;
@@ -202,3 +204,5 @@ router.delete('/:id', auth, async (req, res) => {
 });
 
 module.exports = router;
+
+// Cette ligne sera ignorée - voir le fix inline ci-dessous

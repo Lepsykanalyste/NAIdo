@@ -536,6 +536,8 @@ function Articles() {
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [detail, setDetail] = useState(null);
+  const [modeEditArt, setModeEditArt] = useState(false);
+  const [editArtId, setEditArtId] = useState(null);
   const [composition, setComposition] = useState([]);
   const [newComp, setNewComp] = useState({ mp_id:'', quantite:'', unite_id:'', pct:'' });
   const [form, setForm] = useState({
@@ -564,9 +566,13 @@ function Articles() {
 
   const chargerArticles = async () => {
     try {
-      const { data } = await axios.get(`${API}/articles${search ? `?search=${search}` : ''}`);
+      // Articles = tout SAUF matières premières (elles ont leur propre module)
+      const params = new URLSearchParams();
+      if (search) params.append('search', search);
+      params.append('exclure_mp', 'true');
+      const { data } = await axios.get(`${API}/articles?${params}`);
       setArticles(data);
-      // Charger aussi les matières premières pour la composition
+      // Charger les MP séparément pour la composition
       const { data: mp } = await axios.get(`${API}/articles?type_article=matiere_premiere`);
       setMatieresPremiers(mp);
     } catch {}
@@ -574,9 +580,50 @@ function Articles() {
 
   useEffect(() => { chargerRefs(); chargerArticles(); }, [search]);
 
+  const modifierArticle = async (a) => {
+    await chargerRefs();
+    await chargerArticles();
+    setModeEditArt(true);
+    setEditArtId(a.id);
+    setDetail(null);
+    setComposition(Array.isArray(a.composition) ? a.composition : []);
+    setForm({
+      code: a.code || '',
+      designation: a.designation || '',
+      famille_id: a.famille_id ? String(a.famille_id) : '',
+      unite_mesure_id: a.unite_mesure_id ? String(a.unite_mesure_id) : '',
+      type_article: a.type_article || 'produit_fini',
+      tracabilite_type: a.tracabilite_type || 'lot',
+      format_lot: a.format_lot || 'LOT-YYYYMMDD-001',
+      matieres_principales: a.matieres_principales || [],
+      couleur: a.couleur || '',
+      longueur_mm: a.longueur_mm || '',
+      largeur_mm: a.largeur_mm || '',
+      hauteur_mm: a.hauteur_mm || '',
+      poids_theorique_kg: a.poids_theorique_kg || '',
+      poids_reel_kg: a.poids_reel_kg || '',
+      poids_mandrin_kg: a.poids_mandrin_kg || '',
+      cadence_theorique_kg_h: a.cadence_theorique_kg_h || '',
+      temps_reglage_min: a.temps_reglage_min || '30',
+      prix_achat: a.prix_achat || '0',
+      prix_vente: a.prix_vente || '0',
+      prix_cession_interne: a.prix_cession_interne || '0',
+      stock_mini: a.stock_mini || '0',
+      dlc_jours: a.dlc_jours || '',
+      allergenes: a.allergenes || '',
+      normes_iso: a.normes_iso || '',
+      points_ccp: a.points_ccp || false,
+      atelier_production_id: a.atelier_production_id ? String(a.atelier_production_id) : '',
+    });
+    setShowForm(true);
+    setTimeout(() => window.scrollTo(0, 0), 100);
+  };
+
   const ouvrirFormulaire = async () => {
     await chargerRefs();
     await chargerArticles();
+    setModeEditArt(false);
+    setEditArtId(null);
     setComposition([]);
     setNewComp({ mp_id:'', quantite:'', unite_id:'', pct:'' });
     setForm({ code:'', designation:'', famille_id:'', unite_mesure_id:'', type_article:'produit_fini', tracabilite_type:'lot', format_lot:'LOT-YYYYMMDD-001', matieres_principales:[], couleur:'', longueur_mm:'', largeur_mm:'', hauteur_mm:'', poids_theorique_kg:'', poids_reel_kg:'', poids_mandrin_kg:'', cadence_theorique_kg_h:'', temps_reglage_min:'30', prix_achat:'0', prix_vente:'0', prix_cession_interne:'0', stock_mini:'0', dlc_jours:'', allergenes:'', normes_iso:'', points_ccp:false, atelier_production_id:'' });
@@ -596,18 +643,25 @@ function Articles() {
 
   const totalPct = composition.reduce((s, c) => s + parseFloat(c.pct || 0), 0);
 
-  const creer = async () => {
-    if (!form.code.trim()) return toast.error('Le code est obligatoire');
-    if (!form.designation.trim()) return toast.error('La désignation est obligatoire');
+  const sauvegarderArticle = async () => {
+    if (!form.code.trim()) return toast.error('Code obligatoire');
+    if (!form.designation.trim()) return toast.error('Désignation obligatoire');
     try {
       const payload = new FormData();
-      Object.entries(form).forEach(([k, v]) => { if (v !== '' && v !== null) payload.append(k, v); });
+      Object.entries(form).forEach(([k, v]) => { if (v !== '' && v !== null && v !== undefined) payload.append(k, String(v)); });
       if (composition.length > 0) payload.append('composition', JSON.stringify(composition));
-      await axios.post(`${API}/articles`, payload, { headers: { 'Content-Type': 'multipart/form-data' } });
-      toast.success(`✓ Article ${form.code} créé`);
+      if (modeEditArt && editArtId) {
+        await axios.put(`${API}/articles/${editArtId}`, payload, { headers: { 'Content-Type': 'multipart/form-data' } });
+        toast.success(`✓ ${form.designation} mis à jour`);
+      } else {
+        await axios.post(`${API}/articles`, payload, { headers: { 'Content-Type': 'multipart/form-data' } });
+        toast.success(`✓ Article ${form.code} créé`);
+      }
       setShowForm(false);
+      setModeEditArt(false);
+      setEditArtId(null);
       chargerArticles();
-    } catch (err) { toast.error(err.response?.data?.error || 'Erreur création'); }
+    } catch (err) { toast.error(err.response?.data?.error || 'Erreur'); }
   };
 
   const TYPE_C = {
@@ -640,7 +694,7 @@ function Articles() {
         <div style={{ background:'#fff', borderRadius:14, border:'2px solid #c4b5fd', marginBottom:20 }}>
           {/* Header */}
           <div style={{ background:'linear-gradient(135deg,#7e22ce,#4338ca)', padding:'14px 24px', borderRadius:'12px 12px 0 0', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-            <span style={{ color:'#fff', fontWeight:800, fontSize:15 }}>📦 Fiche Article — Création</span>
+            <span style={{ color:'#fff', fontWeight:800, fontSize:15 }}>{modeEditArt ? '✏ Modifier Article' : '📦 Nouvel Article — Fiche Technique'}</span>
             <button onClick={() => setShowForm(false)} style={{ background:'rgba(255,255,255,0.2)', border:'none', color:'#fff', borderRadius:6, padding:'4px 12px', cursor:'pointer' }}>✕</button>
           </div>
 
@@ -878,9 +932,9 @@ function Articles() {
 
             {/* Boutons finaux */}
             <div style={{ display:'flex', gap:12, paddingTop:16, borderTop:'2px solid #f3f4f6' }}>
-              <button onClick={creer}
+              <button onClick={sauvegarderArticle}
                 style={{ background:'#7e22ce', color:'#fff', border:'none', padding:'13px 36px', borderRadius:10, cursor:'pointer', fontWeight:800, fontSize:15 }}>
-                ✓ Créer l'article
+                {modeEditArt ? '✓ Enregistrer les modifications' : "✓ Créer l'article"}
               </button>
               <button onClick={() => setShowForm(false)}
                 style={{ background:'#f3f4f6', color:'#374151', border:'none', padding:'13px 24px', borderRadius:10, cursor:'pointer', fontWeight:600 }}>
@@ -933,6 +987,10 @@ function Articles() {
                       <button onClick={() => setDetail(detail?.id===a.id ? null : a)}
                         style={{ background:'#f5f3ff', color:'#7e22ce', border:'none', padding:'4px 10px', borderRadius:6, cursor:'pointer', fontSize:11, fontWeight:600 }}>
                         {detail?.id===a.id ? '▲' : '▼ Voir'}
+                      </button>
+                      <button onClick={() => modifierArticle(a)}
+                        style={{ background:'#fef3c7', color:'#92400e', border:'none', padding:'4px 10px', borderRadius:6, cursor:'pointer', fontSize:11, fontWeight:600 }}>
+                        ✏
                       </button>
                       <button onClick={async () => {
                           if (!window.confirm('Supprimer "'+a.designation+'" ?')) return;
@@ -1010,6 +1068,8 @@ function MatieresPremières() {
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [detail, setDetail] = useState(null);
+  const [modeEdition, setModeEdition] = useState(false);
+  const [editId, setEditId] = useState(null);
   const [files, setFiles] = useState({ fiche_technique: null, fiche_securite: null, photo: null });
   const [form, setForm] = useState({
     code:'', designation:'', famille_id:'', unite_mesure_id:'',
@@ -1053,24 +1113,78 @@ function MatieresPremières() {
   const ouvrir = async () => {
     await chargerRefs();
     setFiles({ fiche_technique: null, fiche_securite: null, photo: null });
+    setModeEdition(false);
+    setEditId(null);
     setForm({ code:'', designation:'', famille_id:'', unite_mesure_id:'', type_article:'matiere_premiere', fournisseur:'', reference_fournisseur:'', couleur:'', epaisseur_mm:'', poids_theorique_kg:'', densite:'', temperature_fusion:'', temperature_traitement:'', prix_achat:'0', devise:'DZD', stock_mini:'0', stock_maxi:'', delai_appro_jours:'14', dlc_jours:'', dluo_jours:'', temperature_stockage_min:'', temperature_stockage_max:'', conditions_stockage:'', allergenes:'', points_ccp:false, normes_iso:'', certifications:'', risques_securite:'', epi_requis:'', tracabilite_type:'lot', format_lot:'LOT-YYYYMMDD-001', notes:'' });
     setShowForm(true);
   };
 
-  const creer = async () => {
+  const modifierMP = async (mp) => {
+    await chargerRefs();
+    setFiles({ fiche_technique: null, fiche_securite: null, photo: null });
+    setModeEdition(true);
+    setEditId(mp.id);
+    setDetail(null);
+    // Remplir le formulaire avec les données existantes
+    setForm({
+      code: mp.code || '',
+      designation: mp.designation || '',
+      famille_id: mp.famille_id ? String(mp.famille_id) : '',
+      unite_mesure_id: mp.unite_mesure_id ? String(mp.unite_mesure_id) : '',
+      type_article: 'matiere_premiere',
+      fournisseur: mp.fournisseur || '',
+      reference_fournisseur: mp.reference_fournisseur || '',
+      couleur: mp.couleur || '',
+      epaisseur_mm: mp.epaisseur_mm || '',
+      poids_theorique_kg: mp.poids_theorique_kg || '',
+      densite: mp.densite || '',
+      temperature_fusion: mp.temperature_fusion || '',
+      temperature_traitement: mp.temperature_traitement || '',
+      prix_achat: mp.prix_achat || '0',
+      devise: mp.devise || 'DZD',
+      stock_mini: mp.stock_mini || '0',
+      stock_maxi: mp.stock_maxi || '',
+      delai_appro_jours: mp.delai_appro_jours || '14',
+      dlc_jours: mp.dlc_jours || '',
+      dluo_jours: mp.dluo_jours || '',
+      temperature_stockage_min: mp.temperature_stockage_min || '',
+      temperature_stockage_max: mp.temperature_stockage_max || '',
+      conditions_stockage: mp.conditions_stockage || '',
+      allergenes: mp.allergenes || '',
+      points_ccp: mp.points_ccp || false,
+      normes_iso: mp.normes_iso || '',
+      certifications: mp.certifications || '',
+      risques_securite: mp.risques_securite || '',
+      epi_requis: mp.epi_requis || '',
+      tracabilite_type: mp.tracabilite_type || 'lot',
+      format_lot: mp.format_lot || 'LOT-YYYYMMDD-001',
+      notes: mp.notes || '',
+    });
+    setShowForm(true);
+    setTimeout(() => window.scrollTo(0, 0), 100);
+  };
+
+  const sauvegarder = async () => {
     if (!form.code.trim()) return toast.error('Code obligatoire');
     if (!form.designation.trim()) return toast.error('Désignation obligatoire');
     try {
       const fd = new FormData();
-      Object.entries(form).forEach(([k, v]) => { if (v !== '' && v !== null && v !== undefined) fd.append(k, v); });
+      Object.entries(form).forEach(([k, v]) => { if (v !== '' && v !== null && v !== undefined) fd.append(k, String(v)); });
       if (files.fiche_technique) fd.append('fiche_technique', files.fiche_technique);
       if (files.fiche_securite) fd.append('fiche_securite', files.fiche_securite);
       if (files.photo) fd.append('photo', files.photo);
-      await axios.post(`${API}/articles`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-      toast.success(`✓ Matière première ${form.code} créée`);
+      if (modeEdition && editId) {
+        await axios.put(`${API}/articles/${editId}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+        toast.success(`✓ ${form.designation} mis à jour`);
+      } else {
+        await axios.post(`${API}/articles`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+        toast.success(`✓ Matière première ${form.code} créée`);
+      }
       setShowForm(false);
+      setModeEdition(false);
+      setEditId(null);
       charger();
-    } catch (err) { toast.error(err.response?.data?.error || 'Erreur création'); }
+    } catch (err) { toast.error(err.response?.data?.error || 'Erreur'); }
   };
 
   // Utilise InputField, SelectField, FileField définis globalement
@@ -1100,7 +1214,7 @@ function MatieresPremières() {
       {showForm && (
         <div style={{ background:'#fff', borderRadius:14, border:'2px solid #93c5fd', marginBottom:20 }}>
           <div style={{ background:'linear-gradient(135deg,#1d4ed8,#0369a1)', padding:'14px 24px', borderRadius:'12px 12px 0 0', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-            <span style={{ color:'#fff', fontWeight:800, fontSize:15 }}>🧪 Fiche Matière Première — Création</span>
+            <span style={{ color:'#fff', fontWeight:800, fontSize:15 }}>{modeEdition ? '✏ Modifier Matière Première' : '🧪 Nouvelle Matière Première'}</span>
             <button onClick={() => setShowForm(false)} style={{ background:'rgba(255,255,255,0.2)', border:'none', color:'#fff', borderRadius:6, padding:'4px 12px', cursor:'pointer' }}>✕</button>
           </div>
 
@@ -1215,9 +1329,9 @@ function MatieresPremières() {
 
             {/* Boutons */}
             <div style={{ display:'flex', gap:12, paddingTop:16, borderTop:'2px solid #f3f4f6' }}>
-              <button onClick={creer}
+              <button onClick={sauvegarder}
                 style={{ background:'#1d4ed8', color:'#fff', border:'none', padding:'13px 36px', borderRadius:10, cursor:'pointer', fontWeight:800, fontSize:15 }}>
-                ✓ Créer la matière première
+                {modeEdition ? '✓ Enregistrer les modifications' : '✓ Créer la matière première'}
               </button>
               <button onClick={() => setShowForm(false)}
                 style={{ background:'#f3f4f6', color:'#374151', border:'none', padding:'13px 24px', borderRadius:10, cursor:'pointer', fontWeight:600 }}>
@@ -1279,22 +1393,19 @@ function MatieresPremières() {
                 </td>
                 <td style={{ padding:'9px 14px' }}>
                   <div style={{ display:'flex', gap:6 }}>
-                    <button
-                      onClick={e => { e.stopPropagation(); setDetail(detail?.id===m.id ? null : m); }}
+                    <button onClick={e => { e.stopPropagation(); setDetail(detail?.id===m.id ? null : m); }}
                       style={{ background:'#dbeafe', color:'#1d4ed8', border:'none', padding:'4px 10px', borderRadius:6, cursor:'pointer', fontSize:11, fontWeight:600 }}>
-                      {detail?.id === m.id ? '▲ Fermer' : '▼ Voir'}
+                      {detail?.id===m.id ? '▲ Fermer' : '▼ Voir'}
                     </button>
-                    <button
-                      onClick={async e => {
+                    <button onClick={e => { e.stopPropagation(); modifierMP(m); }}
+                      style={{ background:'#fef3c7', color:'#92400e', border:'none', padding:'4px 10px', borderRadius:6, cursor:'pointer', fontSize:11, fontWeight:600 }}>
+                      ✏ Modifier
+                    </button>
+                    <button onClick={async e => {
                         e.stopPropagation();
-                        if (!window.confirm(`Supprimer "${m.designation}" ?`)) return;
-                        try {
-                          await axios.delete(`${API}/articles/${m.id}`);
-                          toast.success('Matière supprimée');
-                          setDetail(null);
-                          const { data } = await axios.get(`${API}/articles?type_article=matiere_premiere`);
-                          setMps(data);
-                        } catch { toast.error('Erreur suppression'); }
+                        if (!window.confirm('Supprimer "'+m.designation+'" ?')) return;
+                        try { await axios.delete(`${API}/articles/${m.id}`); toast.success('Supprimé'); setDetail(null); charger(); }
+                        catch { toast.error('Erreur suppression'); }
                       }}
                       style={{ background:'#fee2e2', color:'#dc2626', border:'none', padding:'4px 10px', borderRadius:6, cursor:'pointer', fontSize:11, fontWeight:600 }}>
                       ✕ Suppr.
