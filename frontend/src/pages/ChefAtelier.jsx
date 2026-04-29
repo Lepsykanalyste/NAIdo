@@ -7,6 +7,69 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 
 const API = '/api';
 
+// ══════════════════════════════════════════════════════════════
+// COMPOSANTS PARTAGÉS — évite le re-render / perte de focus
+// ══════════════════════════════════════════════════════════════
+
+const InputField = ({ label, value, onChange, type='text', placeholder='', note='', required=false }) => (
+  <div>
+    <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>
+      {label}
+      {required && <span style={{ color:'#dc2626' }}> *</span>}
+      {note && <span style={{ fontSize:10, color:'#9ca3af', marginLeft:5 }}>{note}</span>}
+    </label>
+    <input
+      type={type}
+      value={value||''}
+      placeholder={placeholder}
+      onChange={onChange}
+      style={{
+        width:'100%', border:'1px solid #d1d5db', borderRadius:8,
+        padding:'9px', fontSize:13, boxSizing:'border-box',
+        textAlign: type==='number' ? 'center' : 'left'
+      }}
+    />
+  </div>
+);
+
+const SelectField = ({ label, value, onChange, options, required=false }) => (
+  <div>
+    <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>
+      {label}
+      {required && <span style={{ color:'#dc2626' }}> *</span>}
+      {required && !value && <span style={{ fontSize:10, color:'#dc2626', marginLeft:4 }}>requis</span>}
+    </label>
+    <select
+      value={value||''}
+      onChange={onChange}
+      style={{
+        width:'100%', border:`1px solid ${required&&!value?'#fca5a5':'#d1d5db'}`,
+        borderRadius:8, padding:'9px', fontSize:13, background:'#fff'
+      }}
+    >
+      <option value="">-- Sélectionner --</option>
+      {options.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+    </select>
+  </div>
+);
+
+const FileField = ({ label, file, onFile, accept, icon }) => (
+  <div>
+    <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>{icon} {label}</label>
+    <label style={{
+      display:'block', border:`2px dashed ${file ? '#16a34a' : '#d1d5db'}`,
+      borderRadius:8, padding:'10px 14px', cursor:'pointer',
+      background: file ? '#f0fdf4' : '#fafafa',
+      fontSize:12, color: file ? '#15803d' : '#6b7280', textAlign:'center'
+    }}>
+      {file ? `✓ ${file.name}` : `Cliquez pour choisir (${accept})`}
+      <input type="file" accept={accept} style={{ display:'none' }}
+        onChange={e => onFile(e.target.files[0])}/>
+    </label>
+  </div>
+);
+
+
 // ── ICÔNES SVG ───────────────────────────────────────────────
 const Icon = ({ d, size = 18 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -556,28 +619,9 @@ function Articles() {
     piece_detachee:  { bg:'#fce7f3', tx:'#9d174d', label:'Pièce détachée' },
   };
 
-  const F = ({ label, k, type='text', ph='' }) => (
-    <div>
-      <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>{label}</label>
-      <input id={k==='code'?'art-code':undefined} type={type} value={form[k]||''} placeholder={ph}
-        onChange={e => setForm({...form,[k]:e.target.value})}
-        style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'9px', fontSize:13, boxSizing:'border-box', textAlign:type==='number'?'center':'left' }}/>
-    </div>
-  );
+  // InputField global utilisé
 
-  const S = ({ label, k, opts, req }) => (
-    <div>
-      <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>
-        {label}{req && <span style={{ color:'#dc2626' }}> *</span>}
-        {req && !form[k] && <span style={{ color:'#dc2626', fontSize:10, marginLeft:4 }}>requis</span>}
-      </label>
-      <select value={form[k]||''} onChange={e => setForm({...form,[k]:e.target.value})}
-        style={{ width:'100%', border:`1px solid ${req&&!form[k]?'#fca5a5':'#d1d5db'}`, borderRadius:8, padding:'9px', fontSize:13, background:'#fff' }}>
-        <option value="">-- Sélectionner --</option>
-        {opts.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
-      </select>
-    </div>
-  );
+  // SelectField global utilisé
 
   return (
     <div>
@@ -608,36 +652,26 @@ function Articles() {
                 1 · Identification
               </div>
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:12 }}>
-                <F label="Code *" k="code" ph="EX: SAC-50KG"/>
-                <F label="Désignation *" k="designation" ph="Sac industriel PP 50kg"/>
-                <S label="Famille *" k="famille_id" req={true} opts={
-                  familles.length ? familles.map(f => ({ v:String(f.id), l:f.libelle }))
-                  : [{ v:'', l:'⚠ Créez des familles dans Référentiels' }]
-                }/>
-                <S label="Type article" k="type_article" opts={[
-                  { v:'produit_fini', l:'Produit fini' },
-                  { v:'matiere_premiere', l:'Matière première' },
-                  { v:'semi_fini', l:'Semi-fini' },
-                  { v:'emballage', l:'Emballage' },
-                  { v:'consommable', l:'Consommable' },
-                  { v:'piece_detachee', l:'Pièce détachée' },
-                ]}/>
-                <S label="Unité de mesure *" k="unite_mesure_id" req={true} opts={
-                  unites.length ? unites.map(u => ({ v:String(u.id), l:`${u.code} — ${u.libelle}` }))
-                  : [{ v:'', l:'⚠ Activez des unités dans Référentiels' }]
-                }/>
-                <S label="Atelier de production" k="atelier_production_id" opts={
-                  ateliers.length ? ateliers.map(a => ({ v:String(a.id), l:`${a.code} — ${a.libelle}` }))
-                  : [{ v:'', l:'⚠ Créez des ateliers' }]
-                }/>
+                <InputField label="Code *" value={form.code} onChange={e => setForm({...form,code:e.target.value})} placeholder="EX: SAC-50KG"/>
+                <InputField label="Désignation *" value={form.designation} onChange={e => setForm({...form,designation:e.target.value})} placeholder="Sac industriel PP 50kg"/>
+                <SelectField label="Famille *" value={form.famille_id} onChange={e => setForm({...form,famille_id:e.target.value})}
+                      options={
+                  familles.length ? familles.map(f => ({ v:String(f.id), l:f.libelle }/>
+                <SelectField label="Type article" value={form.type_article} onChange={e => setForm({...form,type_article:e.target.value})}
+                      options={[
+                  { v:'produit_fini', l:'Produit fini' }/>
+                <SelectField label="Unité de mesure *" value={form.unite_mesure_id} onChange={e => setForm({...form,unite_mesure_id:e.target.value})}
+                      options={
+                  unites.length ? unites.map(u => ({ v:String(u.id), l:`${u.code}/>
+                <SelectField label="Atelier de production" value={form.atelier_production_id} onChange={e => setForm({...form,atelier_production_id:e.target.value})}
+                      options={
+                  ateliers.length ? ateliers.map(a => ({ v:String(a.id), l:`${a.code}/>
               </div>
               {/* Traçabilité + format numéro */}
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:12 }}>
-                <S label="Type de traçabilité" k="tracabilite_type" opts={[
-                  { v:'lot', l:'🏷 Par numéro de lot (alimentaire, ISO)' },
-                  { v:'serie', l:'🔢 Par numéro de série (équipement)' },
-                  { v:'aucune', l:'— Aucune traçabilité' },
-                ]}/>
+                <SelectField label="Type de traçabilité" value={form.tracabilite_type} onChange={e => setForm({...form,tracabilite_type:e.target.value})}
+                      options={[
+                  { v:'lot', l:'🏷 Par numéro de lot (alimentaire, ISO)' }/>
                 <div>
                   <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>
                     Format numéro de lot / série
@@ -656,15 +690,15 @@ function Articles() {
                 2 · Caractéristiques physiques
               </div>
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:12 }}>
-                <F label="Longueur (mm)" k="longueur_mm" type="number" ph="0"/>
-                <F label="Largeur (mm)" k="largeur_mm" type="number" ph="0"/>
-                <F label="Hauteur (mm)" k="hauteur_mm" type="number" ph="0"/>
-                <F label="Poids théorique (kg)" k="poids_theorique_kg" type="number" ph="0.000"/>
-                <F label="Poids réel (kg)" k="poids_reel_kg" type="number" ph="0.000"/>
-                <F label="Poids mandrin (kg)" k="poids_mandrin_kg" type="number" ph="0.000"/>
-                <F label="Couleur" k="couleur" ph="Naturel, Blanc, Noir..."/>
-                <F label="Cadence théorique (kg/h)" k="cadence_theorique_kg_h" type="number" ph="0"/>
-                <F label="Temps réglage (min)" k="temps_reglage_min" type="number" ph="30"/>
+                <InputField label="Longueur (mm)" value={form.longueur_mm} onChange={e => setForm({...form,longueur_mm:e.target.value})} type="number" placeholder="0"/>
+                <InputField label="Largeur (mm)" value={form.largeur_mm} onChange={e => setForm({...form,largeur_mm:e.target.value})} type="number" placeholder="0"/>
+                <InputField label="Hauteur (mm)" value={form.hauteur_mm} onChange={e => setForm({...form,hauteur_mm:e.target.value})} type="number" placeholder="0"/>
+                <InputField label="Poids théorique (kg)" value={form.poids_theorique_kg} onChange={e => setForm({...form,poids_theorique_kg:e.target.value})} type="number" placeholder="0.000"/>
+                <InputField label="Poids réel (kg)" value={form.poids_reel_kg} onChange={e => setForm({...form,poids_reel_kg:e.target.value})} type="number" placeholder="0.000"/>
+                <InputField label="Poids mandrin (kg)" value={form.poids_mandrin_kg} onChange={e => setForm({...form,poids_mandrin_kg:e.target.value})} type="number" placeholder="0.000"/>
+                <InputField label="Couleur" value={form.couleur} onChange={e => setForm({...form,couleur:e.target.value})} placeholder="Naturel, Blanc, Noir..."/>
+                <InputField label="Cadence théorique (kg/h)" value={form.cadence_theorique_kg_h} onChange={e => setForm({...form,cadence_theorique_kg_h:e.target.value})} type="number" placeholder="0"/>
+                <InputField label="Temps réglage (min)" value={form.temps_reglage_min} onChange={e => setForm({...form,temps_reglage_min:e.target.value})} type="number" placeholder="30"/>
               </div>
             </div>
 
@@ -717,11 +751,11 @@ function Articles() {
                 3 · Paramètres commerciaux & stock
               </div>
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:12 }}>
-                <F label="Prix achat (DZD)" k="prix_achat" type="number" ph="0"/>
-                <F label="Prix vente (DZD)" k="prix_vente" type="number" ph="0"/>
-                <F label="Prix cession interne" k="prix_cession_interne" type="number" ph="0"/>
-                <F label="Stock minimum" k="stock_mini" type="number" ph="0"/>
-                <F label="DLC — Durée de vie (jours)" k="dlc_jours" type="number" ph="Ex: 365 = 1 an"/>
+                <InputField label="Prix achat (DZD)" value={form.prix_achat} onChange={e => setForm({...form,prix_achat:e.target.value})} type="number" placeholder="0"/>
+                <InputField label="Prix vente (DZD)" value={form.prix_vente} onChange={e => setForm({...form,prix_vente:e.target.value})} type="number" placeholder="0"/>
+                <InputField label="Prix cession interne" value={form.prix_cession_interne} onChange={e => setForm({...form,prix_cession_interne:e.target.value})} type="number" placeholder="0"/>
+                <InputField label="Stock minimum" value={form.stock_mini} onChange={e => setForm({...form,stock_mini:e.target.value})} type="number" placeholder="0"/>
+                <InputField label="DLC — Durée de vie (jours)" value={form.dlc_jours} onChange={e => setForm({...form,dlc_jours:e.target.value})} type="number" placeholder="Ex: 365 = 1 an"/>
                 <div>
                   <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>
                     Normes / Certifications
@@ -731,7 +765,7 @@ function Articles() {
                     placeholder="ISO 9001, ISO 22000, EN 13432..."
                     style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'9px', fontSize:13, boxSizing:'border-box' }}/>
                 </div>
-                <F label="Allergènes (alimentaire)" k="allergenes" ph="Gluten, Lait..."/>
+                <InputField label="Allergènes (alimentaire)" value={form.allergenes} onChange={e => setForm({...form,allergenes:e.target.value})} placeholder="Gluten, Lait..."/>
               </div>
               <div style={{ marginTop:12, display:'flex', alignItems:'center', gap:8 }}>
                 <input type="checkbox" id="chk-ccp" checked={!!form.points_ccp}
@@ -1017,42 +1051,7 @@ function MatieresPremières() {
     } catch (err) { toast.error(err.response?.data?.error || 'Erreur création'); }
   };
 
-  const F = ({ label, k, type='text', ph='', note='' }) => (
-    <div>
-      <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>
-        {label}
-        {note && <span style={{ fontSize:10, color:'#9ca3af', marginLeft:5 }}>{note}</span>}
-      </label>
-      <input type={type} value={form[k]||''} placeholder={ph}
-        onChange={e => setForm({...form,[k]:e.target.value})}
-        style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'9px', fontSize:13,
-          boxSizing:'border-box', textAlign:type==='number'?'center':'left' }}/>
-    </div>
-  );
-
-  const S = ({ label, k, opts }) => (
-    <div>
-      <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>{label}</label>
-      <select value={form[k]||''} onChange={e => setForm({...form,[k]:e.target.value})}
-        style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'9px', fontSize:13 }}>
-        <option value="">-- Sélectionner --</option>
-        {opts.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
-      </select>
-    </div>
-  );
-
-  const Fichier = ({ label, key_name, accept, icon }) => (
-    <div>
-      <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>{icon} {label}</label>
-      <label style={{ display:'block', border:`2px dashed ${files[key_name] ? '#16a34a' : '#d1d5db'}`,
-        borderRadius:8, padding:'10px 14px', cursor:'pointer', background: files[key_name] ? '#f0fdf4' : '#fafafa',
-        fontSize:12, color: files[key_name] ? '#15803d' : '#6b7280', textAlign:'center' }}>
-        {files[key_name] ? `✓ ${files[key_name].name}` : `Cliquez pour choisir (${accept})`}
-        <input type="file" accept={accept} style={{ display:'none' }}
-          onChange={e => setFiles({...files, [key_name]: e.target.files[0]})}/>
-      </label>
-    </div>
-  );
+  // Utilise InputField, SelectField, FileField définis globalement
 
   const TYPES_MP = {
     plastique:   { bg:'#dbeafe', tx:'#1d4ed8' },
@@ -1091,18 +1090,18 @@ function MatieresPremières() {
                 1 · Identification & Fournisseur
               </div>
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(155px,1fr))', gap:12 }}>
-                <F label="Code *" k="code" ph="MP-PP-001"/>
-                <F label="Désignation *" k="designation" ph="Granulés PP Homopolymère"/>
-                <S label="Famille" k="famille_id" opts={familles.map(f => ({ v:String(f.id), l:f.libelle }))}/>
-                <S label="Unité de mesure" k="unite_mesure_id" opts={unites.map(u => ({ v:String(u.id), l:`${u.code} — ${u.libelle}` }))}/>
-                <F label="Fournisseur" k="fournisseur" ph="Nom du fournisseur"/>
-                <F label="Réf. fournisseur" k="reference_fournisseur" ph="REF-FOUR-001"/>
-                <S label="Traçabilité" k="tracabilite_type" opts={[
-                  { v:'lot', l:'Par numéro de lot' },
-                  { v:'serie', l:'Par numéro de série' },
-                  { v:'aucune', l:'Aucune' },
-                ]}/>
-                <F label="Format n° lot" k="format_lot" ph="LOT-YYYYMMDD-001"/>
+                <InputField label="Code *" value={form.code} onChange={e => setForm({...form,code:e.target.value})} placeholder="MP-PP-001"/>
+                <InputField label="Désignation *" value={form.designation} onChange={e => setForm({...form,designation:e.target.value})} placeholder="Granulés PP Homopolymère"/>
+                <SelectField label="Famille" value={form.famille_id} onChange={e => setForm({...form,famille_id:e.target.value})}
+                      options={familles.map(f => ({ v:String(f.id), l:f.libelle }/>
+                <SelectField label="Unité de mesure" value={form.unite_mesure_id} onChange={e => setForm({...form,unite_mesure_id:e.target.value})}
+                      options={unites.map(u => ({ v:String(u.id), l:`${u.code}/>
+                <InputField label="Fournisseur" value={form.fournisseur} onChange={e => setForm({...form,fournisseur:e.target.value})} placeholder="Nom du fournisseur"/>
+                <InputField label="Réf. fournisseur" value={form.reference_fournisseur} onChange={e => setForm({...form,reference_fournisseur:e.target.value})} placeholder="REF-FOUR-001"/>
+                <SelectField label="Traçabilité" value={form.tracabilite_type} onChange={e => setForm({...form,tracabilite_type:e.target.value})}
+                      options={[
+                  { v:'lot', l:'Par numéro de lot' }/>
+                <InputField label="Format n° lot" value={form.format_lot} onChange={e => setForm({...form,format_lot:e.target.value})} placeholder="LOT-YYYYMMDD-001"/>
               </div>
             </div>
 
@@ -1112,12 +1111,12 @@ function MatieresPremières() {
                 2 · Caractéristiques techniques
               </div>
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:12 }}>
-                <F label="Couleur / Aspect" k="couleur" ph="Naturel, Blanc..."/>
-                <F label="Densité (g/cm³)" k="densite" type="number" ph="0.900"/>
-                <F label="Poids unitaire (kg)" k="poids_theorique_kg" type="number" ph="0.000"/>
-                <F label="Épaisseur (mm)" k="epaisseur_mm" type="number" ph="0.00"/>
-                <F label="Temp. fusion (°C)" k="temperature_fusion" type="number" ph="165"/>
-                <F label="Temp. traitement (°C)" k="temperature_traitement" type="number" ph="220"/>
+                <InputField label="Couleur / Aspect" value={form.couleur} onChange={e => setForm({...form,couleur:e.target.value})} placeholder="Naturel, Blanc..."/>
+                <InputField label="Densité (g/cm³)" value={form.densite} onChange={e => setForm({...form,densite:e.target.value})} type="number" placeholder="0.900"/>
+                <InputField label="Poids unitaire (kg)" value={form.poids_theorique_kg} onChange={e => setForm({...form,poids_theorique_kg:e.target.value})} type="number" placeholder="0.000"/>
+                <InputField label="Épaisseur (mm)" value={form.epaisseur_mm} onChange={e => setForm({...form,epaisseur_mm:e.target.value})} type="number" placeholder="0.00"/>
+                <InputField label="Temp. fusion (°C)" value={form.temperature_fusion} onChange={e => setForm({...form,temperature_fusion:e.target.value})} type="number" placeholder="165"/>
+                <InputField label="Temp. traitement (°C)" value={form.temperature_traitement} onChange={e => setForm({...form,temperature_traitement:e.target.value})} type="number" placeholder="220"/>
               </div>
             </div>
 
@@ -1127,21 +1126,21 @@ function MatieresPremières() {
                 3 · Stockage, Conservation & Qualité
               </div>
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:12 }}>
-                <F label="Prix achat (DZD/unité)" k="prix_achat" type="number" ph="0"/>
-                <F label="Stock minimum" k="stock_mini" type="number" ph="0"/>
-                <F label="Stock maximum" k="stock_maxi" type="number" ph=""/>
-                <F label="Délai appro. (jours)" k="delai_appro_jours" type="number" ph="14"/>
-                <F label="DLC (jours)" k="dlc_jours" type="number" ph="" note="si périssable"/>
-                <F label="DLUO (jours)" k="dluo_jours" type="number" ph="" note="date limite utilisation"/>
-                <F label="Temp. stockage min (°C)" k="temperature_stockage_min" type="number" ph=""/>
-                <F label="Temp. stockage max (°C)" k="temperature_stockage_max" type="number" ph=""/>
+                <InputField label="Prix achat (DZD/unité)" value={form.prix_achat} onChange={e => setForm({...form,prix_achat:e.target.value})} type="number" placeholder="0"/>
+                <InputField label="Stock minimum" value={form.stock_mini} onChange={e => setForm({...form,stock_mini:e.target.value})} type="number" placeholder="0"/>
+                <InputField label="Stock maximum" value={form.stock_maxi} onChange={e => setForm({...form,stock_maxi:e.target.value})} type="number"/>
+                <InputField label="Délai appro. (jours)" value={form.delai_appro_jours} onChange={e => setForm({...form,delai_appro_jours:e.target.value})} type="number" placeholder="14"/>
+                <InputField label="DLC (jours)" value={form.dlc_jours} onChange={e => setForm({...form,dlc_jours:e.target.value})} type="number" note="si périssable"/>
+                <InputField label="DLUO (jours)" value={form.dluo_jours} onChange={e => setForm({...form,dluo_jours:e.target.value})} type="number" note="date limite utilisation"/>
+                <InputField label="Temp. stockage min (°C)" value={form.temperature_stockage_min} onChange={e => setForm({...form,temperature_stockage_min:e.target.value})} type="number"/>
+                <InputField label="Temp. stockage max (°C)" value={form.temperature_stockage_max} onChange={e => setForm({...form,temperature_stockage_max:e.target.value})} type="number"/>
               </div>
               <div style={{ marginTop:12 }}>
-                <F label="Conditions de stockage" k="conditions_stockage" ph="À l'abri de l'humidité, à l'ombre..."/>
+                <InputField label="Conditions de stockage" value={form.conditions_stockage} onChange={e => setForm({...form,conditions_stockage:e.target.value})} placeholder="À l"/>
               </div>
               <div style={{ marginTop:12, display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
-                <F label="Normes / Certifications" k="normes_iso" ph="ISO 9001, REACH, RoHS..."/>
-                <F label="Certifications qualité" k="certifications" ph="COA, COC, FDA..."/>
+                <InputField label="Normes / Certifications" value={form.normes_iso} onChange={e => setForm({...form,normes_iso:e.target.value})} placeholder="ISO 9001, REACH, RoHS..."/>
+                <InputField label="Certifications qualité" value={form.certifications} onChange={e => setForm({...form,certifications:e.target.value})} placeholder="COA, COC, FDA..."/>
               </div>
             </div>
 
@@ -1152,13 +1151,13 @@ function MatieresPremières() {
               </div>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
                 <div>
-                  <F label="Risques sécurité / Mentions H" k="risques_securite" ph="H351: Susceptible de provoquer le cancer..."/>
+                  <InputField label="Risques sécurité / Mentions H" value={form.risques_securite} onChange={e => setForm({...form,risques_securite:e.target.value})} placeholder="H351: Susceptible de provoquer le cancer..."/>
                 </div>
                 <div>
-                  <F label="EPI requis" k="epi_requis" ph="Gants nitrile, lunettes, masque FFP2..."/>
+                  <InputField label="EPI requis" value={form.epi_requis} onChange={e => setForm({...form,epi_requis:e.target.value})} placeholder="Gants nitrile, lunettes, masque FFP2..."/>
                 </div>
                 <div>
-                  <F label="Allergènes (alimentaire)" k="allergenes" ph="Gluten, Lait, Arachides..."/>
+                  <InputField label="Allergènes (alimentaire)" value={form.allergenes} onChange={e => setForm({...form,allergenes:e.target.value})} placeholder="Gluten, Lait, Arachides..."/>
                 </div>
                 <div style={{ display:'flex', alignItems:'center', gap:8, paddingTop:20 }}>
                   <input type="checkbox" id="chk-mp-ccp" checked={!!form.points_ccp}
@@ -1170,7 +1169,7 @@ function MatieresPremières() {
                 </div>
               </div>
               <div style={{ marginTop:12 }}>
-                <F label="Notes / Observations" k="notes" ph="Informations complémentaires..."/>
+                <InputField label="Notes / Observations" value={form.notes} onChange={e => setForm({...form,notes:e.target.value})} placeholder="Informations complémentaires..."/>
               </div>
             </div>
 
@@ -1180,9 +1179,9 @@ function MatieresPremières() {
                 5 · Documents techniques
               </div>
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12 }}>
-                <Fichier label="Fiche Technique (TDS)" key_name="fiche_technique" accept=".pdf,.doc,.docx" icon="📄"/>
-                <Fichier label="Fiche de Sécurité (FDS/SDS)" key_name="fiche_securite" accept=".pdf,.doc,.docx" icon="⚠"/>
-                <Fichier label="Photo / Image" key_name="photo" accept=".jpg,.jpeg,.png,.webp" icon="🖼"/>
+                <FileField label="Fiche Technique (TDS)" file={files.fiche_technique} onFile={f => setFiles({...files,fiche_technique:f})} accept=".pdf,.doc,.docx" icon="📄"/>
+                <FileField label="Fiche de Sécurité (FDS/SDS)" file={files.fiche_securite} onFile={f => setFiles({...files,fiche_securite:f})} accept=".pdf,.doc,.docx" icon="⚠"/>
+                <FileField label="Photo / Image" file={files.photo} onFile={f => setFiles({...files,photo:f})} accept=".jpg,.jpeg,.png,.webp" icon="🖼"/>
               </div>
               <div style={{ marginTop:10, background:'#f0fdf4', borderRadius:8, padding:'10px 14px', fontSize:12, color:'#15803d' }}>
                 💡 La fiche de sécurité (FDS) est obligatoire pour les matières dangereuses — REACH, CLP. La fiche technique (TDS) contient les paramètres de mise en œuvre.
