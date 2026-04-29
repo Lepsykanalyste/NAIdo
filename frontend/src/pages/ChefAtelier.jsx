@@ -1671,7 +1671,7 @@ function BonsCession() {
       ${bon.notes ? `<p style="margin-top:20px;padding:12px;background:#fffbeb;border-radius:8px;font-size:13px"><strong>Notes :</strong> ${bon.notes}</p>` : ''}
 
       <div class="footer">
-        NAIdo ERP/MES — Green Industry © ${new Date().getFullYear()} — Document généré le ${new Date().toLocaleString('fr-FR')}
+        NAIdo ERP/MES — NAI © ${new Date().getFullYear()} — Document généré le ${new Date().toLocaleString('fr-FR')}
       </div>
     </body></html>`;
 
@@ -3378,7 +3378,7 @@ export default function ChefAtelier() {
           {sidebarOuverte && (
             <div>
               <div style={{ fontWeight:700, fontSize:14, whiteSpace:'nowrap' }}>NAIdo ERP/MES</div>
-              <div style={{ fontSize:10, color:'#6b7280', whiteSpace:'nowrap' }}>Green Industry</div>
+              <div style={{ fontSize:10, color:'#6b7280', whiteSpace:'nowrap' }}>NAI</div>
             </div>
           )}
           <button onClick={() => setSidebarOuverte(!sidebarOuverte)}
@@ -3471,7 +3471,7 @@ export default function ChefAtelier() {
 
         {/* Footer */}
         <footer style={{ background:'#fff', borderTop:'1px solid #e5e7eb', padding:'8px 24px', fontSize:11, color:'#9ca3af', textAlign:'center', flexShrink:0 }}>
-          © 2026 NAIdo v3.0 — Logiciel créé par SOPHOPSY pour Green Industry
+          © 2026 NAIdo v3.0 — Logiciel créé par SOPHOPSY pour NAI
         </footer>
       </div>
     </div>
