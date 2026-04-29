@@ -959,19 +959,20 @@ function Articles() {
                   <td style={{ padding:'9px 14px' }} onClick={e => e.stopPropagation()}>
                     <div style={{ display:'flex', gap:5 }}>
                       <button onClick={() => setDetail(detail?.id===a.id ? null : a)}
-                        style={{ background:'#f5f3ff', color:'#7e22ce', border:'none', padding:'4px 10px', borderRadius:6, cursor:'pointer', fontSize:11, fontWeight:600 }}>
-                        {detail?.id===a.id ? '▲' : '▼ Voir'}
+                        style={{ background:'#f5f3ff', color:'#7e22ce', border:'1px solid #c4b5fd', padding:'5px 10px', borderRadius:6, cursor:'pointer', fontSize:11, fontWeight:600 }}>
+                        {detail?.id===a.id ? '▲' : '👁'}
                       </button>
                       <button onClick={() => modifierArticle(a)}
-                        style={{ background:'#fef3c7', color:'#92400e', border:'none', padding:'4px 10px', borderRadius:6, cursor:'pointer', fontSize:11, fontWeight:600 }}>
-                        ✏
+                        style={{ background:'#fef3c7', color:'#92400e', border:'1px solid #fde68a', padding:'5px 10px', borderRadius:6, cursor:'pointer', fontSize:11, fontWeight:700 }}>
+                        ✏ Modifier
                       </button>
-                      <button onClick={async () => {
+                      <button onClick={async e => {
+                          e.stopPropagation();
                           if (!window.confirm('Supprimer "'+a.designation+'" ?')) return;
                           try { await axios.delete(`${API}/articles/${a.id}`); toast.success('Supprimé'); setDetail(null); chargerArticles(); }
-                          catch { toast.error('Erreur'); }
+                          catch { toast.error('Erreur suppression'); }
                         }}
-                        style={{ background:'#fee2e2', color:'#dc2626', border:'none', padding:'4px 10px', borderRadius:6, cursor:'pointer', fontSize:11 }}>
+                        style={{ background:'#fee2e2', color:'#dc2626', border:'1px solid #fca5a5', padding:'5px 10px', borderRadius:6, cursor:'pointer', fontSize:11, fontWeight:600 }}>
                         ✕
                       </button>
                     </div>
@@ -2444,14 +2445,28 @@ function Stock() {
   };
 
   const mvtRapide = async () => {
-    if (!formMvt.article_id || !formMvt.qte) return toast.error('Article et quantité requis');
+    if (!formMvt.article_id) return toast.error('Sélectionnez un article');
+    if (!formMvt.qte || parseFloat(formMvt.qte) <= 0) return toast.error('Quantité invalide');
     try {
       const endpoint = typeMvt === 'entree' ? `${API}/stock/entree` : `${API}/stock/sortie`;
-      await axios.post(endpoint, formMvt);
-      toast.success(typeMvt === 'entree' ? 'Entrée enregistrée' : 'Sortie enregistrée');
+      // Envoyer en JSON avec types corrects
+      const payload = {
+        article_id: formMvt.article_id,
+        emplacement_id: formMvt.emplacement_id || null,
+        qte: parseFloat(formMvt.qte),
+        notes: formMvt.notes || null,
+      };
+      if (typeMvt === 'entree') {
+        payload.numero_lot = formMvt.numero_lot || null;
+        payload.date_dlc = formMvt.date_dlc || null;
+        payload.prix_unitaire = parseFloat(formMvt.prix_unitaire) || 0;
+      }
+      await axios.post(endpoint, payload);
+      toast.success(typeMvt === 'entree' ? '✓ Entrée enregistrée' : '✓ Sortie enregistrée');
       setShowMvt(false);
+      setFormMvt({ article_id:'', emplacement_id:'', qte:'', numero_lot:'', date_dlc:'', prix_unitaire:'', notes:'' });
       charger();
-    } catch (err) { toast.error(err.response?.data?.error || 'Erreur'); }
+    } catch (err) { toast.error(err.response?.data?.error || 'Erreur entrée/sortie'); }
   };
 
   const STATUT_LOT = {
