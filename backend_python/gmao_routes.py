@@ -344,7 +344,7 @@ async def get_pieces(pool, search=None, alerte_stock=False):
     async with pool.acquire() as conn:
         q = """
             SELECT pd.*,
-                f.nom AS fournisseur_nom
+                f.raison_sociale AS fournisseur_nom
             FROM pieces_detachees pd
             LEFT JOIN fournisseurs f ON f.id=pd.fournisseur_id
             WHERE pd.actif=true
