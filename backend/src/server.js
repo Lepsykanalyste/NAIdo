@@ -23,6 +23,7 @@ app.use('/api/of',                  require('./routes/of'));
 app.use('/api/sessions',            require('./routes/sessions'));
 app.use('/api/tickets',             require('./routes/tickets'));
 app.use('/api/arrets',              require('./routes/arrets'));
+app.use('/api/stock',          require('./routes/stock'));
 app.use('/api/qualite',             require('./routes/qualite'));
 app.use('/api/kpi',                 require('./routes/kpi'));
 app.use('/api/import',              require('./routes/import'));
