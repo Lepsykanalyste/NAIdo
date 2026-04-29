@@ -26,6 +26,14 @@ app = FastAPI(title="NAIdo API", version="4.0", lifespan=lifespan)
 
 # Import stock routes module
 from stock_routes import inventaire_handler, resume_handler, mouvement_handler
+# Import RH routes module
+from rh_routes import (
+    rh_dashboard, get_postes, get_employes, create_employe,
+    get_contrats, create_contrat,
+    get_conges, create_conge, valider_conge,
+    get_bulletins, generer_bulletin,
+    get_presences, get_evaluations
+)
 # Import QHSE routes module
 from qhse_routes import (
     qhse_dashboard, get_processus_list, create_processus, update_processus,
@@ -1076,6 +1084,177 @@ async def api_get_normes(user=Depends(get_current_user)):
         rows = await conn.fetch("SELECT * FROM normes_qhse WHERE actif=true ORDER BY code")
         return [dict(r) for r in rows]
 
+
+# ══════════════════════════════════════════════════════════════
+# ROUTES RH
+# ══════════════════════════════════════════════════════════════
+
+@app.get("/api/rh/dashboard")
+async def api_rh_dashboard(user=Depends(get_current_user)):
+    return await rh_dashboard(pool)
+
+@app.get("/api/rh/postes")
+async def api_get_postes(user=Depends(get_current_user)):
+    return await get_postes(pool)
+
+@app.post("/api/rh/postes")
+async def api_create_poste(payload: dict, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        d = payload
+        row = await conn.fetchrow("""
+            INSERT INTO postes (code,intitule,departement,niveau,description)
+            VALUES ($1,$2,$3,$4,$5) RETURNING *
+        """, d["code"].upper(), d["intitule"], d.get("departement"),
+            d.get("niveau"), d.get("description"))
+        return dict(row)
+
+@app.get("/api/rh/employes")
+async def api_get_employes(search: Optional[str]=None, statut: Optional[str]=None,
+                            atelier_id: Optional[str]=None, poste_id: Optional[str]=None,
+                            user=Depends(get_current_user)):
+    return await get_employes(pool, search, statut, atelier_id, poste_id)
+
+@app.get("/api/rh/employes/{emp_id}")
+async def api_get_employe(emp_id: str, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("""
+            SELECT e.*, p.intitule AS poste_libelle, p.departement,
+                at.libelle AS atelier_libelle
+            FROM employes e
+            LEFT JOIN postes p ON p.id=e.poste_id
+            LEFT JOIN ateliers at ON at.id=e.atelier_id
+            WHERE e.id=$1
+        """, emp_id)
+        if not row: raise HTTPException(404, "Employé introuvable")
+        return dict(row)
+
+@app.post("/api/rh/employes")
+async def api_create_employe(payload: dict, user=Depends(get_current_user)):
+    try: return await create_employe(pool, payload, user.get("id"))
+    except ValueError as e: raise HTTPException(400, str(e))
+
+@app.put("/api/rh/employes/{emp_id}")
+async def api_update_employe(emp_id: str, payload: dict, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        d = payload
+        sets, vals = [], []
+        def add(col, val): vals.append(val); sets.append(f"{col}=${len(vals)}")
+        for f in ["nom","prenom","telephone","email","adresse","statut","poste_id","atelier_id","notes"]:
+            if f in d: add(f, d[f] if f not in ("poste_id","atelier_id") else (int(d[f]) if d[f] else None))
+        if not sets: return {"message": "Rien à modifier"}
+        vals.append(emp_id)
+        row = await conn.fetchrow(f"UPDATE employes SET {','.join(sets)} WHERE id=${len(vals)} RETURNING *", *vals)
+        return dict(row)
+
+@app.get("/api/rh/contrats")
+async def api_get_contrats(employe_id: Optional[str]=None, user=Depends(get_current_user)):
+    return await get_contrats(pool, employe_id)
+
+@app.post("/api/rh/contrats")
+async def api_create_contrat(payload: dict, user=Depends(get_current_user)):
+    try: return await create_contrat(pool, payload)
+    except Exception as e: raise HTTPException(400, str(e))
+
+@app.get("/api/rh/conges")
+async def api_get_conges(employe_id: Optional[str]=None, statut: Optional[str]=None,
+                          annee: Optional[str]=None, user=Depends(get_current_user)):
+    return await get_conges(pool, employe_id, statut, annee)
+
+@app.post("/api/rh/conges")
+async def api_create_conge(payload: dict, user=Depends(get_current_user)):
+    try: return await create_conge(pool, payload, user.get("id"))
+    except Exception as e: raise HTTPException(400, str(e))
+
+@app.put("/api/rh/conges/{conge_id}/valider")
+async def api_valider_conge(conge_id: str, payload: dict, user=Depends(get_current_user)):
+    try:
+        return await valider_conge(pool, conge_id, payload["statut"],
+                                   user.get("id"), payload.get("commentaire"))
+    except Exception as e: raise HTTPException(400, str(e))
+
+@app.get("/api/rh/bulletins")
+async def api_get_bulletins(employe_id: Optional[str]=None, periode: Optional[str]=None,
+                             user=Depends(get_current_user)):
+    return await get_bulletins(pool, employe_id, periode)
+
+@app.post("/api/rh/bulletins")
+async def api_generer_bulletin(payload: dict, user=Depends(get_current_user)):
+    try: return await generer_bulletin(pool, payload, user.get("id"))
+    except ValueError as e: raise HTTPException(400, str(e))
+    except Exception as e: raise HTTPException(500, str(e))
+
+@app.put("/api/rh/bulletins/{bul_id}/statut")
+async def api_update_bulletin_statut(bul_id: str, payload: dict, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "UPDATE bulletins_paie SET statut=$1 WHERE id=$2 RETURNING *",
+            payload["statut"], bul_id
+        )
+        return dict(row)
+
+@app.get("/api/rh/presences")
+async def api_get_presences(employe_id: Optional[str]=None,
+                             date_debut: Optional[str]=None,
+                             date_fin: Optional[str]=None,
+                             user=Depends(get_current_user)):
+    return await get_presences(pool, employe_id, date_debut, date_fin)
+
+@app.post("/api/rh/presences")
+async def api_saisir_presence(payload: dict, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        d = payload
+        row = await conn.fetchrow("""
+            INSERT INTO presences (employe_id,date_presence,heure_entree,heure_sortie,
+                heures_travaillees,heures_supp,type_presence,notes,saisi_par)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+            ON CONFLICT (employe_id,date_presence)
+            DO UPDATE SET heure_sortie=$4, heures_travaillees=$5, heures_supp=$6, notes=$8
+            RETURNING *
+        """,
+            d["employe_id"], d["date_presence"],
+            d.get("heure_entree") or None, d.get("heure_sortie") or None,
+            float(d.get("heures_travaillees",8) or 8),
+            float(d.get("heures_supp",0) or 0),
+            d.get("type_presence","present"), d.get("notes"),
+            user.get("id")
+        )
+        return dict(row)
+
+@app.get("/api/rh/evaluations")
+async def api_get_evaluations(employe_id: Optional[str]=None, user=Depends(get_current_user)):
+    return await get_evaluations(pool, employe_id)
+
+@app.post("/api/rh/evaluations")
+async def api_create_evaluation(payload: dict, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        d = payload
+        notes = [d.get(f"note_{k}") for k in ["qualite_travail","productivite","ponctualite","esprit_equipe","initiative","securite"]]
+        notes_valides = [float(n) for n in notes if n]
+        note_globale = sum(notes_valides)/len(notes_valides) if notes_valides else None
+        row = await conn.fetchrow("""
+            INSERT INTO evaluations (
+                employe_id, evaluateur_id, periode, date_evaluation,
+                note_qualite_travail, note_productivite, note_ponctualite,
+                note_esprit_equipe, note_initiative, note_securite, note_globale,
+                points_forts, axes_amelioration, objectifs_prochaine_periode, statut
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'brouillon')
+            RETURNING *
+        """,
+            d["employe_id"], d.get("evaluateur_id") or user.get("id"),
+            d.get("periode"), d.get("date_evaluation") or date.today().isoformat(),
+            float(d.get("note_qualite_travail",0) or 0) or None,
+            float(d.get("note_productivite",0) or 0) or None,
+            float(d.get("note_ponctualite",0) or 0) or None,
+            float(d.get("note_esprit_equipe",0) or 0) or None,
+            float(d.get("note_initiative",0) or 0) or None,
+            float(d.get("note_securite",0) or 0) or None,
+            round(note_globale, 2) if note_globale else None,
+            d.get("points_forts"), d.get("axes_amelioration"),
+            d.get("objectifs_prochaine_periode")
+        )
+        return dict(row)
+
+# RH dans nginx aussi
 # ── HEALTH CHECK ───────────────────────────────────────────────
 @app.get("/api/health")
 async def health():
