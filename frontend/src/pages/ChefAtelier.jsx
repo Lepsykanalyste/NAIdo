@@ -1092,6 +1092,7 @@ function Referentiels() {
   const [ateliers, setAteliers] = useState([]);
   const [formF, setFormF] = useState({ code:'', libelle:'' });
   const [formU, setFormU] = useState({ code:'', libelle:'', type:'masse' });
+  const [formA, setFormA] = useState({ code:'', libelle:'', type:'production', localisation:'' });
 
   useEffect(() => {
     Promise.all([
@@ -1103,6 +1104,9 @@ function Referentiels() {
 
   const creerFamille = async () => {
     try { await axios.post(`${API}/referentiels/familles`, formF); toast.success('Famille créée'); setFormF({code:'',libelle:''}); const {data}=await axios.get(`${API}/referentiels/familles`); setFamilles(data); } catch(e){ toast.error(e.response?.data?.error||'Erreur'); }
+  };
+  const creerAtelier = async () => {
+    try { await axios.post(`${API}/ateliers`, formA); toast.success('Atelier créé'); setFormA({code:'',libelle:'',type:'production',localisation:''}); const {data}=await axios.get(`${API}/ateliers`); setAteliers(data); } catch(e){ toast.error(e.response?.data?.error||'Erreur'); }
   };
   const creerUnite = async () => {
     try { await axios.post(`${API}/referentiels/unites`, formU); toast.success('Unité créée'); setFormU({code:'',libelle:'',type:'masse'}); const {data}=await axios.get(`${API}/referentiels/unites`); setUnites(data); } catch(e){ toast.error(e.response?.data?.error||'Erreur'); }
@@ -1165,11 +1169,60 @@ function Referentiels() {
       )}
 
       {onglet === 'ateliers' && (
-        <div style={{ background:'#fff', borderRadius:12, border:'1px solid #e5e7eb', overflow:'hidden' }}>
-          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
-            <thead><tr style={{ background:'#f0fdf4' }}>{['Code','Libellé','Type','Statut'].map(h => <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:600, color:'#14532d', borderBottom:'2px solid #dcfce7' }}>{h}</th>)}</tr></thead>
-            <tbody>{ateliers.map((a,i) => <tr key={a.id} style={{ borderBottom:'1px solid #f0fdf4', background:i%2===0?'#fff':'#f9fefb' }}><td style={{ padding:'10px 14px', fontFamily:'monospace', fontWeight:700 }}>{a.code}</td><td style={{ padding:'10px 14px' }}>{a.libelle}</td><td style={{ padding:'10px 14px', color:'#6b7280' }}>{a.type}</td><td style={{ padding:'10px 14px' }}><span style={{ color:a.actif?'#16a34a':'#dc2626', fontWeight:600 }}>{a.actif?'Actif':'Inactif'}</span></td></tr>)}</tbody>
-          </table>
+        <div>
+          <div style={{ background:'#fff', borderRadius:12, padding:16, border:'1px solid #e5e7eb', marginBottom:14 }}>
+            <div style={{ fontSize:13, fontWeight:700, color:'#374151', marginBottom:10 }}>Ajouter un atelier / service</div>
+            <div style={{ display:'flex', gap:10, flexWrap:'wrap', alignItems:'flex-end' }}>
+              <div style={{ flex:'0 0 100px' }}>
+                <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Code *</label>
+                <input value={formA?.code||''} onChange={e => setFormA({...formA, code:e.target.value})} placeholder="AT3" style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13, boxSizing:'border-box', textTransform:'uppercase' }}/>
+              </div>
+              <div style={{ flex:'1 1 200px' }}>
+                <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Libellé *</label>
+                <input value={formA?.libelle||''} onChange={e => setFormA({...formA, libelle:e.target.value})} placeholder="Atelier 3 — Production" style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13, boxSizing:'border-box' }}/>
+              </div>
+              <div style={{ flex:'0 0 160px' }}>
+                <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Type</label>
+                <select value={formA?.type||'production'} onChange={e => setFormA({...formA, type:e.target.value})} style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13 }}>
+                  <option value="production">Production</option>
+                  <option value="mecanique">Mécanique</option>
+                  <option value="technique">Technique</option>
+                  <option value="achat">Achat</option>
+                  <option value="vente">Vente</option>
+                  <option value="transit">Transit</option>
+                  <option value="qhse">QHSE</option>
+                  <option value="magasin">Magasin</option>
+                  <option value="rh">RH</option>
+                  <option value="direction">Direction</option>
+                </select>
+              </div>
+              <div style={{ flex:'1 1 160px' }}>
+                <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Localisation</label>
+                <input value={formA?.localisation||''} onChange={e => setFormA({...formA, localisation:e.target.value})} placeholder="Bâtiment A, Hall 2..." style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13, boxSizing:'border-box' }}/>
+              </div>
+              <button onClick={creerAtelier} style={{ background:'#14532d', color:'#fff', border:'none', padding:'9px 18px', borderRadius:8, cursor:'pointer', fontWeight:600, flexShrink:0 }}>+ Ajouter</button>
+            </div>
+          </div>
+          <div style={{ background:'#fff', borderRadius:12, border:'1px solid #e5e7eb', overflow:'hidden' }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
+              <thead><tr style={{ background:'#f0fdf4' }}>{['Code','Libellé','Type','Localisation','Statut','Actions'].map(h => <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:600, color:'#14532d', borderBottom:'2px solid #dcfce7' }}>{h}</th>)}</tr></thead>
+              <tbody>
+                {ateliers.map((a,i) => (
+                  <tr key={a.id} style={{ borderBottom:'1px solid #f0fdf4', background:i%2===0?'#fff':'#f9fefb' }}>
+                    <td style={{ padding:'10px 14px', fontFamily:'monospace', fontWeight:700, color:'#14532d' }}>{a.code}</td>
+                    <td style={{ padding:'10px 14px', fontWeight:500 }}>{a.libelle}</td>
+                    <td style={{ padding:'10px 14px' }}><span style={{ background:'#f0fdf4', color:'#15803d', padding:'2px 8px', borderRadius:20, fontSize:11 }}>{a.type}</span></td>
+                    <td style={{ padding:'10px 14px', color:'#6b7280', fontSize:12 }}>{a.localisation||'—'}</td>
+                    <td style={{ padding:'10px 14px' }}><span style={{ color:a.actif?'#16a34a':'#dc2626', fontWeight:600 }}>{a.actif?'Actif':'Inactif'}</span></td>
+                    <td style={{ padding:'10px 14px' }}>
+                      <button onClick={() => axios.delete(`${API}/ateliers/${a.id}`).then(() => { toast.success('Désactivé'); axios.get(`${API}/ateliers`).then(({data}) => setAteliers(data)); }).catch(e => toast.error(e.response?.data?.error||'Erreur'))} style={{ background:'#fee2e2', color:'#dc2626', border:'none', padding:'3px 10px', borderRadius:6, cursor:'pointer', fontSize:11 }}>Désactiver</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {ateliers.length===0 && <div style={{ textAlign:'center', padding:32, color:'#9ca3af' }}>Aucun atelier — créez le premier</div>}
+          </div>
         </div>
       )}
     </div>
