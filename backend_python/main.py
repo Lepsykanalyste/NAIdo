@@ -618,6 +618,100 @@ async def update_commande_statut(cmd_id: str, payload: dict, user=Depends(get_cu
         )
         return dict(row)
 
+
+# ── MOUVEMENTS STOCK ──────────────────────────────────────────
+@app.get("/api/stock/mouvements")
+async def get_mouvements(limit: int = 50, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        try:
+            rows = await conn.fetch("""
+                SELECT
+                    ms.id, ms.created_at, ms.type_mouvement,
+                    ms.notes, ms.statut,
+                    a.code AS article_code, a.designation AS article_designation,
+                    e1.code AS emplacement_code,
+                    lm.qte_prevue AS qte,
+                    ls.numero_lot,
+                    u.nom||' '||u.prenom AS cree_par_nom,
+                    CASE
+                        WHEN ms.type_mouvement IN ('reception_achat','livraison_mp','production') THEN 'entree'
+                        ELSE 'sortie'
+                    END AS type
+                FROM mouvements_stock ms
+                JOIN lignes_mouvement lm ON lm.mouvement_id=ms.id
+                JOIN articles a ON a.id=lm.article_id
+                LEFT JOIN emplacements_stock e1 ON e1.id=ms.emplacement_dest_id
+                LEFT JOIN lots_stock ls ON ls.id=lm.lot_id
+                LEFT JOIN utilisateurs u ON u.id=ms.cree_par
+                WHERE ms.statut IN ('valide','receptionne')
+                ORDER BY ms.created_at DESC
+                LIMIT $1
+            """, limit)
+            return [dict(r) for r in rows]
+        except:
+            return []
+
+# ── LOTS POST ─────────────────────────────────────────────────
+@app.post("/api/stock/lots")
+async def creer_lot(payload: dict, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            d = payload
+            if not d.get("article_id"):
+                raise HTTPException(400, "Article requis")
+            if not d.get("numero_lot"):
+                raise HTTPException(400, "Numéro de lot requis")
+            qte = float(d.get("qte_initiale", 0))
+            if qte <= 0:
+                raise HTTPException(400, "Quantité requise")
+            
+            emplacement_id = int(d["emplacement_id"]) if d.get("emplacement_id") not in (None,"","null") else None
+            prix = float(d.get("prix_unitaire", 0) or 0)
+            
+            try:
+                row = await conn.fetchrow("""
+                    INSERT INTO lots_stock (
+                        article_id, emplacement_id, numero_lot,
+                        qte_initiale, qte_disponible, prix_unitaire,
+                        date_fabrication, date_dlc, date_dluo,
+                        date_reception, statut
+                    ) VALUES ($1,$2,$3,$4,$4,$5,$6,$7,$8,CURRENT_DATE,'disponible')
+                    RETURNING *
+                """,
+                    d["article_id"], emplacement_id, d["numero_lot"],
+                    qte, prix,
+                    d.get("date_fabrication") or None,
+                    d.get("date_dlc") or None,
+                    d.get("date_dluo") or None,
+                )
+            except asyncpg.UniqueViolationError:
+                raise HTTPException(400, "Ce numéro de lot existe déjà")
+            
+            if emplacement_id:
+                await conn.execute("""
+                    INSERT INTO stock_articles (article_id,emplacement_id,qte_disponible,valeur_stock,derniere_entree)
+                    VALUES ($1,$2,$3,$4,NOW())
+                    ON CONFLICT (article_id,emplacement_id)
+                    DO UPDATE SET
+                        qte_disponible=stock_articles.qte_disponible+$3,
+                        valeur_stock=stock_articles.valeur_stock+($3*$4),
+                        derniere_entree=NOW()
+                """, d["article_id"], emplacement_id, qte, prix)
+            
+            return dict(row)
+
+@app.put("/api/stock/lots/{lot_id}")
+async def update_lot_statut(lot_id: str, payload: dict, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        valid = ['disponible','quarantaine','bloque','perime','epuise']
+        if payload.get("statut") not in valid:
+            raise HTTPException(400, "Statut invalide")
+        row = await conn.fetchrow(
+            "UPDATE lots_stock SET statut=$1 WHERE id=$2 RETURNING *",
+            payload["statut"], lot_id
+        )
+        return dict(row)
+
 # ── HEALTH CHECK ───────────────────────────────────────────────
 @app.get("/api/health")
 async def health():
