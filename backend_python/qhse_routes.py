@@ -38,7 +38,15 @@ async def qhse_dashboard(pool):
 async def get_processus_list(pool, type_proc=None, search=None):
     async with pool.acquire() as conn:
         q = """
-            SELECT p.*,
+            SELECT 
+                p.id, p.code, p.titre AS libelle,
+                p.type AS type_processus,
+                p.description, p.objectif AS finalite,
+                p.statut, p.version, p.actif,
+                p.pilote_id, p.copilote_id,
+                COALESCE(p.normes_applicables, '[]'::jsonb) AS normes_applicables,
+                p.donnees_entree, p.donnees_sortie,
+                p.date_revision, p.created_at,
                 up.nom||' '||up.prenom AS pilote_nom,
                 uc.nom||' '||uc.prenom AS copilote_nom,
                 (SELECT COUNT(*) FROM documents_qhse d WHERE d.processus_id = p.id AND d.actif = true) AS nb_documents,
@@ -51,7 +59,7 @@ async def get_processus_list(pool, type_proc=None, search=None):
         params = []
         if type_proc:
             params.append(type_proc)
-            q += f" AND p.type_processus = ${len(params)}"
+            q += f" AND p.type = ${len(params)}"
         if search:
             params.append(f"%{search}%")
             q += f" AND (p.code ILIKE ${len(params)} OR p.libelle ILIKE ${len(params)})"
@@ -63,19 +71,21 @@ async def create_processus(pool, data: dict, user_id: str):
     async with pool.acquire() as conn:
         row = await conn.fetchrow("""
             INSERT INTO processus (
-                code, libelle, type_processus, description, finalite,
+                code, titre, type, description, objectif,
                 pilote_id, copilote_id, normes_applicables,
-                donnees_entree, donnees_sortie, ressources, version
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+                donnees_entree, donnees_sortie, version, statut, actif
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'actif',true)
             RETURNING *
         """,
-            data["code"].upper(), data["libelle"], data["type_processus"],
-            data.get("description"), data.get("finalite"),
+            data["code"].upper(),
+            data.get("libelle") or data.get("titre"),
+            data.get("type_processus") or data.get("type","realisation"),
+            data.get("description"), data.get("finalite") or data.get("objectif"),
             data.get("pilote_id") or None,
             data.get("copilote_id") or None,
             json.dumps(safe_json(data.get("normes_applicables"), [])),
             data.get("donnees_entree"), data.get("donnees_sortie"),
-            data.get("ressources"), data.get("version", "v1")
+            data.get("version", "v1")
         )
         return dict(row)
 
@@ -83,19 +93,20 @@ async def update_processus(pool, proc_id: str, data: dict):
     async with pool.acquire() as conn:
         row = await conn.fetchrow("""
             UPDATE processus SET
-                libelle=$1, description=$2, finalite=$3,
+                titre=$1, description=$2, objectif=$3,
                 pilote_id=$4, copilote_id=$5,
                 normes_applicables=$6,
                 donnees_entree=$7, donnees_sortie=$8,
-                ressources=$9, statut=$10,
-                date_revision=CURRENT_DATE, updated_at=NOW()
-            WHERE id=$11 RETURNING *
+                statut=$9, date_revision=CURRENT_DATE
+            WHERE id=$10 RETURNING *
         """,
-            data.get("libelle"), data.get("description"), data.get("finalite"),
+            data.get("libelle") or data.get("titre"),
+            data.get("description"),
+            data.get("finalite") or data.get("objectif"),
             data.get("pilote_id") or None, data.get("copilote_id") or None,
             json.dumps(safe_json(data.get("normes_applicables"), [])),
             data.get("donnees_entree"), data.get("donnees_sortie"),
-            data.get("ressources"), data.get("statut", "actif"),
+            data.get("statut", "actif"),
             proc_id
         )
         return dict(row) if row else None
