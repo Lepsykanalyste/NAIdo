@@ -467,146 +467,422 @@ function Articles() {
   const [articles, setArticles] = useState([]);
   const [familles, setFamilles] = useState([]);
   const [unites, setUnites] = useState([]);
+  const [ateliers, setAteliers] = useState([]);
+  const [matieresPremiers, setMatieresPremiers] = useState([]);
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ code:'', designation:'', famille_id:'', unite_mesure_id:'', poids_theorique_kg:'', poids_reel_kg:'', cadence_theorique_kg_h:'', temps_reglage_min:'30', couleur:'', matiere:'', longueur_mm:'', largeur_mm:'', prix_cession_interne:'', stock_mini:'', type_article:'produit_fini', tracabilite_type:'lot' });
+  const [detail, setDetail] = useState(null);
+  const [composition, setComposition] = useState([]);
+  const [newComp, setNewComp] = useState({ mp_id:'', quantite:'', unite_id:'', pct:'' });
+  const [form, setForm] = useState({
+    code:'', designation:'', famille_id:'', unite_mesure_id:'',
+    type_article:'produit_fini', tracabilite_type:'lot',
+    couleur:'', matiere:'', longueur_mm:'', largeur_mm:'', hauteur_mm:'',
+    poids_theorique_kg:'', poids_reel_kg:'', poids_mandrin_kg:'',
+    cadence_theorique_kg_h:'', temps_reglage_min:'30',
+    prix_achat:'0', prix_vente:'0', prix_cession_interne:'0',
+    stock_mini:'0', dlc_jours:'', allergenes:'', normes_iso:'',
+    points_ccp: false, atelier_production_id:'',
+  });
 
-  // Charger familles et unités au montage (toujours frais)
-  useEffect(() => {
-    Promise.all([
-      axios.get(`${API}/referentiels/familles`),
-      axios.get(`${API}/referentiels/unites`),
-    ]).then(([f, u]) => {
-      setFamilles(f.data);
-      setUnites(u.data);
-    }).catch(() => {});
-  }, []); // Une seule fois au montage
-
-  useEffect(() => {
-    Promise.all([
-      axios.get(`${API}/articles${search?`?search=${search}`:''}`),
-      axios.get(`${API}/referentiels/familles`),
-      axios.get(`${API}/referentiels/unites`),
-    ]).then(([a,f,u]) => { setArticles(a.data); setFamilles(f.data); setUnites(u.data); }).catch(() => {});
-  }, [search]);
-
-  const ouvrirFormulaire = async () => {
-    // Recharger familles et unités à chaque ouverture du formulaire
+  const chargerRefs = async () => {
     try {
-      const [f, u] = await Promise.all([
+      const [f, u, a] = await Promise.all([
         axios.get(`${API}/referentiels/familles`),
         axios.get(`${API}/referentiels/unites`),
+        axios.get(`${API}/ateliers?type=production`),
       ]);
       setFamilles(f.data);
       setUnites(u.data);
+      setAteliers(a.data);
     } catch {}
-    setShowForm(true);
   };
 
-  const creer = async () => {
-    if (!form.code || !form.designation) return toast.error('Code et désignation requis');
+  const chargerArticles = async () => {
     try {
-      await axios.post(`${API}/articles`, form);
-      toast.success('Article ' + form.code + ' créé');
-      setShowForm(false);
-      setForm({ code:'', designation:'', famille_id:'', unite_mesure_id:'', poids_theorique_kg:'', poids_reel_kg:'', cadence_theorique_kg_h:'', temps_reglage_min:'30', couleur:'', matiere:'', longueur_mm:'', largeur_mm:'', prix_cession_interne:'', stock_mini:'', type_article:'produit_fini', tracabilite_type:'lot' });
-      const { data } = await axios.get(`${API}/articles`);
+      const { data } = await axios.get(`${API}/articles${search ? `?search=${search}` : ''}`);
       setArticles(data);
-    } catch (err) { toast.error(err.response?.data?.error || 'Erreur'); }
+      // Charger aussi les matières premières pour la composition
+      const { data: mp } = await axios.get(`${API}/articles?type_article=matiere_premiere`);
+      setMatieresPremiers(mp);
+    } catch {}
   };
+
+  useEffect(() => { chargerRefs(); chargerArticles(); }, [search]);
+
+  const ouvrirFormulaire = async () => {
+    await chargerRefs();
+    await chargerArticles();
+    setComposition([]);
+    setNewComp({ mp_id:'', quantite:'', unite_id:'', pct:'' });
+    setForm({ code:'', designation:'', famille_id:'', unite_mesure_id:'', type_article:'produit_fini', tracabilite_type:'lot', couleur:'', matiere:'', longueur_mm:'', largeur_mm:'', hauteur_mm:'', poids_theorique_kg:'', poids_reel_kg:'', poids_mandrin_kg:'', cadence_theorique_kg_h:'', temps_reglage_min:'30', prix_achat:'0', prix_vente:'0', prix_cession_interne:'0', stock_mini:'0', dlc_jours:'', allergenes:'', normes_iso:'', points_ccp:false, atelier_production_id:'' });
+    setShowForm(true);
+    setTimeout(() => document.getElementById('art-code')?.focus(), 100);
+  };
+
+  const ajouterCompo = () => {
+    if (!newComp.mp_id) return toast.error('Sélectionnez une matière première');
+    if (!newComp.quantite && !newComp.pct) return toast.error('Indiquez une quantité ou un pourcentage');
+    const mp = matieresPremiers.find(m => m.id === newComp.mp_id);
+    if (!mp) return;
+    if (composition.find(c => c.mp_id === newComp.mp_id)) return toast.error('Cette matière est déjà dans la composition');
+    setComposition([...composition, { ...newComp, code: mp.code, designation: mp.designation }]);
+    setNewComp({ mp_id:'', quantite:'', unite_id:'', pct:'' });
+  };
+
+  const totalPct = composition.reduce((s, c) => s + parseFloat(c.pct || 0), 0);
+
+  const creer = async () => {
+    if (!form.code.trim()) return toast.error('Le code est obligatoire');
+    if (!form.designation.trim()) return toast.error('La désignation est obligatoire');
+    try {
+      const payload = new FormData();
+      Object.entries(form).forEach(([k, v]) => { if (v !== '' && v !== null) payload.append(k, v); });
+      if (composition.length > 0) payload.append('composition', JSON.stringify(composition));
+      await axios.post(`${API}/articles`, payload, { headers: { 'Content-Type': 'multipart/form-data' } });
+      toast.success(`✓ Article ${form.code} créé`);
+      setShowForm(false);
+      chargerArticles();
+    } catch (err) { toast.error(err.response?.data?.error || 'Erreur création'); }
+  };
+
+  const TYPE_C = {
+    produit_fini:    { bg:'#dcfce7', tx:'#15803d', label:'Produit fini' },
+    matiere_premiere:{ bg:'#dbeafe', tx:'#1d4ed8', label:'Matière première' },
+    semi_fini:       { bg:'#f3e8ff', tx:'#7e22ce', label:'Semi-fini' },
+    emballage:       { bg:'#fef3c7', tx:'#92400e', label:'Emballage' },
+    consommable:     { bg:'#f3f4f6', tx:'#374151', label:'Consommable' },
+    piece_detachee:  { bg:'#fce7f3', tx:'#9d174d', label:'Pièce détachée' },
+  };
+
+  const F = ({ label, k, type='text', ph='' }) => (
+    <div>
+      <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>{label}</label>
+      <input id={k==='code'?'art-code':undefined} type={type} value={form[k]||''} placeholder={ph}
+        onChange={e => setForm({...form,[k]:e.target.value})}
+        style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'9px', fontSize:13, boxSizing:'border-box', textAlign:type==='number'?'center':'left' }}/>
+    </div>
+  );
+
+  const S = ({ label, k, opts, req }) => (
+    <div>
+      <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>
+        {label}{req && <span style={{ color:'#dc2626' }}> *</span>}
+        {req && !form[k] && <span style={{ color:'#dc2626', fontSize:10, marginLeft:4 }}>requis</span>}
+      </label>
+      <select value={form[k]||''} onChange={e => setForm({...form,[k]:e.target.value})}
+        style={{ width:'100%', border:`1px solid ${req&&!form[k]?'#fca5a5':'#d1d5db'}`, borderRadius:8, padding:'9px', fontSize:13, background:'#fff' }}>
+        <option value="">-- Sélectionner --</option>
+        {opts.map(o => <option key={o.v} value={o.v}>{o.l}</option>)}
+      </select>
+    </div>
+  );
 
   return (
     <div>
-      <div style={{ display:'flex', gap:10, marginBottom:20, alignItems:'center', flexWrap:'wrap' }}>
-        <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher un article..."
-          style={{ flex:1, border:'1px solid #d1d5db', borderRadius:8, padding:'8px 14px', fontSize:13, minWidth:200 }}/>
-        <button onClick={ouvrirFormulaire} style={{ background:'#7e22ce', color:'#fff', border:'none', padding:'8px 16px', borderRadius:8, cursor:'pointer', fontWeight:600 }}>+ Nouvel article</button>
+      {/* Barre actions */}
+      <div style={{ display:'flex', gap:10, marginBottom:16, alignItems:'center' }}>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Code, désignation..."
+          style={{ flex:1, border:'1px solid #d1d5db', borderRadius:8, padding:'9px 14px', fontSize:13 }}/>
+        <button onClick={ouvrirFormulaire}
+          style={{ background:'#7e22ce', color:'#fff', border:'none', padding:'9px 20px', borderRadius:8, cursor:'pointer', fontWeight:700, whiteSpace:'nowrap' }}>
+          + Nouvel article
+        </button>
       </div>
 
+      {/* ══ FORMULAIRE ══ */}
       {showForm && (
-        <div style={{ background:'#fff', borderRadius:14, padding:24, border:'1px solid #c4b5fd', marginBottom:16 }}>
-          <h4 style={{ margin:'0 0 16px', color:'#7e22ce', fontSize:15, fontWeight:700 }}>Nouvel Article — Fiche Technique</h4>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:10, marginBottom:14 }}>
-            {[['Code *','code'],['Désignation *','designation'],['Couleur','couleur'],['Matière','matiere'],['Longueur (mm)','longueur_mm'],['Largeur (mm)','largeur_mm'],['Poids théorique (kg)','poids_theorique_kg'],['Poids réel (kg)','poids_reel_kg'],['Cadence (kg/h)','cadence_theorique_kg_h'],['Temps réglage (min)','temps_reglage_min'],['Prix cession interne','prix_cession_interne'],['Stock minimum','stock_mini']].map(([label,key]) => (
-              <div key={key}>
-                <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>{label}</label>
-                <input value={form[key]} onChange={e => setForm({...form,[key]:e.target.value})}
-                  style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13, boxSizing:'border-box' }}/>
-              </div>
-            ))}
-            <div>
-              <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Famille *</label>
-              <select value={form.famille_id} onChange={e => setForm({...form,famille_id:e.target.value})} style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13 }}>
-                <option value="">-- Sélectionner --</option>
-                {familles.length === 0 && <option disabled>Créez d'abord des familles dans Référentiels</option>}
-                {familles.map(f => <option key={f.id} value={f.id}>{f.libelle}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Unité de mesure *</label>
-              <select value={form.unite_mesure_id} onChange={e => setForm({...form,unite_mesure_id:e.target.value})} style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13 }}>
-                <option value="">-- Sélectionner --</option>
-                {unites.length === 0 && <option disabled>Activez d'abord des unités dans Référentiels</option>}
-                {unites.map(u => <option key={u.id} value={u.id}>{u.code} — {u.libelle}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Type article</label>
-              <select value={form.type_article} onChange={e => setForm({...form,type_article:e.target.value})} style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13 }}>
-                <option value="produit_fini">Produit fini</option>
-                <option value="matiere_premiere">Matière première</option>
-                <option value="semi_fini">Semi-fini</option>
-                <option value="emballage">Emballage</option>
-                <option value="consommable">Consommable</option>
-              </select>
-            </div>
+        <div style={{ background:'#fff', borderRadius:14, border:'2px solid #c4b5fd', marginBottom:20 }}>
+          {/* Header */}
+          <div style={{ background:'linear-gradient(135deg,#7e22ce,#4338ca)', padding:'14px 24px', borderRadius:'12px 12px 0 0', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <span style={{ color:'#fff', fontWeight:800, fontSize:15 }}>📦 Fiche Article — Création</span>
+            <button onClick={() => setShowForm(false)} style={{ background:'rgba(255,255,255,0.2)', border:'none', color:'#fff', borderRadius:6, padding:'4px 12px', cursor:'pointer' }}>✕</button>
           </div>
-          <div style={{ display:'flex', gap:8 }}>
-            <button onClick={creer} style={{ background:'#7e22ce', color:'#fff', border:'none', padding:'10px 24px', borderRadius:10, cursor:'pointer', fontWeight:700 }}>✓ Créer</button>
-            <button onClick={() => setShowForm(false)} style={{ background:'#f3f4f6', border:'none', padding:'10px 16px', borderRadius:10, cursor:'pointer' }}>Annuler</button>
+
+          <div style={{ padding:24, display:'flex', flexDirection:'column', gap:20 }}>
+
+            {/* BLOC 1 — Identification */}
+            <div>
+              <div style={{ fontSize:11, fontWeight:700, color:'#7e22ce', letterSpacing:1, textTransform:'uppercase', borderBottom:'2px solid #e9d5ff', paddingBottom:6, marginBottom:14 }}>
+                1 · Identification
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:12 }}>
+                <F label="Code *" k="code" ph="EX: SAC-50KG"/>
+                <F label="Désignation *" k="designation" ph="Sac industriel PP 50kg"/>
+                <S label="Famille" k="famille_id" req={true} opts={
+                  familles.length ? familles.map(f => ({ v:String(f.id), l:f.libelle }))
+                  : [{ v:'', l:'⚠ Créez des familles dans Référentiels' }]
+                }/>
+                <S label="Type article" k="type_article" opts={[
+                  { v:'produit_fini', l:'Produit fini' },
+                  { v:'matiere_premiere', l:'Matière première' },
+                  { v:'semi_fini', l:'Semi-fini' },
+                  { v:'emballage', l:'Emballage' },
+                  { v:'consommable', l:'Consommable' },
+                  { v:'piece_detachee', l:'Pièce détachée' },
+                ]}/>
+                <S label="Unité de mesure" k="unite_mesure_id" req={true} opts={
+                  unites.length ? unites.map(u => ({ v:String(u.id), l:`${u.code} — ${u.libelle}` }))
+                  : [{ v:'', l:'⚠ Activez des unités dans Référentiels' }]
+                }/>
+                <S label="Atelier de production" k="atelier_production_id" opts={
+                  ateliers.length ? ateliers.map(a => ({ v:String(a.id), l:`${a.code} — ${a.libelle}` }))
+                  : [{ v:'', l:'⚠ Créez des ateliers de production' }]
+                }/>
+                <S label="Traçabilité" k="tracabilite_type" opts={[
+                  { v:'lot', l:'Par lot (alimentaire, pharma)' },
+                  { v:'serie', l:'Par numéro de série' },
+                  { v:'aucune', l:'Aucune traçabilité' },
+                ]}/>
+              </div>
+            </div>
+
+            {/* BLOC 2 — Physique */}
+            <div>
+              <div style={{ fontSize:11, fontWeight:700, color:'#0369a1', letterSpacing:1, textTransform:'uppercase', borderBottom:'2px solid #bae6fd', paddingBottom:6, marginBottom:14 }}>
+                2 · Caractéristiques physiques
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:12 }}>
+                <F label="Longueur (mm)" k="longueur_mm" type="number" ph="0"/>
+                <F label="Largeur (mm)" k="largeur_mm" type="number" ph="0"/>
+                <F label="Hauteur (mm)" k="hauteur_mm" type="number" ph="0"/>
+                <F label="Poids théorique (kg)" k="poids_theorique_kg" type="number" ph="0.000"/>
+                <F label="Poids réel (kg)" k="poids_reel_kg" type="number" ph="0.000"/>
+                <F label="Poids mandrin (kg)" k="poids_mandrin_kg" type="number" ph="0.000"/>
+                <F label="Couleur" k="couleur" ph="Naturel, Blanc..."/>
+                <F label="Matière principale" k="matiere" ph="PP, PEHD, PEBD..."/>
+                <F label="Cadence théorique (kg/h)" k="cadence_theorique_kg_h" type="number" ph="0"/>
+                <F label="Temps réglage (min)" k="temps_reglage_min" type="number" ph="30"/>
+              </div>
+            </div>
+
+            {/* BLOC 3 — Commercial */}
+            <div>
+              <div style={{ fontSize:11, fontWeight:700, color:'#15803d', letterSpacing:1, textTransform:'uppercase', borderBottom:'2px solid #bbf7d0', paddingBottom:6, marginBottom:14 }}>
+                3 · Paramètres commerciaux & stock
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:12 }}>
+                <F label="Prix achat (DZD)" k="prix_achat" type="number" ph="0"/>
+                <F label="Prix vente (DZD)" k="prix_vente" type="number" ph="0"/>
+                <F label="Prix cession interne" k="prix_cession_interne" type="number" ph="0"/>
+                <F label="Stock minimum" k="stock_mini" type="number" ph="0"/>
+                <F label="DLC (jours)" k="dlc_jours" type="number" ph=""/>
+                <F label="Normes / Certifications" k="normes_iso" ph="ISO 9001..."/>
+                <F label="Allergènes (alimentaire)" k="allergenes" ph="Gluten, Lait..."/>
+              </div>
+              <div style={{ marginTop:12, display:'flex', alignItems:'center', gap:8 }}>
+                <input type="checkbox" id="chk-ccp" checked={!!form.points_ccp}
+                  onChange={e => setForm({...form, points_ccp:e.target.checked})}
+                  style={{ width:16, height:16, cursor:'pointer' }}/>
+                <label htmlFor="chk-ccp" style={{ fontSize:13, cursor:'pointer', color:'#374151' }}>
+                  Point Critique de Contrôle (CCP) — HACCP alimentaire
+                </label>
+              </div>
+            </div>
+
+            {/* BLOC 4 — Composition / Nomenclature */}
+            <div>
+              <div style={{ fontSize:11, fontWeight:700, color:'#b45309', letterSpacing:1, textTransform:'uppercase', borderBottom:'2px solid #fde68a', paddingBottom:6, marginBottom:14 }}>
+                4 · Composition / Nomenclature (matières premières)
+              </div>
+
+              {matieresPremiers.length === 0 ? (
+                <div style={{ background:'#fefce8', border:'1px solid #fde68a', borderRadius:10, padding:16, fontSize:13, color:'#92400e' }}>
+                  ℹ Créez d'abord des articles de type <strong>Matière première</strong> pour les sélectionner ici.
+                </div>
+              ) : (
+                <>
+                  {/* Ligne ajout composition */}
+                  <div style={{ background:'#fffbeb', borderRadius:10, padding:14, marginBottom:12, border:'1px solid #fde68a' }}>
+                    <div style={{ display:'grid', gridTemplateColumns:'2.5fr 1fr 1fr 1fr auto', gap:10, alignItems:'flex-end' }}>
+                      <div>
+                        <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Matière première *</label>
+                        <select value={newComp.mp_id} onChange={e => setNewComp({...newComp, mp_id:e.target.value})}
+                          style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13 }}>
+                          <option value="">-- Sélectionner --</option>
+                          {matieresPremiers.map(m => <option key={m.id} value={m.id}>{m.code} — {m.designation}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Quantité</label>
+                        <input type="number" step="0.001" value={newComp.quantite}
+                          onChange={e => setNewComp({...newComp, quantite:e.target.value})}
+                          placeholder="0.000" style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13, textAlign:'center', boxSizing:'border-box' }}/>
+                      </div>
+                      <div>
+                        <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Unité</label>
+                        <select value={newComp.unite_id} onChange={e => setNewComp({...newComp, unite_id:e.target.value})}
+                          style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13 }}>
+                          <option value="">—</option>
+                          {unites.map(u => <option key={u.id} value={u.id}>{u.code}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>% dans prod.</label>
+                        <input type="number" step="0.1" min="0" max="100" value={newComp.pct}
+                          onChange={e => setNewComp({...newComp, pct:e.target.value})}
+                          placeholder="0.0" style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13, textAlign:'center', boxSizing:'border-box' }}/>
+                      </div>
+                      <button onClick={ajouterCompo}
+                        style={{ background:'#b45309', color:'#fff', border:'none', padding:'9px 14px', borderRadius:8, cursor:'pointer', fontWeight:700 }}>
+                        + Ajouter
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Tableau composition */}
+                  {composition.length > 0 && (
+                    <div style={{ border:'1px solid #fde68a', borderRadius:10, overflow:'hidden' }}>
+                      <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
+                        <thead>
+                          <tr style={{ background:'#fef3c7' }}>
+                            {['Code','Matière première','Quantité','Unité','% compo','Supprimer'].map(h => (
+                              <th key={h} style={{ padding:'8px 12px', textAlign:'left', fontWeight:600, color:'#92400e', borderBottom:'1px solid #fde68a' }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {composition.map((c, i) => (
+                            <tr key={i} style={{ borderBottom:'1px solid #fefce8', background:i%2===0?'#fff':'#fffdf5' }}>
+                              <td style={{ padding:'8px 12px', fontFamily:'monospace', fontWeight:700, color:'#b45309' }}>{c.code}</td>
+                              <td style={{ padding:'8px 12px' }}>{c.designation}</td>
+                              <td style={{ padding:'8px 12px', textAlign:'center', fontWeight:600 }}>{c.quantite||'—'}</td>
+                              <td style={{ padding:'8px 12px', textAlign:'center' }}>{unites.find(u=>String(u.id)===String(c.unite_id))?.code||'—'}</td>
+                              <td style={{ padding:'8px 12px', textAlign:'center' }}>
+                                {c.pct ? <span style={{ background:'#fef3c7', color:'#92400e', padding:'2px 8px', borderRadius:20, fontWeight:700 }}>{c.pct}%</span> : '—'}
+                              </td>
+                              <td style={{ padding:'8px 12px' }}>
+                                <button onClick={() => setComposition(composition.filter((_,j) => j!==i))}
+                                  style={{ background:'#fee2e2', color:'#dc2626', border:'none', borderRadius:6, padding:'3px 10px', cursor:'pointer', fontSize:11 }}>✕</button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <div style={{ padding:'10px 14px', fontSize:12, fontWeight:700,
+                        background: totalPct > 100 ? '#fee2e2' : totalPct === 100 ? '#dcfce7' : '#fef3c7',
+                        color: totalPct > 100 ? '#dc2626' : totalPct === 100 ? '#15803d' : '#92400e' }}>
+                        Total : {totalPct.toFixed(1)}%
+                        {totalPct > 100 && ' ⚠ Dépasse 100% !'}
+                        {totalPct === 100 && ' ✓ Parfait'}
+                        {totalPct < 100 && totalPct > 0 && ` — manque ${(100-totalPct).toFixed(1)}%`}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Boutons finaux */}
+            <div style={{ display:'flex', gap:12, paddingTop:16, borderTop:'2px solid #f3f4f6' }}>
+              <button onClick={creer}
+                style={{ background:'#7e22ce', color:'#fff', border:'none', padding:'13px 36px', borderRadius:10, cursor:'pointer', fontWeight:800, fontSize:15 }}>
+                ✓ Créer l'article
+              </button>
+              <button onClick={() => setShowForm(false)}
+                style={{ background:'#f3f4f6', color:'#374151', border:'none', padding:'13px 24px', borderRadius:10, cursor:'pointer', fontWeight:600 }}>
+                Annuler
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      <div style={{ background:'#fff', borderRadius:14, border:'1px solid #e5e7eb', overflow:'hidden' }}>
-        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
+      {/* ══ LISTE ARTICLES ══ */}
+      <div style={{ background:'#fff', borderRadius:14, border:'1px solid #e5e7eb', overflow:'auto' }}>
+        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13, minWidth:700 }}>
           <thead>
             <tr style={{ background:'#faf5ff' }}>
-              {['Code','Désignation','Famille','Unité','Poids théo.','Poids réel','Cadence','Stock','Type'].map(h => (
-                <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontWeight:600, color:'#7e22ce', borderBottom:'2px solid #e9d5ff', whiteSpace:'nowrap' }}>{h}</th>
+              {['Code','Désignation','Famille','Unité','Poids théo.','Cadence','Stock','Type','Atelier'].map(h => (
+                <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:700, color:'#7e22ce', borderBottom:'2px solid #e9d5ff', whiteSpace:'nowrap' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {articles.map((a,i) => (
-              <tr key={a.id} style={{ borderBottom:'1px solid #faf5ff', background:i%2===0?'#fff':'#fdfcff' }}>
-                <td style={{ padding:'8px 12px', fontFamily:'monospace', fontWeight:700, color:'#7e22ce', fontSize:12 }}>{a.code}</td>
-                <td style={{ padding:'8px 12px', fontWeight:500 }}>{a.designation}</td>
-                <td style={{ padding:'8px 12px', color:'#6b7280', fontSize:12 }}>{a.famille_libelle||'—'}</td>
-                <td style={{ padding:'8px 12px', color:'#6b7280' }}>{a.unite_code||'—'}</td>
-                <td style={{ padding:'8px 12px' }}>{a.poids_theorique_kg ? `${a.poids_theorique_kg} kg` : '—'}</td>
-                <td style={{ padding:'8px 12px' }}>{a.poids_reel_kg ? `${a.poids_reel_kg} kg` : '—'}</td>
-                <td style={{ padding:'8px 12px' }}>{a.cadence_theorique_kg_h ? `${a.cadence_theorique_kg_h} kg/h` : '—'}</td>
-                <td style={{ padding:'8px 12px', fontWeight:700, color: parseFloat(a.stock_total||0) <= parseFloat(a.stock_mini||0) ? '#dc2626' : '#15803d' }}>
-                  {parseFloat(a.stock_total||0).toFixed(1)}
-                </td>
-                <td style={{ padding:'8px 12px' }}>
-                  <span style={{ background:'#f3e8ff', color:'#7e22ce', padding:'2px 6px', borderRadius:20, fontSize:11 }}>{a.type_article?.replace(/_/g,' ')}</span>
-                </td>
-              </tr>
-            ))}
+            {articles.map((a, i) => {
+              const tc = TYPE_C[a.type_article] || TYPE_C.consommable;
+              return (
+                <tr key={a.id}
+                  onClick={() => setDetail(detail?.id === a.id ? null : a)}
+                  style={{ borderBottom:'1px solid #faf5ff', background: detail?.id===a.id ? '#faf5ff' : i%2===0?'#fff':'#fdfcff', cursor:'pointer' }}>
+                  <td style={{ padding:'9px 14px', fontFamily:'monospace', fontWeight:800, color:'#7e22ce', fontSize:12 }}>{a.code}</td>
+                  <td style={{ padding:'9px 14px', fontWeight:500, maxWidth:200, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{a.designation}</td>
+                  <td style={{ padding:'9px 14px', color:'#6b7280', fontSize:12 }}>{a.famille_libelle||'—'}</td>
+                  <td style={{ padding:'9px 14px' }}>
+                    <span style={{ fontFamily:'monospace', background:'#f5f3ff', color:'#7e22ce', padding:'2px 6px', borderRadius:4, fontSize:12, fontWeight:700 }}>
+                      {a.unite_code||'—'}
+                    </span>
+                  </td>
+                  <td style={{ padding:'9px 14px', fontWeight:600 }}>{a.poids_theorique_kg ? `${a.poids_theorique_kg} kg` : '—'}</td>
+                  <td style={{ padding:'9px 14px' }}>{a.cadence_theorique_kg_h ? `${a.cadence_theorique_kg_h} kg/h` : '—'}</td>
+                  <td style={{ padding:'9px 14px', fontWeight:700,
+                    color: parseFloat(a.stock_mini||0) > 0 && parseFloat(a.stock_total||0) <= parseFloat(a.stock_mini||0) ? '#dc2626' : '#15803d' }}>
+                    {parseFloat(a.stock_total||0).toFixed(1)}
+                  </td>
+                  <td style={{ padding:'9px 14px' }}>
+                    <span style={{ background:tc.bg, color:tc.tx, padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:600, whiteSpace:'nowrap' }}>{tc.label}</span>
+                  </td>
+                  <td style={{ padding:'9px 14px', color:'#6b7280', fontSize:12 }}>
+                    {ateliers.find(at => String(at.id) === String(a.atelier_production_id))?.code || '—'}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
         {articles.length === 0 && (
-          <div style={{ textAlign:'center', padding:48, color:'#9ca3af' }}>
-            <div style={{ fontSize:36, marginBottom:8 }}>📦</div>
-            <p>Aucun article — créez votre premier article ou importez depuis Sage</p>
+          <div style={{ textAlign:'center', padding:56, color:'#9ca3af' }}>
+            <div style={{ fontSize:40, marginBottom:12 }}>📦</div>
+            <p style={{ fontWeight:600, color:'#6b7280' }}>Aucun article</p>
+            <p style={{ fontSize:12 }}>Commencez par créer des <strong>Matières premières</strong>, puis vos <strong>Produits finis</strong></p>
+            <button onClick={ouvrirFormulaire} style={{ background:'#7e22ce', color:'#fff', border:'none', padding:'10px 24px', borderRadius:8, cursor:'pointer', marginTop:12, fontWeight:600 }}>
+              + Créer le premier article
+            </button>
           </div>
         )}
       </div>
+
+      {/* Détail au clic */}
+      {detail && (
+        <div style={{ background:'#fff', borderRadius:12, padding:20, border:'2px solid #c4b5fd', marginTop:12 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+            <div>
+              <span style={{ fontFamily:'monospace', fontWeight:800, fontSize:16, color:'#7e22ce' }}>{detail.code}</span>
+              <span style={{ marginLeft:12, fontSize:14, fontWeight:500 }}>{detail.designation}</span>
+            </div>
+            <button onClick={() => setDetail(null)} style={{ background:'none', border:'none', fontSize:20, cursor:'pointer', color:'#9ca3af' }}>✕</button>
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(140px,1fr))', gap:10 }}>
+            {[
+              ['Famille', detail.famille_libelle],
+              ['Type', detail.type_article?.replace(/_/g,' ')],
+              ['Unité', detail.unite_code],
+              ['Poids théo.', detail.poids_theorique_kg ? detail.poids_theorique_kg+' kg' : '—'],
+              ['Poids réel', detail.poids_reel_kg ? detail.poids_reel_kg+' kg' : '—'],
+              ['Cadence', detail.cadence_theorique_kg_h ? detail.cadence_theorique_kg_h+' kg/h' : '—'],
+              ['Dimensions', detail.longueur_mm ? `${detail.longueur_mm}×${detail.largeur_mm} mm` : '—'],
+              ['Couleur', detail.couleur||'—'],
+              ['Matière', detail.matiere||'—'],
+              ['Prix achat', detail.prix_achat ? detail.prix_achat+' DZD' : '—'],
+              ['Prix vente', detail.prix_vente ? detail.prix_vente+' DZD' : '—'],
+              ['Cession', detail.prix_cession_interne ? detail.prix_cession_interne+' DZD' : '—'],
+              ['Stock mini', detail.stock_mini||'0'],
+              ['DLC', detail.dlc_jours ? detail.dlc_jours+' j' : '—'],
+              ['Normes', detail.normes_iso||'—'],
+              ['CCP', detail.points_ccp ? '✓ Oui' : 'Non'],
+            ].map(([l, v]) => (
+              <div key={l} style={{ background:'#faf5ff', borderRadius:8, padding:'8px 12px' }}>
+                <div style={{ fontSize:10, color:'#9ca3af', marginBottom:2 }}>{l}</div>
+                <div style={{ fontWeight:600, fontSize:13, color:'#374151' }}>{v||'—'}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
 
 function BonsCession() {
   const [mouvements, setMouvements] = useState([]);
@@ -1284,18 +1560,19 @@ function Referentiels() {
 
             {onglet === 'ateliers' && (
         <div>
+          {/* Formulaire ajout */}
           <div style={{ background:'#fff', borderRadius:12, padding:16, border:'1px solid #e5e7eb', marginBottom:14 }}>
             <div style={{ fontSize:13, fontWeight:700, color:'#374151', marginBottom:10 }}>Ajouter un atelier / service</div>
             <div style={{ display:'flex', gap:10, flexWrap:'wrap', alignItems:'flex-end' }}>
-              <div style={{ flex:'0 0 100px' }}>
+              <div style={{ flex:'0 0 90px' }}>
                 <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Code *</label>
                 <input value={formA?.code||''} onChange={e => setFormA({...formA, code:e.target.value})} placeholder="AT3" style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13, boxSizing:'border-box', textTransform:'uppercase' }}/>
               </div>
-              <div style={{ flex:'1 1 200px' }}>
+              <div style={{ flex:'1 1 180px' }}>
                 <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Libellé *</label>
                 <input value={formA?.libelle||''} onChange={e => setFormA({...formA, libelle:e.target.value})} placeholder="Atelier 3 — Production" style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13, boxSizing:'border-box' }}/>
               </div>
-              <div style={{ flex:'0 0 160px' }}>
+              <div style={{ flex:'0 0 150px' }}>
                 <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Type</label>
                 <select value={formA?.type||'production'} onChange={e => setFormA({...formA, type:e.target.value})} style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13 }}>
                   <option value="production">Production</option>
@@ -1310,33 +1587,93 @@ function Referentiels() {
                   <option value="direction">Direction</option>
                 </select>
               </div>
-              <div style={{ flex:'1 1 160px' }}>
+              <div style={{ flex:'1 1 140px' }}>
                 <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Localisation</label>
-                <input value={formA?.localisation||''} onChange={e => setFormA({...formA, localisation:e.target.value})} placeholder="Bâtiment A, Hall 2..." style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13, boxSizing:'border-box' }}/>
+                <input value={formA?.localisation||''} onChange={e => setFormA({...formA, localisation:e.target.value})} placeholder="Bâtiment A..." style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13, boxSizing:'border-box' }}/>
               </div>
               <button onClick={creerAtelier} style={{ background:'#14532d', color:'#fff', border:'none', padding:'9px 18px', borderRadius:8, cursor:'pointer', fontWeight:600, flexShrink:0 }}>+ Ajouter</button>
             </div>
           </div>
-          <div style={{ background:'#fff', borderRadius:12, border:'1px solid #e5e7eb', overflow:'hidden' }}>
-            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
-              <thead><tr style={{ background:'#f0fdf4' }}>{['Code','Libellé','Type','Localisation','Statut','Actions'].map(h => <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:600, color:'#14532d', borderBottom:'2px solid #dcfce7' }}>{h}</th>)}</tr></thead>
-              <tbody>
-                {ateliers.map((a,i) => (
-                  <tr key={a.id} style={{ borderBottom:'1px solid #f0fdf4', background:i%2===0?'#fff':'#f9fefb' }}>
-                    <td style={{ padding:'10px 14px', fontFamily:'monospace', fontWeight:700, color:'#14532d' }}>{a.code}</td>
-                    <td style={{ padding:'10px 14px', fontWeight:500 }}>{a.libelle}</td>
-                    <td style={{ padding:'10px 14px' }}><span style={{ background:'#f0fdf4', color:'#15803d', padding:'2px 8px', borderRadius:20, fontSize:11 }}>{a.type}</span></td>
-                    <td style={{ padding:'10px 14px', color:'#6b7280', fontSize:12 }}>{a.localisation||'—'}</td>
-                    <td style={{ padding:'10px 14px' }}><span style={{ color:a.actif?'#16a34a':'#dc2626', fontWeight:600 }}>{a.actif?'Actif':'Inactif'}</span></td>
-                    <td style={{ padding:'10px 14px' }}>
-                      <button onClick={() => axios.delete(`${API}/ateliers/${a.id}`).then(() => { toast.success('Désactivé'); axios.get(`${API}/ateliers`).then(({data}) => setAteliers(data)); }).catch(e => toast.error(e.response?.data?.error||'Erreur'))} style={{ background:'#fee2e2', color:'#dc2626', border:'none', padding:'3px 10px', borderRadius:6, cursor:'pointer', fontSize:11 }}>Désactiver</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {ateliers.length===0 && <div style={{ textAlign:'center', padding:32, color:'#9ca3af' }}>Aucun atelier — créez le premier</div>}
-          </div>
+
+          {/* Charger tous les ateliers (actifs + inactifs) */}
+          {(() => {
+            const chargerTous = () => axios.get(`${API}/ateliers?actif=tous`).then(({data}) => setAteliers(data)).catch(() => {});
+            const toggleAtelier = async (a) => {
+              try {
+                await axios.put(`${API}/ateliers/${a.id}`, { ...a, actif: !a.actif });
+                toast.success(a.actif ? 'Atelier désactivé' : 'Atelier réactivé');
+                const { data } = await axios.get(`${API}/ateliers?actif=tous`);
+                setAteliers(data);
+              } catch(e) { toast.error(e.response?.data?.error || 'Erreur'); }
+            };
+
+            const TYPE_COLORS2 = {
+              production:'#dcfce7', mecanique:'#dbeafe', technique:'#e0e7ff',
+              achat:'#fef3c7', vente:'#fce7f3', transit:'#f3f4f6',
+              qhse:'#fee2e2', magasin:'#f0fdf4', rh:'#ede9fe', direction:'#fff7ed'
+            };
+            const TYPE_TEXTS2 = {
+              production:'#15803d', mecanique:'#1d4ed8', technique:'#4338ca',
+              achat:'#92400e', vente:'#9d174d', transit:'#374151',
+              qhse:'#b91c1c', magasin:'#14532d', rh:'#7c3aed', direction:'#c2410c'
+            };
+
+            return (
+              <div>
+                <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:10 }}>
+                  <button onClick={chargerTous} style={{ background:'#eff6ff', border:'1px solid #93c5fd', color:'#1d4ed8', padding:'6px 14px', borderRadius:8, cursor:'pointer', fontSize:12 }}>
+                    Afficher tous (actifs + inactifs)
+                  </button>
+                </div>
+                <div style={{ background:'#fff', borderRadius:12, border:'1px solid #e5e7eb', overflow:'hidden' }}>
+                  <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
+                    <thead>
+                      <tr style={{ background:'#f0fdf4' }}>
+                        {['Code','Libellé','Type','Localisation','Statut','Action'].map(h => (
+                          <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:600, color:'#14532d', borderBottom:'2px solid #dcfce7' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ateliers.map((a,i) => (
+                        <tr key={a.id} style={{ borderBottom:'1px solid #f0fdf4', background: !a.actif ? '#f9f9f9' : i%2===0?'#fff':'#f9fefb', opacity: a.actif ? 1 : 0.6 }}>
+                          <td style={{ padding:'10px 14px', fontFamily:'monospace', fontWeight:700, color: a.actif ? '#14532d' : '#9ca3af' }}>{a.code}</td>
+                          <td style={{ padding:'10px 14px', fontWeight:500 }}>{a.libelle}</td>
+                          <td style={{ padding:'10px 14px' }}>
+                            <span style={{ background:TYPE_COLORS2[a.type]||'#f3f4f6', color:TYPE_TEXTS2[a.type]||'#374151', padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:600 }}>
+                              {a.type}
+                            </span>
+                          </td>
+                          <td style={{ padding:'10px 14px', color:'#6b7280', fontSize:12 }}>{a.localisation||'—'}</td>
+                          <td style={{ padding:'10px 14px' }}>
+                            <span style={{ color: a.actif ? '#16a34a' : '#dc2626', fontWeight:700, fontSize:12 }}>
+                              {a.actif ? '● Actif' : '○ Inactif'}
+                            </span>
+                          </td>
+                          <td style={{ padding:'10px 14px' }}>
+                            <button onClick={() => toggleAtelier(a)} style={{
+                              background: a.actif ? '#fee2e2' : '#dcfce7',
+                              color: a.actif ? '#dc2626' : '#15803d',
+                              border: `1px solid ${a.actif ? '#fca5a5' : '#86efac'}`,
+                              padding:'4px 12px', borderRadius:6, cursor:'pointer', fontSize:11, fontWeight:600
+                            }}>
+                              {a.actif ? 'Désactiver' : '✓ Réactiver'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {ateliers.length === 0 && (
+                    <div style={{ textAlign:'center', padding:32, color:'#9ca3af' }}>
+                      <div style={{ fontSize:32, marginBottom:8 }}>🏭</div>
+                      <p>Aucun atelier — créez le premier ci-dessus</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>
