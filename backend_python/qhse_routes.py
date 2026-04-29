@@ -210,7 +210,7 @@ async def get_documents_list(pool, processus_id=None, type_doc=None, statut=None
     async with pool.acquire() as conn:
         q = """
             SELECT d.*,
-                p.libelle AS processus_libelle,
+                p.titre AS processus_libelle,
                 ur.nom||' '||ur.prenom AS redacteur_nom,
                 ua.nom||' '||ua.prenom AS approbateur_nom
             FROM documents_qhse d
@@ -284,7 +284,7 @@ async def create_audit(pool, data: dict, user_id: str):
 async def get_risques_list(pool, type_r=None, categorie=None):
     async with pool.acquire() as conn:
         q = """
-            SELECT r.*, p.libelle AS processus_libelle,
+            SELECT r.*, p.titre AS processus_libelle,
                 u.nom||' '||u.prenom AS responsable_nom
             FROM risques_opportunites r
             LEFT JOIN processus p ON p.id = r.processus_id
@@ -307,7 +307,7 @@ async def get_indicateurs(pool, processus_id=None):
     async with pool.acquire() as conn:
         q = """
             SELECT i.*,
-                p.libelle AS processus_libelle,
+                p.titre AS processus_libelle,
                 u.nom||' '||u.prenom AS responsable_nom,
                 (SELECT vi.valeur FROM valeurs_indicateurs vi
                  WHERE vi.indicateur_id=i.id ORDER BY vi.periode DESC LIMIT 1) AS derniere_valeur,
