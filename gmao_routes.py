@@ -37,8 +37,9 @@ async def get_equipements(pool, search=None, statut=None, atelier_id=None, criti
     async with pool.acquire() as conn:
         q = """
             SELECT e.*,
-                at.libelle AS atelier_libelle, at.code AS atelier_code,
-                u.nom||' '||u.prenom AS responsable_nom,
+                COALESCE(at.libelle,'') AS atelier_libelle,
+                COALESCE(at.code,'') AS atelier_code,
+                COALESCE(u.nom||' '||u.prenom,'') AS responsable_nom,
                 (SELECT COUNT(*) FROM ordres_travail ot WHERE ot.equipement_id=e.id AND ot.statut NOT IN ('termine','annule')) AS ot_en_cours,
                 (SELECT MIN(pm.prochaine_echeance) FROM plans_maintenance pm WHERE pm.equipement_id=e.id AND pm.actif=true) AS prochaine_maintenance,
                 (SELECT COUNT(*) FROM historique_pannes hp WHERE hp.equipement_id=e.id) AS nb_pannes_total

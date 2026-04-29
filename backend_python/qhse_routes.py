@@ -49,8 +49,8 @@ async def get_processus_list(pool, type_proc=None, search=None):
                 p.date_revision, p.created_at,
                 up.nom||' '||up.prenom AS pilote_nom,
                 uc.nom||' '||uc.prenom AS copilote_nom,
-                (SELECT COUNT(*) FROM documents_qhse d WHERE d.processus_id = p.id AND d.actif = true) AS nb_documents,
-                (SELECT COUNT(*) FROM non_conformites n WHERE n.processus_id = p.id AND n.statut != 'clos') AS nb_nc_ouvertes
+                0 AS nb_documents,
+                0 AS nb_nc_ouvertes
             FROM processus p
             LEFT JOIN utilisateurs up ON up.id = p.pilote_id
             LEFT JOIN utilisateurs uc ON uc.id = p.copilote_id
