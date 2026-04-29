@@ -133,96 +133,230 @@ const MENU = [
 function Dashboard() {
   const [data, setData] = useState({ sessions_actives:0, trs_moyen:0, poids_net_total:0, poids_dechets_total:0, nb_tickets:0, arrets_actifs:0, alertes_rebus:[] });
   const [trs, setTrs] = useState([]);
-  const [rebus, setRebus] = useState([]);
+  const [kpi, setKpi] = useState({});
+  const [vueMode, setVueMode] = useState('general'); // 'general' | 'at3'
+  const [dashGeneral, setDashGeneral] = useState({});
+  const [machinesStatut, setMachinesStatut] = useState([]);
+  const [alertes, setAlertes] = useState([]);
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const [d, t, r] = await Promise.all([
-          axios.get(`${API}/kpi/dashboard`),
-          axios.get(`${API}/kpi/trs`),
-          axios.get(`${API}/kpi/rebus`),
-        ]);
-        setData(d.data);
-        setTrs(t.data.slice(0, 10));
-        setRebus(r.data.slice(0, 8));
-      } catch {}
-    };
-    load();
-    const iv = setInterval(load, 30000);
-    return () => clearInterval(iv);
-  }, []);
+  const charger = async () => {
+    try {
+      const [d1, d2, d3] = await Promise.all([
+        axios.get(`${API}/kpi/dashboard`),
+        axios.get(`${API}/kpi/trs`),
+        axios.get(`${API}/kpi/rebus`).catch(()=>({data:{}})),
+      ]);
+      setData(d1.data || {}); setTrs(d2.data || []); setKpi(d3.data || {});
+    } catch {}
+    try { const {data}=await axios.get(`${API}/alertes`); setAlertes(data||[]); } catch {}
+    try {
+      const {data}=await axios.get(`${API}/gmao/dashboard`);
+      setDashGeneral(prev=>({...prev, ...data}));
+    } catch {}
+    try {
+      const {data}=await axios.get(`${API}/rh/dashboard`);
+      setDashGeneral(prev=>({...prev, effectif:data.nb_employes, conges_attente:data.conges_en_attente}));
+    } catch {}
+    try {
+      const {data}=await axios.get(`${API}/qhse/dashboard`);
+      setDashGeneral(prev=>({...prev, nc_ouvertes:data.nc_ouvertes, risques:data.risques_eleves}));
+    } catch {}
+    try {
+      const {data}=await axios.get(`${API}/stock/resume`);
+      setDashGeneral(prev=>({...prev, valeur_stock:data.valeur_totale, alertes_stock:data.nb_alertes}));
+    } catch {}
+  };
 
-  const couleurTRS = (v) => v >= 80 ? '#16a34a' : v >= 60 ? '#d97706' : '#dc2626';
+  useEffect(() => { charger(); const t=setInterval(charger,30000); return()=>clearInterval(t); }, []);
 
+  const trsColor = (v) => v>=85?'#15803d':v>=70?'#d97706':'#dc2626';
+  const trsLabel = (v) => v>=85?'Excellent':v>=70?'Acceptable':'Critique';
 
   return (
     <div>
-      {data.alertes_rebus?.length > 0 && (
-        <div style={{ background:'#fef2f2', border:'1px solid #fca5a5', borderRadius:12, padding:'12px 18px', marginBottom:20, display:'flex', alignItems:'center', gap:10 }}>
-          <span style={{ fontSize:18 }}>⚠</span>
-          <strong style={{ color:'#dc2626' }}>Alerte rebus &gt; 5% :</strong>
-          {data.alertes_rebus.map(a => (
-            <span key={a.machine_code} style={{ background:'#fee2e2', color:'#991b1b', padding:'2px 8px', borderRadius:20, fontSize:12 }}>
-              {a.machine_code} — {a.taux_rebus_pct}%
-            </span>
-          ))}
-        </div>
-      )}
-
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:14, marginBottom:24 }}>
-        {[
-          { label:'Sessions actives',   value:data.sessions_actives,                       unit:'',   color:'#15803d', bg:'#dcfce7' },
-          { label:'TRS moyen',          value:(data.trs_moyen||0)+'%',                     unit:'',   color:'#0369a1', bg:'#e0f2fe' },
-          { label:'Production du jour', value:(data.poids_net_total||0).toFixed(1),        unit:'kg', color:'#7e22ce', bg:'#f3e8ff' },
-          { label:'Déchets du jour',    value:(data.poids_dechets_total||0).toFixed(1),    unit:'kg', color:'#c2410c', bg:'#fff7ed' },
-          { label:'Tickets imprimés',   value:data.nb_tickets,                             unit:'',   color:'#0f766e', bg:'#f0fdfa' },
-          { label:'Arrêts en cours',    value:data.arrets_actifs,                          unit:'',   color:'#b91c1c', bg:'#fef2f2' },
-        ].map(k => (
-          <div key={k.label} style={{ background:k.bg, borderRadius:12, padding:'18px 16px' }}>
-            <div style={{ fontSize:11, color:'#6b7280', marginBottom:6 }}>{k.label}</div>
-            <div style={{ fontSize:26, fontWeight:800, color:k.color }}>{k.value}<span style={{ fontSize:13, marginLeft:3 }}>{k.unit}</span></div>
-          </div>
+      {/* Sélecteur de vue */}
+      <div style={{display:'flex',gap:0,marginBottom:20,borderRadius:10,overflow:'hidden',border:'2px solid #e5e7eb',width:'fit-content'}}>
+        {[['general','🏭 NAI — Vue Générale'],['at3','⚙ Atelier 3 — Production']].map(([id,label])=>(
+          <button key={id} onClick={()=>setVueMode(id)} style={{
+            padding:'10px 24px',border:'none',cursor:'pointer',fontSize:13,fontWeight:700,
+            background:vueMode===id?'#1d4ed8':'#fff',color:vueMode===id?'#fff':'#6b7280'
+          }}>{label}</button>
         ))}
+        <button onClick={charger} style={{padding:'10px 14px',border:'none',background:'#f3f4f6',cursor:'pointer',borderLeft:'2px solid #e5e7eb'}}>🔄</button>
       </div>
 
-      {trs.length > 0 && (
-        <div style={{ background:'#fff', borderRadius:14, padding:20, border:'1px solid #e5e7eb', marginBottom:20 }}>
-          <h3 style={{ margin:'0 0 16px', fontSize:14, fontWeight:700, color:'#14532d' }}>TRS par machine — aujourd'hui</h3>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={trs}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0fdf4"/>
-              <XAxis dataKey="machine_code" tick={{ fontSize:11 }}/>
-              <YAxis domain={[0,100]} tick={{ fontSize:11 }}/>
-              <Tooltip formatter={v => v+'%'}/>
-              <Bar dataKey="trs_pct" radius={[6,6,0,0]}>
-                {trs.map((e,i) => <Cell key={i} fill={couleurTRS(e.trs_pct)}/>)}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
+      {/* ══ VUE GÉNÉRALE NAI ══ */}
+      {vueMode==='general' && (
+        <div>
+          {/* KPIs production */}
+          <div style={{fontSize:11,fontWeight:700,color:'#6b7280',letterSpacing:1,textTransform:'uppercase',marginBottom:10}}>📊 Production temps réel</div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:10,marginBottom:20}}>
+            {[
+              {icon:'⚙',label:'Sessions actives',value:data.sessions_actives||0,color:'#1d4ed8',bg:'#dbeafe'},
+              {icon:'📊',label:'TRS moyen',value:`${parseFloat(data.trs_moyen||0).toFixed(1)}%`,color:trsColor(data.trs_moyen||0),bg:'#f0fdf4'},
+              {icon:'⚖',label:'Production nette',value:`${parseFloat(data.poids_net_total||0).toFixed(0)} kg`,color:'#15803d',bg:'#dcfce7'},
+              {icon:'🗑',label:'Déchets',value:`${parseFloat(data.poids_dechets_total||0).toFixed(0)} kg`,color:'#d97706',bg:'#fef3c7'},
+              {icon:'🔴',label:'Arrêts actifs',value:data.arrets_actifs||0,color:data.arrets_actifs>0?'#dc2626':'#15803d',bg:data.arrets_actifs>0?'#fee2e2':'#dcfce7'},
+            ].map(k=>(
+              <div key={k.label} style={{background:k.bg,borderRadius:12,padding:'14px 16px'}}>
+                <div style={{fontSize:10,color:'#6b7280',marginBottom:4}}>{k.icon} {k.label}</div>
+                <div style={{fontSize:22,fontWeight:800,color:k.color}}>{k.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* KPIs transversaux */}
+          <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10,marginBottom:20}}>
+            {[
+              ['👥 Effectif actif', dashGeneral.effectif||'—', '#0891b2','#e0f2fe'],
+              ['🏭 Machines en panne', dashGeneral.equipements_en_panne||0, dashGeneral.equipements_en_panne>0?'#dc2626':'#15803d', dashGeneral.equipements_en_panne>0?'#fee2e2':'#dcfce7'],
+              ['⚠ NC ouvertes', dashGeneral.nc_ouvertes||0, dashGeneral.nc_ouvertes>0?'#d97706':'#15803d', dashGeneral.nc_ouvertes>0?'#fef3c7':'#dcfce7'],
+              ['📦 Valeur stock', dashGeneral.valeur_stock?`${parseFloat(dashGeneral.valeur_stock).toLocaleString('fr-FR')} FCFA`:'—', '#6d28d9','#f5f3ff'],
+            ].map(([label,value,color,bg])=>(
+              <div key={label} style={{background:bg,borderRadius:12,padding:'12px 14px'}}>
+                <div style={{fontSize:10,color:'#6b7280',marginBottom:4}}>{label}</div>
+                <div style={{fontSize:18,fontWeight:800,color}}>{value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Alertes consolidées */}
+          {(alertes.length > 0 || dashGeneral.nc_ouvertes > 0 || dashGeneral.equipements_en_panne > 0) && (
+            <div style={{background:'#fff',borderRadius:12,border:'2px solid #fecdd3',padding:16,marginBottom:20}}>
+              <div style={{fontWeight:700,color:'#dc2626',marginBottom:12,fontSize:13}}>🚨 Alertes actives</div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(200px,1fr))',gap:8}}>
+                {dashGeneral.equipements_en_panne>0&&(
+                  <div style={{background:'#fee2e2',borderRadius:8,padding:'8px 12px',fontSize:12}}>
+                    <strong>{dashGeneral.equipements_en_panne} machine(s) en panne</strong> — voir GMAO
+                  </div>
+                )}
+                {dashGeneral.nc_ouvertes>0&&(
+                  <div style={{background:'#fef3c7',borderRadius:8,padding:'8px 12px',fontSize:12}}>
+                    <strong>{dashGeneral.nc_ouvertes} NC ouvertes</strong> — voir QHSE
+                  </div>
+                )}
+                {dashGeneral.conges_attente>0&&(
+                  <div style={{background:'#dbeafe',borderRadius:8,padding:'8px 12px',fontSize:12}}>
+                    <strong>{dashGeneral.conges_attente} congé(s) en attente</strong> — voir RH
+                  </div>
+                )}
+                {dashGeneral.alertes_stock>0&&(
+                  <div style={{background:'#fee2e2',borderRadius:8,padding:'8px 12px',fontSize:12}}>
+                    <strong>{dashGeneral.alertes_stock} article(s) en rupture</strong> — voir Stock
+                  </div>
+                )}
+                {(data.alertes_rebus||[]).map((a,i)=>(
+                  <div key={i} style={{background:'#fef3c7',borderRadius:8,padding:'8px 12px',fontSize:12}}>
+                    ⚠ {a.machine_code} — Rebus {parseFloat(a.taux_rebus||0).toFixed(1)}%
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* TRS par machine */}
+          {trs.length > 0 && (
+            <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',padding:16}}>
+              <div style={{fontWeight:700,color:'#1d4ed8',marginBottom:12,fontSize:13}}>📊 TRS par machine (aujourd'hui)</div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(120px,1fr))',gap:8}}>
+                {trs.slice(0,12).map((m,i)=>{
+                  const v = parseFloat(m.trs||0);
+                  const c = trsColor(v);
+                  return (
+                    <div key={i} style={{background:'#f8fafc',borderRadius:10,padding:'10px 12px',border:`2px solid ${c}20`}}>
+                      <div style={{fontSize:11,fontWeight:700,color:'#374151',marginBottom:4}}>{m.machine_code||m.machine}</div>
+                      <div style={{fontSize:24,fontWeight:800,color:c}}>{v.toFixed(0)}%</div>
+                      <div style={{fontSize:10,color:c,fontWeight:600}}>{trsLabel(v)}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
-      {rebus.length > 0 && (
-        <div style={{ background:'#fff', borderRadius:14, padding:20, border:'1px solid #e5e7eb' }}>
-          <h3 style={{ margin:'0 0 16px', fontSize:14, fontWeight:700, color:'#dc2626' }}>Taux de rebus — 7 jours</h3>
-          <ResponsiveContainer width="100%" height={180}>
-            <BarChart data={rebus}>
-              <CartesianGrid strokeDasharray="3 3"/>
-              <XAxis dataKey="machine" tick={{ fontSize:11 }}/>
-              <YAxis tick={{ fontSize:11 }}/>
-              <Tooltip formatter={v => v+'%'}/>
-              <Bar dataKey="taux_rebus_pct" fill="#ef4444" radius={[4,4,0,0]}/>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
+      {/* ══ VUE AT3 PRODUCTION ══ */}
+      {vueMode==='at3' && (
+        <div>
+          <div style={{fontSize:11,fontWeight:700,color:'#6b7280',letterSpacing:1,textTransform:'uppercase',marginBottom:10}}>⚙ Atelier 3 — Tableau de bord production</div>
 
-      {trs.length === 0 && rebus.length === 0 && (
-        <div style={{ background:'#fff', borderRadius:14, padding:48, textAlign:'center', border:'1px solid #e5e7eb' }}>
-          <div style={{ fontSize:48, marginBottom:12 }}>📊</div>
-          <p style={{ color:'#6b7280', fontSize:15 }}>Aucune donnée de production encore</p>
-          <p style={{ color:'#9ca3af', fontSize:13 }}>Les KPI s'afficheront dès qu'un opérateur saisira de la production</p>
+          {/* Status extrudeuses */}
+          <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',padding:16,marginBottom:16}}>
+            <div style={{fontWeight:700,color:'#1d4ed8',marginBottom:12,fontSize:13}}>🔵 9 Extrudeuses</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(9,1fr)',gap:6}}>
+              {Array.from({length:9},(_,i)=>{
+                const m = (trs||[]).find(t=>(t.machine_code||'').includes(`EX${String(i+1).padStart(2,'0')}`)||
+                                            (t.machine_code||'').toLowerCase().includes(`ext${i+1}`)||
+                                            (t.machine||'').includes(`${i+1}`));
+                const v = m ? parseFloat(m.trs||0) : null;
+                const c = v===null?'#9ca3af':trsColor(v);
+                return (
+                  <div key={i} style={{background:v===null?'#f3f4f6':c+'20',borderRadius:8,padding:'10px 6px',textAlign:'center',border:`2px solid ${c}`}}>
+                    <div style={{fontSize:10,fontWeight:700,color:'#374151'}}>EX{String(i+1).padStart(2,'0')}</div>
+                    <div style={{fontSize:18,fontWeight:800,color:c}}>{v!==null?`${v.toFixed(0)}%`:'—'}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Status soudeuses */}
+          <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',padding:16,marginBottom:16}}>
+            <div style={{fontWeight:700,color:'#7c3aed',marginBottom:12,fontSize:13}}>🟣 5 Soudeuses</div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:8}}>
+              {Array.from({length:5},(_,i)=>{
+                const m = (trs||[]).find(t=>(t.machine_code||'').includes(`SO${String(i+1).padStart(2,'0')}`)||
+                                            (t.machine||'').toLowerCase().includes(`soud${i+1}`));
+                const v = m ? parseFloat(m.trs||0) : null;
+                const c = v===null?'#9ca3af':trsColor(v);
+                return (
+                  <div key={i} style={{background:v===null?'#f3f4f6':c+'20',borderRadius:8,padding:'12px 8px',textAlign:'center',border:`2px solid ${c}`}}>
+                    <div style={{fontSize:11,fontWeight:700,color:'#374151'}}>SOU{String(i+1).padStart(2,'0')}</div>
+                    <div style={{fontSize:22,fontWeight:800,color:c}}>{v!==null?`${v.toFixed(0)}%`:'—'}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Tables manuelles + postes */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
+            <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',padding:16}}>
+              <div style={{fontWeight:700,color:'#92400e',marginBottom:10,fontSize:13}}>🟤 3 Tables manuelles</div>
+              {Array.from({length:3},(_,i)=>(
+                <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0',borderBottom:i<2?'1px solid #f3f4f6':'none'}}>
+                  <span style={{fontWeight:600,fontSize:13}}>TABLE {String(i+1).padStart(2,'0')}</span>
+                  <span style={{background:'#dcfce7',color:'#15803d',padding:'2px 10px',borderRadius:20,fontSize:11,fontWeight:700}}>2 opér.</span>
+                </div>
+              ))}
+            </div>
+            <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',padding:16}}>
+              <div style={{fontWeight:700,color:'#0891b2',marginBottom:10,fontSize:13}}>👥 Postes transverses</div>
+              {[['Emballeurs','3'],['Technicien Régleur','1'],['Contrôleur Qualité','1'],['Chef Atelier','1']].map(([p,n])=>(
+                <div key={p} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 0',borderBottom:'1px solid #f3f4f6'}}>
+                  <span style={{fontSize:12}}>{p}</span>
+                  <span style={{background:'#dbeafe',color:'#1d4ed8',padding:'1px 8px',borderRadius:20,fontSize:11,fontWeight:700}}>{n}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* KPIs AT3 */}
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:10}}>
+            {[
+              {icon:'⚙',label:'Sessions AT3',value:data.sessions_actives||0,color:'#1d4ed8',bg:'#dbeafe'},
+              {icon:'📊',label:'TRS moyen AT3',value:`${parseFloat(data.trs_moyen||0).toFixed(1)}%`,color:trsColor(data.trs_moyen||0),bg:'#f0fdf4'},
+              {icon:'⚖',label:'Production nette',value:`${parseFloat(data.poids_net_total||0).toFixed(0)} kg`,color:'#15803d',bg:'#dcfce7'},
+              {icon:'🔴',label:'Arrêts',value:data.arrets_actifs||0,color:data.arrets_actifs>0?'#dc2626':'#15803d',bg:data.arrets_actifs>0?'#fee2e2':'#dcfce7'},
+              {icon:'🏭',label:'Pannes GMAO',value:dashGeneral.equipements_en_panne||0,color:dashGeneral.equipements_en_panne>0?'#dc2626':'#15803d',bg:dashGeneral.equipements_en_panne>0?'#fee2e2':'#dcfce7'},
+            ].map(k=>(
+              <div key={k.label} style={{background:k.bg,borderRadius:12,padding:'14px 16px'}}>
+                <div style={{fontSize:10,color:'#6b7280',marginBottom:4}}>{k.icon} {k.label}</div>
+                <div style={{fontSize:22,fontWeight:800,color:k.color}}>{k.value}</div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
@@ -1261,6 +1395,11 @@ function MatieresPremières() {
                 <InputField label="Couleur / Aspect" value={form.couleur} onChange={e => setForm({...form,couleur:e.target.value})} placeholder="Naturel, Blanc..."/>
                 <InputField label="Densité (g/cm³)" value={form.densite} onChange={e => setForm({...form,densite:e.target.value})} type="number" placeholder="0.900"/>
                 <InputField label="Poids unitaire (kg)" value={form.poids_theorique_kg} onChange={e => setForm({...form,poids_theorique_kg:e.target.value})} type="number" placeholder="0.000"/>
+                <InputField label="Cadence standard (pcs/h)" value={form.cadence_heure} onChange={e => setForm({...form,cadence_heure:e.target.value})} type="number" placeholder="Ex: 500"/>
+                <InputField label="Temps cycle (min)" value={form.temps_cycle_min} onChange={e => setForm({...form,temps_cycle_min:e.target.value})} type="number" placeholder="Ex: 0.12"/>
+                <InputField label="Temps réglage (min)" value={form.temps_reglage_min} onChange={e => setForm({...form,temps_reglage_min:e.target.value})} type="number" placeholder="30"/>
+                <InputField label="Conso MP/pièce (kg)" value={form.conso_mp_kg} onChange={e => setForm({...form,conso_mp_kg:e.target.value})} type="number" placeholder="0.000"/>
+                <InputField label="Taux rebut std (%)" value={form.taux_rebut_std} onChange={e => setForm({...form,taux_rebut_std:e.target.value})} type="number" placeholder="2.0"/>
                 <InputField label="Épaisseur (mm)" value={form.epaisseur_mm} onChange={e => setForm({...form,epaisseur_mm:e.target.value})} type="number" placeholder="0.00"/>
                 <InputField label="Temp. fusion (°C)" value={form.temperature_fusion} onChange={e => setForm({...form,temperature_fusion:e.target.value})} type="number" placeholder="165"/>
                 <InputField label="Temp. traitement (°C)" value={form.temperature_traitement} onChange={e => setForm({...form,temperature_traitement:e.target.value})} type="number" placeholder="220"/>
@@ -5181,7 +5320,27 @@ function RH() {
               style={{background:'#059669',color:'#fff',border:'none',padding:'9px 18px',borderRadius:8,cursor:'pointer',fontWeight:700}}>
               + Saisir relevé
             </button>
-            <span style={{fontSize:12,color:'#9ca3af',marginLeft:'auto'}}>Tarif CIE : {parseFloat(energieDash.tarif_kwh||105).toFixed(0)} FCFA/kWh</span>
+            <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:8}}>
+              <span style={{fontSize:12,color:'#9ca3af'}}>Tarif CIE :</span>
+              {editTarif ? (
+                <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                  <input type="number" value={newTarif} onChange={e=>setNewTarif(e.target.value)}
+                    style={{width:80,border:'1px solid #bfdbfe',borderRadius:6,padding:'4px 8px',fontSize:13,fontWeight:700}}/>
+                  <span style={{fontSize:11,color:'#6b7280'}}>FCFA/kWh</span>
+                  <button onClick={async()=>{
+                    await axios.put(`${API}/gmao/energie/parametres`,{tarif_kwh:parseFloat(newTarif)});
+                    toast.success('Tarif mis à jour');setEditTarif(false);
+                    const {data}=await axios.get(`${API}/gmao/energie/dashboard`);setEnergieDash(data);
+                  }} style={{background:'#059669',color:'#fff',border:'none',padding:'4px 10px',borderRadius:6,cursor:'pointer',fontSize:11,fontWeight:700}}>✓</button>
+                  <button onClick={()=>setEditTarif(false)} style={{background:'#f3f4f6',border:'none',padding:'4px 8px',borderRadius:6,cursor:'pointer',fontSize:11}}>✕</button>
+                </div>
+              ) : (
+                <span onClick={()=>{setNewTarif(energieDash.tarif_kwh||105);setEditTarif(true);}}
+                  style={{fontSize:13,fontWeight:700,color:'#1d4ed8',cursor:'pointer',textDecoration:'underline',textDecorationStyle:'dotted'}}>
+                  {parseFloat(energieDash.tarif_kwh||105).toFixed(0)} FCFA/kWh ✏
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Tableau des relevés */}
@@ -5350,6 +5509,8 @@ function GMAO() {
   const [energieDash, setEnergieDash] = useState({});
   const [releves, setReleves] = useState([]);
   const [consoMensuelle, setConsoMensuelle] = useState([]);
+  const [editTarif, setEditTarif] = useState(false);
+  const [newTarif, setNewTarif] = useState(105);
   const [utilisateurs, setUtilisateurs] = useState([]);
   const [ateliers, setAteliers] = useState([]);
   const [fournisseurs, setFournisseurs] = useState([]);
@@ -5857,7 +6018,27 @@ function GMAO() {
               style={{background:'#059669',color:'#fff',border:'none',padding:'9px 18px',borderRadius:8,cursor:'pointer',fontWeight:700}}>
               + Saisir relevé
             </button>
-            <span style={{fontSize:12,color:'#9ca3af',marginLeft:'auto'}}>Tarif CIE : {parseFloat(energieDash.tarif_kwh||105).toFixed(0)} FCFA/kWh</span>
+            <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:8}}>
+              <span style={{fontSize:12,color:'#9ca3af'}}>Tarif CIE :</span>
+              {editTarif ? (
+                <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                  <input type="number" value={newTarif} onChange={e=>setNewTarif(e.target.value)}
+                    style={{width:80,border:'1px solid #bfdbfe',borderRadius:6,padding:'4px 8px',fontSize:13,fontWeight:700}}/>
+                  <span style={{fontSize:11,color:'#6b7280'}}>FCFA/kWh</span>
+                  <button onClick={async()=>{
+                    await axios.put(`${API}/gmao/energie/parametres`,{tarif_kwh:parseFloat(newTarif)});
+                    toast.success('Tarif mis à jour');setEditTarif(false);
+                    const {data}=await axios.get(`${API}/gmao/energie/dashboard`);setEnergieDash(data);
+                  }} style={{background:'#059669',color:'#fff',border:'none',padding:'4px 10px',borderRadius:6,cursor:'pointer',fontSize:11,fontWeight:700}}>✓</button>
+                  <button onClick={()=>setEditTarif(false)} style={{background:'#f3f4f6',border:'none',padding:'4px 8px',borderRadius:6,cursor:'pointer',fontSize:11}}>✕</button>
+                </div>
+              ) : (
+                <span onClick={()=>{setNewTarif(energieDash.tarif_kwh||105);setEditTarif(true);}}
+                  style={{fontSize:13,fontWeight:700,color:'#1d4ed8',cursor:'pointer',textDecoration:'underline',textDecorationStyle:'dotted'}}>
+                  {parseFloat(energieDash.tarif_kwh||105).toFixed(0)} FCFA/kWh ✏
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Tableau des relevés */}
@@ -5943,7 +6124,10 @@ function GMAO() {
                 <F label="Marque" k="marque" ph="Battenfeld, Engel..."/>
                 <F label="Modèle" k="modele" ph="EM 80/350"/>
                 <F label="N° Série" k="numero_serie" ph="SN-2021-001"/>
-                <F label="Puissance" k="puissance" ph="55 kW"/>
+                <F label="Puissance nominale (kW)" k="puissance_kw" type="number" ph="55"/>
+                <F label="Facteur de puissance" k="facteur_puissance" type="number" ph="0.85"/>
+                <F label="Tension (V)" k="tension_v" type="number" ph="380"/>
+                <F label="Intensité (A)" k="intensite_a" type="number" ph="100"/>
                 <F label="Date acquisition" k="date_acquisition" type="date"/>
                 <F label="Date mise en service" k="date_mise_en_service" type="date"/>
                 <F label="Date fin garantie" k="date_fin_garantie" type="date"/>

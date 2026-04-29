@@ -1516,6 +1516,67 @@ async def api_create_evaluation(payload: dict, user=Depends(get_current_user)):
         return dict(row)
 
 # RH dans nginx aussi
+
+@app.patch("/api/articles/{article_id}/production")
+async def update_article_production(article_id: str, payload: dict, user=Depends(get_current_user)):
+    """Met à jour les données de production d'un article"""
+    async with pool.acquire() as conn:
+        d = payload
+        row = await conn.fetchrow("""
+            UPDATE articles SET
+                cadence_heure = $1,
+                temps_cycle_min = $2,
+                temps_reglage_min = $3,
+                conso_mp_kg = $4,
+                taux_rebut_std = $5,
+                machines_ids = $6
+            WHERE id = $7
+            RETURNING id, code, designation, cadence_heure, temps_cycle_min,
+                      temps_reglage_min, conso_mp_kg, taux_rebut_std, machines_ids
+        """,
+            int(d["cadence_heure"]) if d.get("cadence_heure") else None,
+            float(d["temps_cycle_min"]) if d.get("temps_cycle_min") else None,
+            float(d.get("temps_reglage_min", 30) or 30),
+            float(d["conso_mp_kg"]) if d.get("conso_mp_kg") else None,
+            float(d.get("taux_rebut_std", 2) or 2),
+            json.dumps(d.get("machines_ids", [])),
+            article_id
+        )
+        if not row:
+            raise HTTPException(404, "Article introuvable")
+        return dict(row)
+
+@app.get("/api/articles/{article_id}/temps-production")
+async def calcul_temps_production(
+    article_id: str,
+    quantite: float = 1000,
+    user=Depends(get_current_user)
+):
+    """Calcule le temps de production selon la formule du cahier des charges"""
+    async with pool.acquire() as conn:
+        art = await conn.fetchrow("SELECT * FROM articles WHERE id=$1", article_id)
+        if not art:
+            raise HTTPException(404, "Article introuvable")
+        
+        cadence = art["cadence_heure"] or 0
+        temps_reglage = float(art["temps_reglage_min"] or 30) / 60  # en heures
+        
+        if cadence > 0:
+            temps_prod = quantite / cadence + temps_reglage
+        else:
+            temps_prod = None
+        
+        return {
+            "article_id": article_id,
+            "article_code": art["code"],
+            "designation": art["designation"],
+            "quantite": quantite,
+            "cadence_heure": cadence,
+            "temps_reglage_h": temps_reglage,
+            "temps_production_h": round(temps_prod, 2) if temps_prod else None,
+            "formule": f"({quantite} / {cadence}) + {temps_reglage:.2f}h = {round(temps_prod,2) if temps_prod else '?'}h",
+        }
+
 # ── HEALTH CHECK ───────────────────────────────────────────────
 @app.get("/api/health")
 async def health():
