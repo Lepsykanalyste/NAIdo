@@ -1,5 +1,4 @@
 version: '3.9'
-
 services:
   postgres:
     image: postgres:16-alpine
@@ -42,6 +41,21 @@ services:
       - naido_uploads:/app/uploads
     restart: unless-stopped
 
+  backend_python:
+    build: ./backend_python
+    container_name: naido_backend_python
+    environment:
+      DATABASE_URL: postgresql://naido_user:naido_pass_2026@postgres:5432/naido_db
+      JWT_SECRET: naido_jwt_secret_green_industry_2026
+    ports:
+      - "3091:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - naido_uploads:/app/uploads
+    restart: unless-stopped
+
   frontend:
     build: ./frontend
     container_name: naido_frontend
@@ -49,6 +63,7 @@ services:
       - "8090:80"
     depends_on:
       - backend
+      - backend_python
     restart: unless-stopped
 
 volumes:

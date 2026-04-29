@@ -205,10 +205,10 @@ router.put('/:id', auth, handleUploadOrJSON, async (req, res) => {
     if(fp(req,'fiche_securite')) add('fiche_securite_path',fp(req,'fiche_securite'));
     if(fp(req,'photo')) add('photo_path',fp(req,'photo'));
     add('updated_at',new Date());
-    vals.push(req.params.id);
-
+    // ID mis directement dans la requête SQL - évite le bug Markdown SSH
+    const articleId = String(req.params.id);
     const { rows } = await db.query(
-      `UPDATE articles SET ${sets.join(',')} WHERE id=$${vals.length} RETURNING id,code,designation`,
+      `UPDATE articles SET ${sets.join(',')} WHERE id='${articleId}' RETURNING id,code,designation`,
       vals
     );
     if (!rows.length) return res.status(404).json({ error:'Article introuvable' });

@@ -790,8 +790,8 @@ function Articles() {
                 3 · Paramètres commerciaux & stock
               </div>
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:12 }}>
-                <InputField label="Prix achat (DZD)" value={form.prix_achat} onChange={e => setForm({...form,prix_achat:e.target.value})} type="number" placeholder="0"/>
-                <InputField label="Prix vente (DZD)" value={form.prix_vente} onChange={e => setForm({...form,prix_vente:e.target.value})} type="number" placeholder="0"/>
+                <InputField label="Prix achat (FCFA)" value={form.prix_achat} onChange={e => setForm({...form,prix_achat:e.target.value})} type="number" placeholder="0"/>
+                <InputField label="Prix vente (FCFA)" value={form.prix_vente} onChange={e => setForm({...form,prix_vente:e.target.value})} type="number" placeholder="0"/>
                 <InputField label="Prix cession interne" value={form.prix_cession_interne} onChange={e => setForm({...form,prix_cession_interne:e.target.value})} type="number" placeholder="0"/>
                 <InputField label="Stock minimum" value={form.stock_mini} onChange={e => setForm({...form,stock_mini:e.target.value})} type="number" placeholder="0"/>
                 <InputField label="DLC — Durée de vie (jours)" value={form.dlc_jours} onChange={e => setForm({...form,dlc_jours:e.target.value})} type="number" placeholder="Ex: 365 = 1 an"/>
@@ -1020,9 +1020,9 @@ function Articles() {
               ['Dimensions', detail.longueur_mm ? `${detail.longueur_mm}×${detail.largeur_mm} mm` : '—'],
               ['Couleur', detail.couleur||'—'],
               ['Matière', detail.matiere||'—'],
-              ['Prix achat', detail.prix_achat ? detail.prix_achat+' DZD' : '—'],
-              ['Prix vente', detail.prix_vente ? detail.prix_vente+' DZD' : '—'],
-              ['Cession', detail.prix_cession_interne ? detail.prix_cession_interne+' DZD' : '—'],
+              ['Prix achat', detail.prix_achat ? detail.prix_achat+' FCFA' : '—'],
+              ['Prix vente', detail.prix_vente ? detail.prix_vente+' FCFA' : '—'],
+              ['Cession', detail.prix_cession_interne ? detail.prix_cession_interne+' FCFA' : '—'],
               ['Stock mini', detail.stock_mini||'0'],
               ['DLC', detail.dlc_jours ? detail.dlc_jours+' j' : '—'],
               ['Normes', detail.normes_iso||'—'],
@@ -1058,7 +1058,7 @@ function MatieresPremières() {
     couleur:'', epaisseur_mm:'',
     poids_theorique_kg:'', densite:'',
     temperature_fusion:'', temperature_traitement:'',
-    prix_achat:'0', devise:'DZD',
+    prix_achat:'0', devise:'FCFA',
     stock_mini:'0', stock_maxi:'', delai_appro_jours:'14',
     dlc_jours:'', dluo_jours:'',
     temperature_stockage_min:'', temperature_stockage_max:'',
@@ -1095,7 +1095,7 @@ function MatieresPremières() {
     setFiles({ fiche_technique: null, fiche_securite: null, photo: null });
     setModeEdition(false);
     setEditId(null);
-    setForm({ code:'', designation:'', famille_id:'', unite_mesure_id:'', type_article:'matiere_premiere', fournisseur:'', reference_fournisseur:'', couleur:'', epaisseur_mm:'', poids_theorique_kg:'', densite:'', temperature_fusion:'', temperature_traitement:'', prix_achat:'0', devise:'DZD', stock_mini:'0', stock_maxi:'', delai_appro_jours:'14', dlc_jours:'', dluo_jours:'', temperature_stockage_min:'', temperature_stockage_max:'', conditions_stockage:'', allergenes:'', points_ccp:false, normes_iso:'', certifications:'', risques_securite:'', epi_requis:'', tracabilite_type:'lot', format_lot:'LOT-YYYYMMDD-001', notes:'' });
+    setForm({ code:'', designation:'', famille_id:'', unite_mesure_id:'', type_article:'matiere_premiere', fournisseur:'', reference_fournisseur:'', couleur:'', epaisseur_mm:'', poids_theorique_kg:'', densite:'', temperature_fusion:'', temperature_traitement:'', prix_achat:'0', devise:'FCFA', stock_mini:'0', stock_maxi:'', delai_appro_jours:'14', dlc_jours:'', dluo_jours:'', temperature_stockage_min:'', temperature_stockage_max:'', conditions_stockage:'', allergenes:'', points_ccp:false, normes_iso:'', certifications:'', risques_securite:'', epi_requis:'', tracabilite_type:'lot', format_lot:'LOT-YYYYMMDD-001', notes:'' });
     setShowForm(true);
   };
 
@@ -1121,7 +1121,7 @@ function MatieresPremières() {
       temperature_fusion: mp.temperature_fusion || '',
       temperature_traitement: mp.temperature_traitement || '',
       prix_achat: mp.prix_achat || '0',
-      devise: mp.devise || 'DZD',
+      devise: mp.devise || 'FCFA',
       stock_mini: mp.stock_mini || '0',
       stock_maxi: mp.stock_maxi || '',
       delai_appro_jours: mp.delai_appro_jours || '14',
@@ -1270,7 +1270,7 @@ function MatieresPremières() {
                 3 · Stockage, Conservation & Qualité
               </div>
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:12 }}>
-                <InputField label="Prix achat (DZD/unité)" value={form.prix_achat} onChange={e => setForm({...form,prix_achat:e.target.value})} type="number" placeholder="0"/>
+                <InputField label="Prix achat (FCFA/unité)" value={form.prix_achat} onChange={e => setForm({...form,prix_achat:e.target.value})} type="number" placeholder="0"/>
                 <InputField label="Stock minimum" value={form.stock_mini} onChange={e => setForm({...form,stock_mini:e.target.value})} type="number" placeholder="0"/>
                 <InputField label="Stock maximum" value={form.stock_maxi} onChange={e => setForm({...form,stock_maxi:e.target.value})} type="number"/>
                 <InputField label="Délai appro. (jours)" value={form.delai_appro_jours} onChange={e => setForm({...form,delai_appro_jours:e.target.value})} type="number" placeholder="14"/>
@@ -1370,7 +1370,7 @@ function MatieresPremières() {
                     {m.unite_code||'—'}
                   </span>
                 </td>
-                <td style={{ padding:'9px 14px', fontWeight:600 }}>{m.prix_achat ? `${m.prix_achat} DZD` : '—'}</td>
+                <td style={{ padding:'9px 14px', fontWeight:600 }}>{m.prix_achat ? `${m.prix_achat} FCFA` : '—'}</td>
                 <td style={{ padding:'9px 14px', fontWeight:700,
                   color: parseFloat(m.stock_mini||0) > 0 && parseFloat(m.stock_total||0) <= parseFloat(m.stock_mini||0) ? '#dc2626' : '#15803d' }}>
                   {parseFloat(m.stock_total||0).toFixed(1)}
@@ -1454,7 +1454,7 @@ function MatieresPremières() {
               ['Temp. fusion', detail.temperature_fusion ? detail.temperature_fusion+'°C' : null],
               ['Temp. traitement', detail.temperature_traitement ? detail.temperature_traitement+'°C' : null],
               ['Couleur', detail.couleur],
-              ['Prix achat', detail.prix_achat ? detail.prix_achat+' DZD' : null],
+              ['Prix achat', detail.prix_achat ? detail.prix_achat+' FCFA' : null],
               ['Stock mini', detail.stock_mini||'0'],
               ['Délai appro.', detail.delai_appro_jours ? detail.delai_appro_jours+' j' : null],
               ['DLC', detail.dlc_jours ? detail.dlc_jours+' j' : null],
@@ -2652,17 +2652,20 @@ function Stock() {
       {/* Navigation onglets */}
       <div style={{ display:'flex', gap:0, marginBottom:16, borderBottom:'2px solid #e5e7eb' }}>
         {[
-          ['inventaire','📊 Inventaire'],
-          ['lots','🏷 Lots'],
-          ['mouvements','📋 Mouvements'],
-          ['emplacements','🏭 Emplacements'],
-        ].map(([id, label]) => (
-          <button key={id} onClick={() => setOnglet(id)} style={{
+          ['inventaire','📊 Inventaire','État du stock par article'],
+          ['lots','🏷 Lots','Chaque livraison reçue = 1 lot traçable'],
+          ['mouvements','📋 Mouvements','Journal de toutes les entrées/sorties'],
+          ['emplacements','🏭 Emplacements','Magasin MP, PF, Quarantaine...'],
+        ].map(([id, label, tooltip]) => (
+          <button key={id} onClick={() => setOnglet(id)} title={tooltip} style={{
             padding:'10px 20px', border:'none', background:'none', cursor:'pointer', fontSize:13,
             fontWeight: onglet===id ? 700 : 400,
             color: onglet===id ? '#1d4ed8' : '#6b7280',
             borderBottom: onglet===id ? '3px solid #1d4ed8' : '3px solid transparent',
-          }}>{label}</button>
+          }}>
+            {label}
+            {onglet!==id && <div style={{fontSize:9,color:'#9ca3af',marginTop:2}}>{tooltip}</div>}
+          </button>
         ))}
       </div>
 
@@ -2672,7 +2675,7 @@ function Stock() {
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13, minWidth:700 }}>
             <thead>
               <tr style={{ background:'#eff6ff' }}>
-                {['Code','Article','Famille','Unité','Stock dispo','Réservé','Stock mini','Valeur','⚠'].map(h => (
+                {['Code','Article','Famille','Unité','Stock dispo','Réservé','Stock mini','Valeur','⚠','Actions'].map(h => (
                   <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:700, color:'#1d4ed8', borderBottom:'2px solid #bfdbfe', whiteSpace:'nowrap' }}>{h}</th>
                 ))}
               </tr>
@@ -2689,9 +2692,21 @@ function Stock() {
                   </td>
                   <td style={{ padding:'9px 14px', color:'#6b7280' }}>{parseFloat(a.stock_total_reserve||0).toFixed(3)}</td>
                   <td style={{ padding:'9px 14px', color:'#9ca3af' }}>{parseFloat(a.stock_mini||0).toFixed(3)}</td>
-                  <td style={{ padding:'9px 14px', fontWeight:600 }}>{parseFloat(a.valeur_totale||0).toFixed(2)} DZD</td>
+                  <td style={{ padding:'9px 14px', fontWeight:600 }}>{parseFloat(a.valeur_totale||0).toFixed(2)} FCFA</td>
                   <td style={{ padding:'9px 14px', textAlign:'center' }}>
                     {a.alerte_stock_bas && <span style={{ color:'#d97706', fontWeight:700 }}>⚠</span>}
+                  </td>
+                  <td style={{ padding:'9px 14px' }}>
+                    <div style={{ display:'flex', gap:4 }}>
+                      <button onClick={()=>{ setTypeMvt('entree'); setFormMvt({...formMvt, article_id:a.id}); setShowMvt(true); }}
+                        style={{ background:'#dcfce7', color:'#15803d', border:'none', padding:'3px 8px', borderRadius:6, cursor:'pointer', fontSize:10, fontWeight:700 }}>
+                        + Entrée
+                      </button>
+                      <button onClick={()=>{ setTypeMvt('sortie'); setFormMvt({...formMvt, article_id:a.id}); setShowMvt(true); }}
+                        style={{ background:'#fee2e2', color:'#dc2626', border:'none', padding:'3px 8px', borderRadius:6, cursor:'pointer', fontSize:10, fontWeight:700 }}>
+                        − Sortie
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -3222,7 +3237,7 @@ function Clients() {
                 <td style={{padding:'9px 14px',color:'#6b7280'}}>{c.telephone||'—'}</td>
                 <td style={{padding:'9px 14px',color:'#6b7280'}}>{c.ville||'—'}</td>
                 <td style={{padding:'9px 14px',fontWeight:700,color:parseFloat(c.solde_actuel||0)<0?'#dc2626':'#374151'}}>
-                  {parseFloat(c.solde_actuel||0).toFixed(2)} DZD
+                  {parseFloat(c.solde_actuel||0).toFixed(2)} FCFA
                 </td>
                 <td style={{padding:'9px 14px'}}>
                   <button onClick={()=>ouvrir(c)} style={{background:'#fef3c7',color:'#92400e',border:'none',padding:'4px 10px',borderRadius:6,cursor:'pointer',fontSize:11,fontWeight:600}}>✏ Modifier</button>
@@ -3387,10 +3402,10 @@ function Vente() {
       {/* KPIs */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:12,marginBottom:20}}>
         {[
-          {label:'CA TTC (année)',value:`${parseFloat(stats.ca_ttc||0).toLocaleString('fr-FR')} DZD`,color:'#15803d',bg:'#dcfce7',icon:'💰'},
+          {label:'CA TTC (année)',value:`${parseFloat(stats.ca_ttc||0).toLocaleString('fr-FR')} FCFA`,color:'#15803d',bg:'#dcfce7',icon:'💰'},
           {label:'Nb ventes',value:stats.nb_ventes||0,color:'#1d4ed8',bg:'#dbeafe',icon:'📋'},
-          {label:'Encaissé',value:`${parseFloat(stats.total_encaisse||0).toLocaleString('fr-FR')} DZD`,color:'#0369a1',bg:'#e0f2fe',icon:'✅'},
-          {label:'Restant dû',value:`${parseFloat(stats.total_restant||0).toLocaleString('fr-FR')} DZD`,color:parseFloat(stats.total_restant||0)>0?'#dc2626':'#15803d',bg:'#fee2e2',icon:'⏳'},
+          {label:'Encaissé',value:`${parseFloat(stats.total_encaisse||0).toLocaleString('fr-FR')} FCFA`,color:'#0369a1',bg:'#e0f2fe',icon:'✅'},
+          {label:'Restant dû',value:`${parseFloat(stats.total_restant||0).toLocaleString('fr-FR')} FCFA`,color:parseFloat(stats.total_restant||0)>0?'#dc2626':'#15803d',bg:'#fee2e2',icon:'⏳'},
           {label:'Brouillons',value:stats.nb_brouillon||0,color:'#6b7280',bg:'#f3f4f6',icon:'📝'},
         ].map(k=>(
           <div key={k.label} style={{background:k.bg,borderRadius:12,padding:'14px 16px'}}>
@@ -3492,7 +3507,7 @@ function Vente() {
               ))}
               {lignes.length>0&&(
                 <div style={{textAlign:'right',fontWeight:800,fontSize:15,color:'#15803d',marginTop:8,paddingTop:8,borderTop:'2px solid #dcfce7'}}>
-                  Total TTC : {totalLignes.toLocaleString('fr-FR',{minimumFractionDigits:2})} DZD
+                  Total TTC : {totalLignes.toLocaleString('fr-FR',{minimumFractionDigits:2})} FCFA
                 </div>
               )}
             </div>
@@ -3524,9 +3539,9 @@ function Vente() {
                   <td style={{padding:'9px 14px',fontSize:12}}>{v.client_nom||<span style={{color:'#9ca3af'}}>—</span>}</td>
                   <td style={{padding:'9px 14px'}}><span style={{background:'#dbeafe',color:'#1d4ed8',padding:'2px 6px',borderRadius:20,fontSize:11,fontWeight:700}}>{v.type_vente}</span></td>
                   <td style={{padding:'9px 14px',fontSize:12,color:'#6b7280'}}>{new Date(v.date_vente).toLocaleDateString('fr-FR')}</td>
-                  <td style={{padding:'9px 14px',fontWeight:700}}>{parseFloat(v.montant_ttc||0).toLocaleString('fr-FR')} DZD</td>
+                  <td style={{padding:'9px 14px',fontWeight:700}}>{parseFloat(v.montant_ttc||0).toLocaleString('fr-FR')} FCFA</td>
                   <td style={{padding:'9px 14px',fontWeight:700,color:parseFloat(v.solde_restant||0)>0?'#dc2626':'#15803d'}}>
-                    {parseFloat(v.montant_paye||0).toLocaleString('fr-FR')} DZD
+                    {parseFloat(v.montant_paye||0).toLocaleString('fr-FR')} FCFA
                   </td>
                   <td style={{padding:'9px 14px'}}><span style={{background:sc.bg,color:sc.tx,padding:'3px 10px',borderRadius:20,fontSize:11,fontWeight:700}}>{v.statut}</span></td>
                   <td style={{padding:'9px 14px'}}>
@@ -3673,7 +3688,7 @@ function Achat() {
               ))}
               {lignes.length>0&&(
                 <div style={{textAlign:'right',fontWeight:800,fontSize:15,color:'#6d28d9',marginTop:8,paddingTop:8,borderTop:'2px solid #c4b5fd'}}>
-                  Total TTC : {totalLignes.toLocaleString('fr-FR',{minimumFractionDigits:2})} DZD
+                  Total TTC : {totalLignes.toLocaleString('fr-FR',{minimumFractionDigits:2})} FCFA
                 </div>
               )}
             </div>
@@ -3703,7 +3718,7 @@ function Achat() {
                   <td style={{padding:'9px 14px',fontSize:12}}>{c.fournisseur_nom||'—'}</td>
                   <td style={{padding:'9px 14px',fontSize:12,color:'#6b7280'}}>{c.date_commande?new Date(c.date_commande).toLocaleDateString('fr-FR'):'—'}</td>
                   <td style={{padding:'9px 14px',fontSize:12,color:'#6b7280'}}>{c.date_livraison_prevue?new Date(c.date_livraison_prevue).toLocaleDateString('fr-FR'):'—'}</td>
-                  <td style={{padding:'9px 14px',fontWeight:700}}>{parseFloat(c.montant_ttc||0).toLocaleString('fr-FR')} DZD</td>
+                  <td style={{padding:'9px 14px',fontWeight:700}}>{parseFloat(c.montant_ttc||0).toLocaleString('fr-FR')} FCFA</td>
                   <td style={{padding:'9px 14px'}}><span style={{background:sc.bg,color:sc.tx,padding:'3px 10px',borderRadius:20,fontSize:11,fontWeight:700}}>{c.statut}</span></td>
                   <td style={{padding:'9px 14px'}}>
                     <div style={{display:'flex',gap:4}}>
