@@ -157,7 +157,7 @@ router.post('/', auth, handleUploadOrJSON, async (req, res) => {
     ]);
     res.status(201).json(rows[0]);
   } catch(err) {
-    console.error('POST article:',err.message);
+    console.error('POST article ERROR:',err.message,'| composition type:',typeof req.body?.composition, '| val:',JSON.stringify(req.body?.composition)?.slice(0,50));
     if (err.code==='23505') return res.status(400).json({ error:`Code "${req.body?.code}" déjà existant` });
     res.status(500).json({ error:err.message });
   }
@@ -206,7 +206,7 @@ router.put('/:id', auth, handleUploadOrJSON, async (req, res) => {
     );
     if (!rows.length) return res.status(404).json({ error:'Article introuvable' });
     res.json(rows[0]);
-  } catch(err) { console.error('PUT article:',err.message); res.status(500).json({ error:err.message }); }
+  } catch(err) { console.error('PUT article ERROR:',err.message, '| body keys:', Object.keys(req.body||{})); res.status(500).json({ error:err.message }); }
 });
 
 // DELETE /api/articles/:id
