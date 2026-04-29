@@ -5543,7 +5543,7 @@ function GMAO() {
                       <td style={{padding:'9px 12px',fontSize:12,fontWeight:600}}>{ot.cout_total>0?`${parseFloat(ot.cout_total).toLocaleString('fr-FR')} FCFA`:'—'}</td>
                       <td style={{padding:'9px 12px'}}><span style={{background:sc.bg,color:sc.tx,padding:'2px 8px',borderRadius:20,fontSize:10,fontWeight:700}}>{ot.statut}</span></td>
                       <td style={{padding:'9px 12px'}}>
-                        <div style={{display:'flex',gap:4'}}>
+                        <div style={{display:'flex',gap:4}}>
                           <button onClick={()=>ouvrir('ot',{...ot})}
                             style={{background:'#fef3c7',color:'#92400e',border:'none',padding:'3px 7px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>✏</button>
                           {ot.statut==='ouvert'&&<button onClick={()=>changerStatutOT(ot,'en_cours')}
