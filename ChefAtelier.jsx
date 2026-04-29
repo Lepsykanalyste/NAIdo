@@ -1965,132 +1965,848 @@ function BonsCession() {
 }
 
 function QHSE() {
+  const [onglet, setOnglet] = useState('dashboard');
+  const [dashboard, setDashboard] = useState({});
+  const [processus, setProcessus] = useState([]);
   const [ncs, setNcs] = useState([]);
-  const [showForm, setShowForm] = useState(false);
+  const [documents, setDocuments] = useState([]);
+  const [audits, setAudits] = useState([]);
+  const [risques, setRisques] = useState([]);
+  const [indicateurs, setIndicateurs] = useState([]);
+  const [accidents, setAccidents] = useState([]);
+  const [habilitations, setHabilitations] = useState([]);
+  const [normes, setNormes] = useState([]);
+  const [utilisateurs, setUtilisateurs] = useState([]);
   const [ateliers, setAteliers] = useState([]);
-  const [form, setForm] = useState({ type:'interne', gravite:'mineure', atelier_id:'', titre:'', description:'', causes_identifiees:'', action_immediate:'', gravite_amdec:'', occurrence_amdec:'', detectabilite_amdec:'' });
+  const [showForm, setShowForm] = useState(false);
+  const [formType, setFormType] = useState('');
+  const [form, setForm] = useState({});
+  const [detail, setDetail] = useState(null);
+  const [filtreStatut, setFiltreStatut] = useState('');
+  const [filtreNorme, setFiltreNorme] = useState('');
 
-  useEffect(() => {
-    Promise.all([
-      axios.get(`${API}/nc`),
-      axios.get(`${API}/ateliers`),
-    ]).then(([n,a]) => { setNcs(n.data); setAteliers(a.data); }).catch(() => {});
-  }, []);
+  const charger = async () => {
+    try { const {data} = await axios.get(`${API}/qhse/dashboard`); setDashboard(data); } catch {}
+    try { const {data} = await axios.get(`${API}/qhse/normes`); setNormes(data); } catch {}
+    try { const {data} = await axios.get(`${API}/users`); setUtilisateurs(data); } catch {}
+    try { const {data} = await axios.get(`${API}/ateliers`); setAteliers(data); } catch {}
+  };
 
-  const creer = async () => {
-    if (!form.titre || !form.description) return toast.error('Titre et description requis');
+  const chargerOnglet = async (tab) => {
+    setOnglet(tab);
     try {
-      await axios.post(`${API}/nc`, form);
-      toast.success('NC créée');
+      if (tab === 'processus') { const {data} = await axios.get(`${API}/qhse/processus`); setProcessus(data); }
+      else if (tab === 'nc') { const {data} = await axios.get(`${API}/qhse/nc${filtreStatut?`?statut=${filtreStatut}`:''}`); setNcs(data); }
+      else if (tab === 'documents') { const {data} = await axios.get(`${API}/qhse/documents`); setDocuments(data); }
+      else if (tab === 'audits') { const {data} = await axios.get(`${API}/qhse/audits`); setAudits(data); }
+      else if (tab === 'risques') { const {data} = await axios.get(`${API}/qhse/risques`); setRisques(data); }
+      else if (tab === 'indicateurs') { const {data} = await axios.get(`${API}/qhse/indicateurs`); setIndicateurs(data); }
+      else if (tab === 'sst') { const {data} = await axios.get(`${API}/qhse/accidents`); setAccidents(data); }
+      else if (tab === 'habilitations') { const {data} = await axios.get(`${API}/qhse/habilitations`); setHabilitations(data); }
+    } catch(e) { toast.error('Erreur chargement: ' + e.message); }
+  };
+
+  useEffect(() => { charger(); chargerOnglet('dashboard'); }, []);
+
+  const ouvrir = (type, data={}) => { setFormType(type); setForm(data); setShowForm(true); };
+
+  const sauvegarder = async () => {
+    try {
+      const urls = {
+        processus: '/qhse/processus', nc: '/qhse/nc',
+        document: '/qhse/documents', audit: '/qhse/audits',
+        risque: '/qhse/risques', indicateur: '/qhse/indicateurs',
+        accident: '/qhse/accidents', habilitation: '/qhse/habilitations'
+      };
+      const url = urls[formType];
+      if (!url) return;
+      if (form.id) await axios.put(`${API}${url}/${form.id}`, form);
+      else await axios.post(`${API}${url}`, form);
+      toast.success('Enregistré ✓');
       setShowForm(false);
-      const { data } = await axios.get(`${API}/nc`);
-      setNcs(data);
-    } catch (err) { toast.error(err.response?.data?.error || 'Erreur'); }
+      chargerOnglet(
+        formType === 'nc' ? 'nc' :
+        formType === 'document' ? 'documents' :
+        formType === 'audit' ? 'audits' :
+        formType === 'risque' ? 'risques' :
+        formType === 'indicateur' ? 'indicateurs' :
+        formType === 'accident' ? 'sst' :
+        formType === 'habilitation' ? 'habilitations' : 'processus'
+      );
+      charger();
+    } catch(e) { toast.error(e.response?.data?.error || 'Erreur'); }
   };
 
-  const analyserIA = async (id) => {
-    try {
-      toast('Analyse IA en cours...', { icon:'🤖' });
-      await axios.post(`${API}/ia/analyser-nc`, { nc_id: id });
-      toast.success('Analyse IA effectuée — consultez la NC');
-    } catch { toast.error('IA non disponible'); }
+  const NORMES_COLORS = {
+    ISO9001:   { bg:'#dbeafe', tx:'#1d4ed8' },
+    ISO14001:  { bg:'#dcfce7', tx:'#15803d' },
+    ISO45001:  { bg:'#fef3c7', tx:'#92400e' },
+    FSSC22000: { bg:'#fce7f3', tx:'#9d174d' },
   };
 
-  const GCOLOR = { mineure:'#dbeafe', majeure:'#fef3c7', critique:'#fee2e2', bloquante:'#fce7f3' };
-  const GTEXT  = { mineure:'#1d4ed8', majeure:'#92400e', critique:'#dc2626', bloquante:'#9d174d' };
-  const SCOLOR = { ouvert:'#fef3c7', en_cours:'#dbeafe', clos:'#dcfce7', annule:'#f3f4f6' };
-  const STEXT  = { ouvert:'#92400e', en_cours:'#1d4ed8', clos:'#15803d', annule:'#6b7280' };
+  const GRAVITE_COLORS = {
+    observation: { bg:'#f3f4f6', tx:'#6b7280' },
+    mineure:     { bg:'#fef3c7', tx:'#92400e' },
+    majeure:     { bg:'#fed7aa', tx:'#c2410c' },
+    critique:    { bg:'#fee2e2', tx:'#dc2626' },
+  };
+
+  const STATUT_COLORS = {
+    ouverte:        { bg:'#fee2e2', tx:'#dc2626' },
+    en_cours:       { bg:'#fef3c7', tx:'#92400e' },
+    en_verification:{ bg:'#dbeafe', tx:'#1d4ed8' },
+    clos:           { bg:'#dcfce7', tx:'#15803d' },
+    planifie:       { bg:'#f3f4f6', tx:'#6b7280' },
+    realise:        { bg:'#dcfce7', tx:'#15803d' },
+    approuve:       { bg:'#dcfce7', tx:'#15803d' },
+    brouillon:      { bg:'#f3f4f6', tx:'#6b7280' },
+    identifie:      { bg:'#fef3c7', tx:'#92400e' },
+    traite:         { bg:'#dcfce7', tx:'#15803d' },
+  };
+
+  const NormesBadges = ({normes_applicables}) => {
+    const ns = Array.isArray(normes_applicables) ? normes_applicables : [];
+    return (
+      <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+        {ns.map(n => {
+          const c = NORMES_COLORS[n] || {bg:'#f3f4f6',tx:'#374151'};
+          return <span key={n} style={{background:c.bg,color:c.tx,padding:'1px 6px',borderRadius:20,fontSize:10,fontWeight:700}}>{n}</span>;
+        })}
+      </div>
+    );
+  };
+
+  const IPRBadge = ({ipr}) => {
+    const v = parseInt(ipr||0);
+    const c = v >= 100 ? '#dc2626' : v >= 50 ? '#d97706' : v >= 20 ? '#f59e0b' : '#15803d';
+    return <span style={{fontWeight:800,color:c,fontSize:13}}>{v}</span>;
+  };
+
+  const F = ({label, k, type='text', ph='', required=false}) => (
+    <div>
+      <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>{label}{required&&<span style={{color:'#dc2626'}}> *</span>}</label>
+      <input type={type} value={form[k]||''} onChange={e=>setForm({...form,[k]:e.target.value})} placeholder={ph}
+        style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13,boxSizing:'border-box'}}/>
+    </div>
+  );
+
+  const S = ({label, k, opts, required=false}) => (
+    <div>
+      <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>{label}{required&&<span style={{color:'#dc2626'}}> *</span>}</label>
+      <select value={form[k]||''} onChange={e=>setForm({...form,[k]:e.target.value})}
+        style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13}}>
+        <option value="">-- Sélectionner --</option>
+        {opts.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
+      </select>
+    </div>
+  );
+
+  const ONGLETS = [
+    {id:'dashboard', label:'📊 Tableau de bord'},
+    {id:'processus', label:'🗺 Processus'},
+    {id:'nc', label:'⚠ Non-conformités'},
+    {id:'documents', label:'📄 Documents'},
+    {id:'audits', label:'🔍 Audits'},
+    {id:'risques', label:'🎯 Risques'},
+    {id:'indicateurs', label:'📈 Indicateurs'},
+    {id:'sst', label:'🦺 SST'},
+    {id:'habilitations', label:'🏅 Habilitations'},
+  ];
 
   return (
     <div>
-      <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:20 }}>
-        <button onClick={() => setShowForm(true)} style={{ background:'#b45309', color:'#fff', border:'none', padding:'8px 16px', borderRadius:8, cursor:'pointer', fontWeight:600 }}>+ Nouvelle NC</button>
+      {/* Navigation onglets */}
+      <div style={{display:'flex',gap:0,marginBottom:20,borderBottom:'2px solid #e5e7eb',overflowX:'auto'}}>
+        {ONGLETS.map(o=>(
+          <button key={o.id} onClick={()=>chargerOnglet(o.id)} style={{
+            padding:'10px 16px',border:'none',background:'none',cursor:'pointer',
+            fontSize:12,whiteSpace:'nowrap',
+            fontWeight:onglet===o.id?700:400,
+            color:onglet===o.id?'#b45309':'#6b7280',
+            borderBottom:onglet===o.id?'3px solid #b45309':'3px solid transparent',
+          }}>{o.label}</button>
+        ))}
       </div>
 
-      {showForm && (
-        <div style={{ background:'#fff', borderRadius:14, padding:24, border:'1px solid #fcd34d', marginBottom:16 }}>
-          <h4 style={{ margin:'0 0 16px', color:'#b45309', fontSize:15, fontWeight:700 }}>Nouvelle Non-Conformité</h4>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:10, marginBottom:14 }}>
-            <div>
-              <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Type</label>
-              <select value={form.type} onChange={e => setForm({...form,type:e.target.value})} style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13 }}>
-                {['interne','client','fournisseur','produit','processus','equipement','securite'].map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Gravité</label>
-              <select value={form.gravite} onChange={e => setForm({...form,gravite:e.target.value})} style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13 }}>
-                {['mineure','majeure','critique','bloquante'].map(g => <option key={g} value={g}>{g}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Atelier</label>
-              <select value={form.atelier_id} onChange={e => setForm({...form,atelier_id:e.target.value})} style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13 }}>
-                <option value="">Sélectionner...</option>
-                {ateliers.map(a => <option key={a.id} value={a.id}>{a.libelle}</option>)}
-              </select>
-            </div>
-            {[['G AMDEC (1-10)','gravite_amdec'],['O AMDEC (1-10)','occurrence_amdec'],['D AMDEC (1-10)','detectabilite_amdec']].map(([label,key]) => (
-              <div key={key}>
-                <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>{label}</label>
-                <input type="number" min="1" max="10" value={form[key]} onChange={e => setForm({...form,[key]:e.target.value})} style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13, textAlign:'center', boxSizing:'border-box' }}/>
+      {/* ══ DASHBOARD ══ */}
+      {onglet==='dashboard' && (
+        <div>
+          {/* KPIs */}
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:12,marginBottom:24}}>
+            {[
+              {icon:'⚠',label:'NC ouvertes',value:dashboard.nc_ouvertes||0,color:'#dc2626',bg:'#fee2e2'},
+              {icon:'🔴',label:'NC critiques',value:dashboard.nc_critiques||0,color:'#dc2626',bg:'#fee2e2'},
+              {icon:'🔍',label:'Audits planifiés',value:dashboard.audits_planifies||0,color:'#1d4ed8',bg:'#dbeafe'},
+              {icon:'🎯',label:'Risques élevés',value:dashboard.risques_eleves||0,color:'#d97706',bg:'#fef3c7'},
+              {icon:'🏅',label:'Habilitations expirantes',value:dashboard.habilitations_expiration||0,color:'#9d174d',bg:'#fce7f3'},
+              {icon:'🦺',label:'Accidents (année)',value:dashboard.accidents_annee||0,color:'#92400e',bg:'#fed7aa'},
+              {icon:'📄',label:'Docs à réviser',value:dashboard.docs_revision||0,color:'#6d28d9',bg:'#f5f3ff'},
+              {icon:'🗺',label:'Processus actifs',value:dashboard.nb_processus||0,color:'#15803d',bg:'#dcfce7'},
+            ].map(k=>(
+              <div key={k.label} style={{background:k.bg,borderRadius:12,padding:'14px 16px'}}>
+                <div style={{fontSize:11,color:'#6b7280',marginBottom:4}}>{k.icon} {k.label}</div>
+                <div style={{fontSize:28,fontWeight:800,color:k.color}}>{k.value}</div>
               </div>
             ))}
           </div>
-          <div style={{ display:'grid', gap:10, marginBottom:14 }}>
-            {[['Titre *','titre'],['Description *','description'],['Causes identifiées','causes_identifiees'],['Action immédiate','action_immediate']].map(([label,key]) => (
-              <div key={key}>
-                <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>{label}</label>
-                <textarea value={form[key]} onChange={e => setForm({...form,[key]:e.target.value})} rows={2}
-                  style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13, resize:'vertical', boxSizing:'border-box' }}/>
+          {/* Normes */}
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:12}}>
+            {[
+              {code:'ISO9001',label:'Qualité',color:'#1d4ed8',bg:'#dbeafe',icone:'✅',desc:'Satisfaction client, amélioration continue'},
+              {code:'ISO14001',label:'Environnement',color:'#15803d',bg:'#dcfce7',icone:'🌿',desc:'Impacts environnementaux, conformité réglementaire'},
+              {code:'ISO45001',label:'Santé & Sécurité',color:'#92400e',bg:'#fef3c7',icone:'🦺',desc:'Prévention accidents, bien-être au travail'},
+              {code:'FSSC22000',label:'Sécurité Alimentaire',color:'#9d174d',bg:'#fce7f3',icone:'🍽',desc:'HACCP, sécurité des denrées alimentaires'},
+            ].map(n=>(
+              <div key={n.code} style={{background:'#fff',borderRadius:12,border:`2px solid ${n.bg}`,padding:16}}>
+                <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
+                  <span style={{fontSize:24}}>{n.icone}</span>
+                  <div>
+                    <div style={{fontWeight:800,color:n.color,fontSize:14}}>{n.code}</div>
+                    <div style={{fontSize:11,color:'#6b7280'}}>{n.label}</div>
+                  </div>
+                </div>
+                <p style={{fontSize:11,color:'#6b7280',margin:0}}>{n.desc}</p>
               </div>
             ))}
-          </div>
-          <div style={{ display:'flex', gap:8 }}>
-            <button onClick={creer} style={{ background:'#b45309', color:'#fff', border:'none', padding:'10px 24px', borderRadius:10, cursor:'pointer', fontWeight:700 }}>✓ Créer NC</button>
-            <button onClick={() => setShowForm(false)} style={{ background:'#f3f4f6', border:'none', padding:'10px 16px', borderRadius:10, cursor:'pointer' }}>Annuler</button>
           </div>
         </div>
       )}
 
-      <div style={{ background:'#fff', borderRadius:14, border:'1px solid #e5e7eb', overflow:'hidden' }}>
-        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
-          <thead>
-            <tr style={{ background:'#fffbeb' }}>
-              {['N° NC','Type','Titre','Atelier','Gravité','IPR','Statut','IA','Date'].map(h => (
-                <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontWeight:600, color:'#b45309', borderBottom:'2px solid #fde68a', whiteSpace:'nowrap' }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {ncs.map((n,i) => (
-              <tr key={n.id} style={{ borderBottom:'1px solid #fffbeb', background:i%2===0?'#fff':'#fffdf5' }}>
-                <td style={{ padding:'8px 12px', fontFamily:'monospace', fontWeight:700, color:'#b45309', fontSize:12 }}>{n.numero_nc}</td>
-                <td style={{ padding:'8px 12px', fontSize:12 }}>{n.type}</td>
-                <td style={{ padding:'8px 12px', fontWeight:500 }}>{n.titre?.substring(0,40)}</td>
-                <td style={{ padding:'8px 12px', fontSize:12, color:'#6b7280' }}>{n.atelier_libelle||'—'}</td>
-                <td style={{ padding:'8px 12px' }}>
-                  <span style={{ background:GCOLOR[n.gravite]||'#f3f4f6', color:GTEXT[n.gravite]||'#374151', padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:600 }}>{n.gravite}</span>
-                </td>
-                <td style={{ padding:'8px 12px', fontWeight:700, color:n.ipr_amdec>100?'#dc2626':'#374151' }}>{n.ipr_amdec||'—'}</td>
-                <td style={{ padding:'8px 12px' }}>
-                  <span style={{ background:SCOLOR[n.statut]||'#f3f4f6', color:STEXT[n.statut]||'#374151', padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:600 }}>{n.statut}</span>
-                </td>
-                <td style={{ padding:'8px 12px' }}>
-                  <button onClick={() => analyserIA(n.id)} title="Analyser avec IA" style={{ background:'#ede9fe', color:'#7e22ce', border:'1px solid #c4b5fd', padding:'3px 8px', borderRadius:6, cursor:'pointer', fontSize:11 }}>🤖</button>
-                </td>
-                <td style={{ padding:'8px 12px', fontSize:11, color:'#9ca3af' }}>{new Date(n.date_detection||n.created_at).toLocaleDateString('fr-FR')}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {ncs.length === 0 && (
-          <div style={{ textAlign:'center', padding:48, color:'#9ca3af' }}>
-            <div style={{ fontSize:36, marginBottom:8 }}>✅</div>
-            <p>Aucune non-conformité enregistrée</p>
+      {/* ══ PROCESSUS ══ */}
+      {onglet==='processus' && (
+        <div>
+          <div style={{display:'flex',justifyContent:'flex-end',marginBottom:16}}>
+            <button onClick={()=>ouvrir('processus',{type_processus:'realisation',normes_applicables:['ISO9001']})}
+              style={{background:'#b45309',color:'#fff',border:'none',padding:'9px 20px',borderRadius:8,cursor:'pointer',fontWeight:700}}>
+              + Nouveau processus
+            </button>
           </div>
-        )}
-      </div>
+          {['management','realisation','support'].map(type=>(
+            <div key={type} style={{marginBottom:20}}>
+              <div style={{fontSize:12,fontWeight:700,color:'#6b7280',letterSpacing:1,textTransform:'uppercase',marginBottom:10,borderBottom:'2px solid #f3f4f6',paddingBottom:6}}>
+                {type==='management'?'🎯 Processus de Management':type==='realisation'?'⚙ Processus de Réalisation':'🔧 Processus Support'}
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:12}}>
+                {processus.filter(p=>p.type_processus===type).map(p=>(
+                  <div key={p.id} style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',padding:16,cursor:'pointer'}}
+                    onClick={()=>setDetail(detail?.id===p.id?null:p)}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
+                      <div>
+                        <span style={{fontFamily:'monospace',fontWeight:800,color:'#b45309',fontSize:13}}>{p.code}</span>
+                        <div style={{fontWeight:600,fontSize:14,marginTop:2}}>{p.libelle}</div>
+                      </div>
+                      <span style={{background:STATUT_COLORS[p.statut]?.bg||'#f3f4f6',color:STATUT_COLORS[p.statut]?.tx||'#374151',padding:'2px 8px',borderRadius:20,fontSize:10,fontWeight:700}}>{p.statut}</span>
+                    </div>
+                    <NormesBadges normes_applicables={p.normes_applicables}/>
+                    <div style={{display:'flex',gap:12,marginTop:8,fontSize:11,color:'#6b7280'}}>
+                      <span>👤 {p.pilote_nom||'—'}</span>
+                      <span>📄 {p.nb_documents||0} docs</span>
+                      <span>⚠ {p.nb_nc_ouvertes||0} NC</span>
+                    </div>
+                    {detail?.id===p.id && (
+                      <div style={{marginTop:12,paddingTop:12,borderTop:'1px solid #f3f4f6'}}>
+                        {p.finalite&&<p style={{fontSize:12,color:'#374151',margin:'0 0 8px'}}><strong>Finalité :</strong> {p.finalite}</p>}
+                        {p.donnees_entree&&<p style={{fontSize:12,color:'#374151',margin:'0 0 4px'}}><strong>Entrées :</strong> {p.donnees_entree}</p>}
+                        {p.donnees_sortie&&<p style={{fontSize:12,color:'#374151',margin:'0 0 8px'}}><strong>Sorties :</strong> {p.donnees_sortie}</p>}
+                        <div style={{display:'flex',gap:8}}>
+                          <button onClick={e=>{e.stopPropagation();ouvrir('processus',p);}}
+                            style={{background:'#fef3c7',color:'#92400e',border:'none',padding:'5px 12px',borderRadius:6,cursor:'pointer',fontSize:11,fontWeight:600}}>✏ Modifier</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {processus.filter(p=>p.type_processus===type).length===0&&(
+                  <div style={{color:'#9ca3af',fontSize:12,padding:16}}>Aucun processus de ce type</div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ══ NON-CONFORMITÉS ══ */}
+      {onglet==='nc' && (
+        <div>
+          <div style={{display:'flex',gap:10,marginBottom:16,flexWrap:'wrap',alignItems:'center'}}>
+            <div style={{display:'flex',gap:0}}>
+              {['','ouverte','en_cours','en_verification','clos'].map(s=>(
+                <button key={s} onClick={()=>{setFiltreStatut(s);chargerOnglet('nc');}} style={{
+                  padding:'7px 12px',border:'1px solid #e5e7eb',
+                  background:filtreStatut===s?'#b45309':'#fff',
+                  color:filtreStatut===s?'#fff':'#6b7280',
+                  cursor:'pointer',fontSize:11,fontWeight:filtreStatut===s?700:400,
+                  borderRadius:s===''?'8px 0 0 8px':s==='clos'?'0 8px 8px 0':'0'
+                }}>{s||'Toutes'}</button>
+              ))}
+            </div>
+            <button onClick={()=>ouvrir('nc',{source:'interne',type_nc:'qualite',gravite:'mineure'})}
+              style={{background:'#b45309',color:'#fff',border:'none',padding:'9px 20px',borderRadius:8,cursor:'pointer',fontWeight:700,marginLeft:'auto'}}>
+              + Nouvelle NC
+            </button>
+          </div>
+          <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',overflow:'auto'}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:13,minWidth:700}}>
+              <thead>
+                <tr style={{background:'#fffbeb'}}>
+                  {['N° NC','Titre','Type','Gravité','Source','Processus','IPR','Statut','Actions'].map(h=>(
+                    <th key={h} style={{padding:'10px 14px',textAlign:'left',fontWeight:700,color:'#92400e',borderBottom:'2px solid #fde68a',whiteSpace:'nowrap'}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {ncs.map((nc,i)=>{
+                  const gs=GRAVITE_COLORS[nc.gravite]||{bg:'#f3f4f6',tx:'#374151'};
+                  const ss=STATUT_COLORS[nc.statut]||{bg:'#f3f4f6',tx:'#374151'};
+                  return (
+                    <tr key={nc.id} style={{borderBottom:'1px solid #fffbeb',background:i%2===0?'#fff':'#fffdf5'}}>
+                      <td style={{padding:'9px 14px',fontFamily:'monospace',fontWeight:700,color:'#b45309',fontSize:11}}>{nc.numero_nc}</td>
+                      <td style={{padding:'9px 14px',fontWeight:500,maxWidth:200}}>{nc.titre}</td>
+                      <td style={{padding:'9px 14px',fontSize:11,color:'#6b7280'}}>{nc.type_nc}</td>
+                      <td style={{padding:'9px 14px'}}><span style={{background:gs.bg,color:gs.tx,padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:700}}>{nc.gravite}</span></td>
+                      <td style={{padding:'9px 14px',fontSize:11,color:'#6b7280'}}>{nc.source}</td>
+                      <td style={{padding:'9px 14px',fontSize:11,color:'#6b7280'}}>{nc.processus_libelle||'—'}</td>
+                      <td style={{padding:'9px 14px',textAlign:'center'}}><IPRBadge ipr={nc.ipr_amdec}/></td>
+                      <td style={{padding:'9px 14px'}}><span style={{background:ss.bg,color:ss.tx,padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:700}}>{nc.statut}</span></td>
+                      <td style={{padding:'9px 14px'}}>
+                        <div style={{display:'flex',gap:5}}>
+                          <button onClick={()=>ouvrir('nc',{...nc})}
+                            style={{background:'#fef3c7',color:'#92400e',border:'none',padding:'3px 8px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>✏</button>
+                          {nc.statut==='ouverte'&&<button onClick={async()=>{await axios.put(`${API}/qhse/nc/${nc.id}`,{statut:'en_cours'});chargerOnglet('nc');toast.success('NC en cours');}}
+                            style={{background:'#dbeafe',color:'#1d4ed8',border:'none',padding:'3px 8px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>Traiter</button>}
+                          {nc.statut==='en_cours'&&<button onClick={async()=>{await axios.put(`${API}/qhse/nc/${nc.id}`,{statut:'clos',date_cloture:new Date().toISOString().split('T')[0]});chargerOnglet('nc');toast.success('NC clôturée');}}
+                            style={{background:'#dcfce7',color:'#15803d',border:'none',padding:'3px 8px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>Clôturer</button>}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {ncs.length===0&&<div style={{textAlign:'center',padding:40,color:'#9ca3af'}}><div style={{fontSize:36,marginBottom:8}}>✅</div><p>Aucune non-conformité — tout va bien !</p></div>}
+          </div>
+        </div>
+      )}
+
+      {/* ══ DOCUMENTS ══ */}
+      {onglet==='documents' && (
+        <div>
+          <div style={{display:'flex',justifyContent:'flex-end',marginBottom:16}}>
+            <button onClick={()=>ouvrir('document',{type_document:'procedure',version:'v1'})}
+              style={{background:'#b45309',color:'#fff',border:'none',padding:'9px 20px',borderRadius:8,cursor:'pointer',fontWeight:700}}>
+              + Nouveau document
+            </button>
+          </div>
+          <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',overflow:'auto'}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:13,minWidth:700}}>
+              <thead>
+                <tr style={{background:'#fffbeb'}}>
+                  {['Code','Titre','Type','Processus','Version','Normes','Statut','Actions'].map(h=>(
+                    <th key={h} style={{padding:'10px 14px',textAlign:'left',fontWeight:700,color:'#92400e',borderBottom:'2px solid #fde68a',whiteSpace:'nowrap'}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {documents.map((d,i)=>{
+                  const ss=STATUT_COLORS[d.statut]||{bg:'#f3f4f6',tx:'#374151'};
+                  return (
+                    <tr key={d.id} style={{borderBottom:'1px solid #fffbeb',background:i%2===0?'#fff':'#fffdf5'}}>
+                      <td style={{padding:'9px 14px',fontFamily:'monospace',fontWeight:700,color:'#b45309',fontSize:11}}>{d.code}</td>
+                      <td style={{padding:'9px 14px',fontWeight:500}}>{d.titre}</td>
+                      <td style={{padding:'9px 14px',fontSize:11,color:'#6b7280'}}>{d.type_document}</td>
+                      <td style={{padding:'9px 14px',fontSize:11,color:'#6b7280'}}>{d.processus_libelle||'—'}</td>
+                      <td style={{padding:'9px 14px',textAlign:'center'}}><span style={{fontFamily:'monospace',background:'#f3f4f6',padding:'2px 6px',borderRadius:4,fontSize:11}}>{d.version}</span></td>
+                      <td style={{padding:'9px 14px'}}><NormesBadges normes_applicables={d.normes_applicables}/></td>
+                      <td style={{padding:'9px 14px'}}><span style={{background:ss.bg,color:ss.tx,padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:700}}>{d.statut}</span></td>
+                      <td style={{padding:'9px 14px'}}>
+                        <div style={{display:'flex',gap:5}}>
+                          {d.file_path&&<a href={d.file_path} target="_blank" rel="noreferrer"
+                            style={{background:'#dbeafe',color:'#1d4ed8',border:'none',padding:'3px 8px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600,textDecoration:'none'}}>📄</a>}
+                          {d.statut==='brouillon'&&<button onClick={async()=>{await axios.put(`${API}/qhse/documents/${d.id}/statut`,{statut:'approuve'});chargerOnglet('documents');toast.success('Document approuvé');}}
+                            style={{background:'#dcfce7',color:'#15803d',border:'none',padding:'3px 8px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>Approuver</button>}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {documents.length===0&&<div style={{textAlign:'center',padding:40,color:'#9ca3af'}}><div style={{fontSize:36,marginBottom:8}}>📄</div><p>Aucun document — commencez par créer vos procédures</p></div>}
+          </div>
+        </div>
+      )}
+
+      {/* ══ AUDITS ══ */}
+      {onglet==='audits' && (
+        <div>
+          <div style={{display:'flex',justifyContent:'flex-end',marginBottom:16}}>
+            <button onClick={()=>ouvrir('audit',{type_audit:'interne'})}
+              style={{background:'#b45309',color:'#fff',border:'none',padding:'9px 20px',borderRadius:8,cursor:'pointer',fontWeight:700}}>
+              + Planifier un audit
+            </button>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(300px,1fr))',gap:12}}>
+            {audits.map(a=>{
+              const ss=STATUT_COLORS[a.statut]||{bg:'#f3f4f6',tx:'#374151'};
+              const nc=NORMES_COLORS[a.norme_auditee]||{bg:'#f3f4f6',tx:'#374151'};
+              return (
+                <div key={a.id} style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',padding:16}}>
+                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:10}}>
+                    <div>
+                      <span style={{fontFamily:'monospace',fontWeight:800,color:'#b45309',fontSize:12}}>{a.numero_audit}</span>
+                      <div style={{fontWeight:600,fontSize:13,marginTop:2}}>{a.titre}</div>
+                    </div>
+                    <span style={{background:ss.bg,color:ss.tx,padding:'2px 8px',borderRadius:20,fontSize:10,fontWeight:700}}>{a.statut}</span>
+                  </div>
+                  <div style={{display:'flex',gap:8,marginBottom:8}}>
+                    {a.norme_auditee&&<span style={{background:nc.bg,color:nc.tx,padding:'2px 8px',borderRadius:20,fontSize:10,fontWeight:700}}>{a.norme_auditee}</span>}
+                    <span style={{background:'#f3f4f6',color:'#374151',padding:'2px 8px',borderRadius:20,fontSize:10}}>{a.type_audit}</span>
+                  </div>
+                  <div style={{fontSize:11,color:'#6b7280',display:'grid',gridTemplateColumns:'1fr 1fr',gap:4}}>
+                    <span>📅 {a.date_planifiee?new Date(a.date_planifiee).toLocaleDateString('fr-FR'):'Non planifié'}</span>
+                    <span>⏱ {a.duree_jours}j</span>
+                    <span>🔴 {a.nb_ecarts_majeurs||0} majeurs</span>
+                    <span>🟡 {a.nb_ecarts_mineurs||0} mineurs</span>
+                  </div>
+                  <div style={{marginTop:10}}>
+                    <button onClick={()=>ouvrir('audit',{...a})}
+                      style={{background:'#fef3c7',color:'#92400e',border:'none',padding:'5px 12px',borderRadius:6,cursor:'pointer',fontSize:11,fontWeight:600}}>✏ Modifier</button>
+                  </div>
+                </div>
+              );
+            })}
+            {audits.length===0&&<div style={{textAlign:'center',padding:40,color:'#9ca3af',gridColumn:'1/-1'}}><div style={{fontSize:36,marginBottom:8}}>🔍</div><p>Aucun audit planifié</p></div>}
+          </div>
+        </div>
+      )}
+
+      {/* ══ RISQUES ══ */}
+      {onglet==='risques' && (
+        <div>
+          <div style={{display:'flex',justifyContent:'flex-end',marginBottom:16}}>
+            <button onClick={()=>ouvrir('risque',{type:'risque',categorie:'qualite',probabilite:'1',gravite:'1',detectabilite:'1'})}
+              style={{background:'#b45309',color:'#fff',border:'none',padding:'9px 20px',borderRadius:8,cursor:'pointer',fontWeight:700}}>
+              + Nouveau risque/opportunité
+            </button>
+          </div>
+          <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',overflow:'auto'}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:13,minWidth:600}}>
+              <thead>
+                <tr style={{background:'#fffbeb'}}>
+                  {['Type','Titre','Catégorie','P','G','D','IPR','Criticité','Statut','Actions'].map(h=>(
+                    <th key={h} style={{padding:'10px 12px',textAlign:'left',fontWeight:700,color:'#92400e',borderBottom:'2px solid #fde68a'}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {risques.map((r,i)=>{
+                  const ss=STATUT_COLORS[r.statut]||{bg:'#f3f4f6',tx:'#374151'};
+                  return (
+                    <tr key={r.id} style={{borderBottom:'1px solid #fffbeb',background:i%2===0?'#fff':'#fffdf5'}}>
+                      <td style={{padding:'9px 12px'}}>
+                        <span style={{background:r.type==='risque'?'#fee2e2':'#dcfce7',color:r.type==='risque'?'#dc2626':'#15803d',padding:'2px 8px',borderRadius:20,fontSize:10,fontWeight:700}}>
+                          {r.type==='risque'?'⚠ Risque':'💡 Opportunité'}
+                        </span>
+                      </td>
+                      <td style={{padding:'9px 12px',fontWeight:500,maxWidth:180}}>{r.titre}</td>
+                      <td style={{padding:'9px 12px',fontSize:11,color:'#6b7280'}}>{r.categorie}</td>
+                      <td style={{padding:'9px 12px',textAlign:'center',fontWeight:700}}>{r.probabilite}</td>
+                      <td style={{padding:'9px 12px',textAlign:'center',fontWeight:700}}>{r.gravite}</td>
+                      <td style={{padding:'9px 12px',textAlign:'center',fontWeight:700}}>{r.detectabilite}</td>
+                      <td style={{padding:'9px 12px',textAlign:'center'}}><IPRBadge ipr={r.ipr}/></td>
+                      <td style={{padding:'9px 12px',textAlign:'center'}}>
+                        <span style={{fontWeight:700,color:parseInt(r.criticite||0)>=12?'#dc2626':parseInt(r.criticite||0)>=6?'#d97706':'#15803d'}}>
+                          {r.criticite}
+                        </span>
+                      </td>
+                      <td style={{padding:'9px 12px'}}><span style={{background:ss.bg,color:ss.tx,padding:'2px 8px',borderRadius:20,fontSize:10,fontWeight:700}}>{r.statut}</span></td>
+                      <td style={{padding:'9px 12px'}}>
+                        <button onClick={()=>ouvrir('risque',{...r})}
+                          style={{background:'#fef3c7',color:'#92400e',border:'none',padding:'3px 8px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>✏</button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {risques.length===0&&<div style={{textAlign:'center',padding:40,color:'#9ca3af'}}><div style={{fontSize:36,marginBottom:8}}>🎯</div><p>Aucun risque identifié</p></div>}
+          </div>
+        </div>
+      )}
+
+      {/* ══ INDICATEURS ══ */}
+      {onglet==='indicateurs' && (
+        <div>
+          <div style={{display:'flex',justifyContent:'flex-end',marginBottom:16}}>
+            <button onClick={()=>ouvrir('indicateur',{frequence_mesure:'mensuel',sens:'hausse'})}
+              style={{background:'#b45309',color:'#fff',border:'none',padding:'9px 20px',borderRadius:8,cursor:'pointer',fontWeight:700}}>
+              + Nouvel indicateur
+            </button>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(260px,1fr))',gap:12}}>
+            {indicateurs.map(ind=>{
+              const val = parseFloat(ind.derniere_valeur||0);
+              const obj = parseFloat(ind.objectif_valeur||0);
+              const pct = obj > 0 ? Math.min(100, (val/obj)*100) : 0;
+              const ok = ind.sens==='hausse' ? val >= obj : val <= obj;
+              return (
+                <div key={ind.id} style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',padding:16}}>
+                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:8}}>
+                    <div>
+                      <span style={{fontFamily:'monospace',fontWeight:800,color:'#b45309',fontSize:11}}>{ind.code}</span>
+                      <div style={{fontWeight:600,fontSize:13,marginTop:2}}>{ind.libelle}</div>
+                    </div>
+                    {ind.norme_associee&&<span style={{background:NORMES_COLORS[ind.norme_associee]?.bg||'#f3f4f6',color:NORMES_COLORS[ind.norme_associee]?.tx||'#374151',padding:'2px 6px',borderRadius:20,fontSize:10,fontWeight:700}}>{ind.norme_associee}</span>}
+                  </div>
+                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:8}}>
+                    <div style={{textAlign:'center'}}>
+                      <div style={{fontSize:22,fontWeight:800,color:ok?'#15803d':'#dc2626'}}>{val.toFixed(1)}</div>
+                      <div style={{fontSize:10,color:'#9ca3af'}}>{ind.unite||'—'}</div>
+                    </div>
+                    <div style={{textAlign:'center'}}>
+                      <div style={{fontSize:14,fontWeight:600,color:'#6b7280'}}>/{obj.toFixed(1)}</div>
+                      <div style={{fontSize:10,color:'#9ca3af'}}>objectif</div>
+                    </div>
+                    <div style={{textAlign:'center'}}>
+                      <div style={{fontSize:14,fontWeight:700,color:ok?'#15803d':'#dc2626'}}>{ok?'✓':'✗'}</div>
+                      <div style={{fontSize:10,color:'#9ca3af'}}>{pct.toFixed(0)}%</div>
+                    </div>
+                  </div>
+                  <div style={{background:'#f3f4f6',borderRadius:20,height:6,marginBottom:8}}>
+                    <div style={{background:ok?'#15803d':'#dc2626',borderRadius:20,height:6,width:`${Math.min(100,pct)}%`,transition:'width 0.3s'}}/>
+                  </div>
+                  <div style={{fontSize:10,color:'#9ca3af'}}>{ind.frequence_mesure} | {ind.processus_libelle||'—'}</div>
+                </div>
+              );
+            })}
+            {indicateurs.length===0&&<div style={{textAlign:'center',padding:40,color:'#9ca3af',gridColumn:'1/-1'}}><div style={{fontSize:36,marginBottom:8}}>📈</div><p>Aucun indicateur — définissez vos KPIs QHSE</p></div>}
+          </div>
+        </div>
+      )}
+
+      {/* ══ SST ══ */}
+      {onglet==='sst' && (
+        <div>
+          <div style={{display:'flex',justifyContent:'flex-end',marginBottom:16}}>
+            <button onClick={()=>ouvrir('accident',{type:'incident',gravite_sst:'leger'})}
+              style={{background:'#dc2626',color:'#fff',border:'none',padding:'9px 20px',borderRadius:8,cursor:'pointer',fontWeight:700}}>
+              🚨 Déclarer un accident/incident
+            </button>
+          </div>
+          <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',overflow:'auto'}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:13,minWidth:600}}>
+              <thead>
+                <tr style={{background:'#fef2f2'}}>
+                  {['N°','Type','Gravité','Titre','Date','Victime','Jours arrêt','Statut','Actions'].map(h=>(
+                    <th key={h} style={{padding:'10px 12px',textAlign:'left',fontWeight:700,color:'#dc2626',borderBottom:'2px solid #fecaca',whiteSpace:'nowrap'}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {accidents.map((a,i)=>{
+                  const gs = {
+                    leger:{bg:'#fef3c7',tx:'#92400e'},
+                    moyen:{bg:'#fed7aa',tx:'#c2410c'},
+                    grave:{bg:'#fee2e2',tx:'#dc2626'},
+                    mortel:{bg:'#7f1d1d',tx:'#fff'},
+                    sans_arret:{bg:'#f3f4f6',tx:'#6b7280'},
+                  }[a.gravite_sst]||{bg:'#f3f4f6',tx:'#374151'};
+                  const ss=STATUT_COLORS[a.statut]||{bg:'#f3f4f6',tx:'#374151'};
+                  return (
+                    <tr key={a.id} style={{borderBottom:'1px solid #fef2f2',background:i%2===0?'#fff':'#fff5f5'}}>
+                      <td style={{padding:'9px 12px',fontFamily:'monospace',fontWeight:700,color:'#dc2626',fontSize:11}}>{a.numero}</td>
+                      <td style={{padding:'9px 12px',fontSize:11}}>{a.type}</td>
+                      <td style={{padding:'9px 12px'}}><span style={{background:gs.bg,color:gs.tx,padding:'2px 8px',borderRadius:20,fontSize:10,fontWeight:700}}>{a.gravite_sst}</span></td>
+                      <td style={{padding:'9px 12px',fontWeight:500}}>{a.titre}</td>
+                      <td style={{padding:'9px 12px',fontSize:11,color:'#6b7280'}}>{new Date(a.date_accident).toLocaleDateString('fr-FR')}</td>
+                      <td style={{padding:'9px 12px',fontSize:11}}>{a.victime_nom||a.victime_nom_user||'—'}</td>
+                      <td style={{padding:'9px 12px',textAlign:'center',fontWeight:700,color:a.nb_jours_arret>0?'#dc2626':'#6b7280'}}>{a.nb_jours_arret||0}</td>
+                      <td style={{padding:'9px 12px'}}><span style={{background:ss.bg,color:ss.tx,padding:'2px 8px',borderRadius:20,fontSize:10,fontWeight:700}}>{a.statut}</span></td>
+                      <td style={{padding:'9px 12px'}}>
+                        <button onClick={()=>ouvrir('accident',{...a})}
+                          style={{background:'#fef3c7',color:'#92400e',border:'none',padding:'3px 8px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>✏</button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {accidents.length===0&&<div style={{textAlign:'center',padding:40,color:'#9ca3af'}}><div style={{fontSize:36,marginBottom:8}}>🦺</div><p>Aucun accident/incident déclaré</p></div>}
+          </div>
+        </div>
+      )}
+
+      {/* ══ HABILITATIONS ══ */}
+      {onglet==='habilitations' && (
+        <div>
+          <div style={{display:'flex',justifyContent:'flex-end',marginBottom:16}}>
+            <button onClick={()=>ouvrir('habilitation',{})}
+              style={{background:'#b45309',color:'#fff',border:'none',padding:'9px 20px',borderRadius:8,cursor:'pointer',fontWeight:700}}>
+              + Nouvelle habilitation
+            </button>
+          </div>
+          <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',overflow:'auto'}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:13,minWidth:600}}>
+              <thead>
+                <tr style={{background:'#fffbeb'}}>
+                  {['Employé','Type habilitation','N°','Organisme','Obtention','Expiration','Statut'].map(h=>(
+                    <th key={h} style={{padding:'10px 12px',textAlign:'left',fontWeight:700,color:'#92400e',borderBottom:'2px solid #fde68a'}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {habilitations.map((h,i)=>{
+                  const exp = h.date_expiration ? new Date(h.date_expiration) : null;
+                  const joursRestants = exp ? Math.ceil((exp - new Date())/86400000) : null;
+                  const expColor = joursRestants !== null ? (joursRestants < 0 ? '#dc2626' : joursRestants < 30 ? '#d97706' : '#15803d') : '#9ca3af';
+                  const ss=STATUT_COLORS[h.statut]||{bg:'#f3f4f6',tx:'#374151'};
+                  return (
+                    <tr key={h.id} style={{borderBottom:'1px solid #fffbeb',background:i%2===0?'#fff':'#fffdf5'}}>
+                      <td style={{padding:'9px 12px',fontWeight:600}}>{h.nom} {h.prenom}</td>
+                      <td style={{padding:'9px 12px'}}>{h.type_habilitation}</td>
+                      <td style={{padding:'9px 12px',fontFamily:'monospace',fontSize:11}}>{h.numero||'—'}</td>
+                      <td style={{padding:'9px 12px',fontSize:11,color:'#6b7280'}}>{h.organisme_delivrant||'—'}</td>
+                      <td style={{padding:'9px 12px',fontSize:11,color:'#6b7280'}}>{h.date_obtention?new Date(h.date_obtention).toLocaleDateString('fr-FR'):'—'}</td>
+                      <td style={{padding:'9px 12px',fontWeight:700,color:expColor}}>
+                        {exp?exp.toLocaleDateString('fr-FR'):'—'}
+                        {joursRestants!==null&&<span style={{fontSize:10,marginLeft:4}}>({joursRestants}j)</span>}
+                      </td>
+                      <td style={{padding:'9px 12px'}}><span style={{background:ss.bg,color:ss.tx,padding:'2px 8px',borderRadius:20,fontSize:10,fontWeight:700}}>{h.statut}</span></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {habilitations.length===0&&<div style={{textAlign:'center',padding:40,color:'#9ca3af'}}><div style={{fontSize:36,marginBottom:8}}>🏅</div><p>Aucune habilitation enregistrée</p></div>}
+          </div>
+        </div>
+      )}
+
+      {/* ══ FORMULAIRES MODAUX ══ */}
+      {showForm && (
+        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:60,overflowY:'auto'}}>
+          <div style={{background:'#fff',borderRadius:14,width:'95%',maxWidth:700,padding:24,maxHeight:'85vh',overflowY:'auto'}}>
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:20}}>
+              <h3 style={{margin:0,color:'#b45309',fontSize:16,fontWeight:800}}>
+                {formType==='processus'?'🗺 Processus':
+                 formType==='nc'?'⚠ Non-conformité':
+                 formType==='document'?'📄 Document':
+                 formType==='audit'?'🔍 Audit':
+                 formType==='risque'?'🎯 Risque/Opportunité':
+                 formType==='indicateur'?'📈 Indicateur':
+                 formType==='accident'?'🚨 Accident/Incident':
+                 '🏅 Habilitation'}
+              </h3>
+              <button onClick={()=>setShowForm(false)} style={{background:'none',border:'none',fontSize:20,cursor:'pointer',color:'#9ca3af'}}>✕</button>
+            </div>
+
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:12,marginBottom:16}}>
+
+              {/* PROCESSUS */}
+              {formType==='processus' && <>
+                <F label="Code *" k="code" ph="PROC-001" required/>
+                <F label="Libellé *" k="libelle" ph="Management de la qualité" required/>
+                <S label="Type *" k="type_processus" required opts={[
+                  {v:'management',l:'🎯 Management'},{v:'realisation',l:'⚙ Réalisation'},{v:'support',l:'🔧 Support'}
+                ]}/>
+                <S label="Pilote" k="pilote_id" opts={utilisateurs.map(u=>({v:u.id,l:`${u.prenom} ${u.nom}`}))}/>
+                <S label="Co-pilote" k="copilote_id" opts={utilisateurs.map(u=>({v:u.id,l:`${u.prenom} ${u.nom}`}))}/>
+                <F label="Version" k="version" ph="v1"/>
+                <div style={{gridColumn:'1/-1'}}><F label="Finalité" k="finalite" ph="Décrire la finalité du processus"/></div>
+                <div style={{gridColumn:'1/-1'}}><F label="Données d'entrée" k="donnees_entree" ph="Commandes clients, exigences réglementaires..."/></div>
+                <div style={{gridColumn:'1/-1'}}><F label="Données de sortie" k="donnees_sortie" ph="Produits conformes, rapports, enregistrements..."/></div>
+              </>}
+
+              {/* NON-CONFORMITÉ */}
+              {formType==='nc' && <>
+                <F label="Titre *" k="titre" ph="Description courte de la NC" required/>
+                <S label="Source" k="source" opts={[
+                  {v:'interne',l:'Interne'},{v:'client',l:'Client'},{v:'audit_interne',l:'Audit interne'},
+                  {v:'audit_externe',l:'Audit externe'},{v:'fournisseur',l:'Fournisseur'},
+                  {v:'accident',l:'Accident'},{v:'inspection',l:'Inspection'}
+                ]}/>
+                <S label="Type" k="type_nc" opts={[
+                  {v:'qualite',l:'Qualité'},{v:'securite',l:'Sécurité'},
+                  {v:'environnement',l:'Environnement'},{v:'alimentaire',l:'Alimentaire'},{v:'reglementaire',l:'Réglementaire'}
+                ]}/>
+                <S label="Gravité" k="gravite" opts={[
+                  {v:'observation',l:'Observation'},{v:'mineure',l:'Mineure'},{v:'majeure',l:'Majeure'},{v:'critique',l:'Critique'}
+                ]}/>
+                <S label="Processus" k="processus_id" opts={processus.map(p=>({v:p.id,l:`${p.code} — ${p.libelle}`}))}/>
+                <F label="Produit concerné" k="produit_concerne" ph="Réf. produit"/>
+                <F label="N° Lot" k="lot_concerne" ph="LOT-2026-001"/>
+                <F label="Date détection" k="date_detection" type="date"/>
+                <S label="Responsable traitement" k="responsable_traitement_id" opts={utilisateurs.map(u=>({v:u.id,l:`${u.prenom} ${u.nom}`}))}/>
+                <div style={{gridColumn:'1/-1'}}><label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>Description</label>
+                  <textarea value={form.description||''} onChange={e=>setForm({...form,description:e.target.value})} rows={3}
+                    style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13,boxSizing:'border-box',resize:'vertical'}}/></div>
+                <div style={{gridColumn:'1/-1'}}><label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>Action immédiate</label>
+                  <textarea value={form.action_immediate||''} onChange={e=>setForm({...form,action_immediate:e.target.value})} rows={2}
+                    style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13,boxSizing:'border-box',resize:'vertical'}}/></div>
+                <div style={{gridColumn:'1/-1'}}><label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>Action corrective</label>
+                  <textarea value={form.action_corrective||''} onChange={e=>setForm({...form,action_corrective:e.target.value})} rows={2}
+                    style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13,boxSizing:'border-box',resize:'vertical'}}/></div>
+                <div style={{background:'#f8f9ff',borderRadius:8,padding:12,gridColumn:'1/-1'}}>
+                  <div style={{fontSize:11,fontWeight:700,color:'#4338ca',marginBottom:10}}>Cotation AMDEC (IPR = G × O × D)</div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+                    {[['Gravité (1-5)','gravite_score'],['Occurrence (1-5)','occurrence_score'],['Détectabilité (1-5)','detectabilite_score']].map(([label,k])=>(
+                      <div key={k}>
+                        <label style={{fontSize:10,fontWeight:600,display:'block',marginBottom:3}}>{label}</label>
+                        <input type="number" min="1" max="5" value={form[k]||1} onChange={e=>setForm({...form,[k]:parseInt(e.target.value)||1})}
+                          style={{width:'100%',border:'1px solid #d1d5db',borderRadius:6,padding:'8px',fontSize:13,textAlign:'center',boxSizing:'border-box'}}/>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{textAlign:'center',marginTop:8,fontSize:13,fontWeight:800,color:'#4338ca'}}>
+                    IPR = {(form.gravite_score||1)*(form.occurrence_score||1)*(form.detectabilite_score||1)}
+                  </div>
+                </div>
+              </>}
+
+              {/* DOCUMENT */}
+              {formType==='document' && <>
+                <F label="Code *" k="code" ph="PRO-QUA-001" required/>
+                <F label="Titre *" k="titre" ph="Procédure de contrôle qualité" required/>
+                <S label="Type" k="type_document" opts={[
+                  {v:'procedure',l:'Procédure'},{v:'instruction',l:'Instruction de travail'},
+                  {v:'formulaire',l:'Formulaire'},{v:'enregistrement',l:'Enregistrement'},
+                  {v:'plan',l:'Plan'},{v:'manuel',l:'Manuel'},{v:'specification',l:'Spécification'},{v:'autre',l:'Autre'}
+                ]}/>
+                <S label="Processus" k="processus_id" opts={processus.map(p=>({v:p.id,l:`${p.code} — ${p.libelle}`}))}/>
+                <F label="Version" k="version" ph="v1"/>
+                <F label="Date prochaine révision" k="date_prochaine_revision" type="date"/>
+                <S label="Rédacteur" k="redacteur_id" opts={utilisateurs.map(u=>({v:u.id,l:`${u.prenom} ${u.nom}`}))}/>
+                <S label="Approbateur" k="approbateur_id" opts={utilisateurs.map(u=>({v:u.id,l:`${u.prenom} ${u.nom}`}))}/>
+                <div style={{gridColumn:'1/-1'}}><F label="Mots-clés" k="mots_cles" ph="qualité, contrôle, réception..."/></div>
+              </>}
+
+              {/* AUDIT */}
+              {formType==='audit' && <>
+                <F label="Titre *" k="titre" ph="Audit ISO 9001 — Production" required/>
+                <S label="Type" k="type_audit" opts={[
+                  {v:'interne',l:'Interne'},{v:'externe',l:'Externe'},{v:'fournisseur',l:'Fournisseur'},
+                  {v:'certification',l:'Certification'},{v:'surveillance',l:'Surveillance'}
+                ]}/>
+                <S label="Norme auditée" k="norme_auditee" opts={normes.map(n=>({v:n.code,l:`${n.code} — ${n.libelle}`}))}/>
+                <F label="Date planifiée" k="date_planifiee" type="date"/>
+                <F label="Durée (jours)" k="duree_jours" type="number" ph="1"/>
+                <S label="Chef auditeur" k="auditeur_chef_id" opts={utilisateurs.map(u=>({v:u.id,l:`${u.prenom} ${u.nom}`}))}/>
+                {form.id && <>
+                  <S label="Statut" k="statut" opts={[
+                    {v:'planifie',l:'Planifié'},{v:'en_cours',l:'En cours'},{v:'realise',l:'Réalisé'},{v:'clos',l:'Clos'}
+                  ]}/>
+                  <F label="Écarts majeurs" k="nb_ecarts_majeurs" type="number" ph="0"/>
+                  <F label="Écarts mineurs" k="nb_ecarts_mineurs" type="number" ph="0"/>
+                  <F label="Observations" k="nb_observations" type="number" ph="0"/>
+                  <div style={{gridColumn:'1/-1'}}><label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>Conclusion</label>
+                    <textarea value={form.conclusion||''} onChange={e=>setForm({...form,conclusion:e.target.value})} rows={3}
+                      style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13,boxSizing:'border-box',resize:'vertical'}}/></div>
+                </>}
+              </>}
+
+              {/* RISQUE */}
+              {formType==='risque' && <>
+                <S label="Type" k="type" opts={[{v:'risque',l:'⚠ Risque'},{v:'opportunite',l:'💡 Opportunité'}]}/>
+                <S label="Catégorie" k="categorie" opts={[
+                  {v:'qualite',l:'Qualité'},{v:'securite',l:'Sécurité'},{v:'environnement',l:'Environnement'},
+                  {v:'alimentaire',l:'Alimentaire'},{v:'strategique',l:'Stratégique'},{v:'operationnel',l:'Opérationnel'}
+                ]}/>
+                <F label="Titre *" k="titre" ph="Description du risque" required/>
+                <S label="Norme" k="norme_ref" opts={normes.map(n=>({v:n.code,l:n.code}))}/>
+                <S label="Processus" k="processus_id" opts={processus.map(p=>({v:p.id,l:`${p.code} — ${p.libelle}`}))}/>
+                <S label="Responsable" k="responsable_id" opts={utilisateurs.map(u=>({v:u.id,l:`${u.prenom} ${u.nom}`}))}/>
+                <F label="Échéance" k="date_echeance" type="date"/>
+                <div style={{background:'#f8f9ff',borderRadius:8,padding:12,gridColumn:'1/-1'}}>
+                  <div style={{fontSize:11,fontWeight:700,color:'#4338ca',marginBottom:10}}>Cotation (1 à 5)</div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+                    {[['Probabilité','probabilite'],['Gravité','gravite'],['Détectabilité','detectabilite']].map(([l,k])=>(
+                      <div key={k}>
+                        <label style={{fontSize:10,fontWeight:600,display:'block',marginBottom:3}}>{l}</label>
+                        <input type="number" min="1" max="5" value={form[k]||1} onChange={e=>setForm({...form,[k]:parseInt(e.target.value)||1})}
+                          style={{width:'100%',border:'1px solid #d1d5db',borderRadius:6,padding:'8px',fontSize:13,textAlign:'center',boxSizing:'border-box'}}/>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{textAlign:'center',marginTop:8,fontSize:13,fontWeight:800,color:'#4338ca'}}>
+                    Criticité = {(form.probabilite||1)*(form.gravite||1)} | IPR = {(form.probabilite||1)*(form.gravite||1)*(form.detectabilite||1)}
+                  </div>
+                </div>
+                <div style={{gridColumn:'1/-1'}}><label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>Plan de traitement</label>
+                  <textarea value={form.plan_traitement||''} onChange={e=>setForm({...form,plan_traitement:e.target.value})} rows={3}
+                    style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13,boxSizing:'border-box',resize:'vertical'}}/></div>
+              </>}
+
+              {/* INDICATEUR */}
+              {formType==='indicateur' && <>
+                <F label="Code *" k="code" ph="IND-QUA-001" required/>
+                <F label="Libellé *" k="libelle" ph="Taux de conformité produit" required/>
+                <S label="Norme" k="norme_associee" opts={normes.map(n=>({v:n.code,l:n.code}))}/>
+                <S label="Processus" k="processus_id" opts={processus.map(p=>({v:p.id,l:`${p.code} — ${p.libelle}`}))}/>
+                <F label="Unité" k="unite" ph="%, ppm, nombre..."/>
+                <F label="Objectif" k="objectif_valeur" type="number" ph="0"/>
+                <F label="Seuil alerte" k="seuil_alerte" type="number" ph="0"/>
+                <S label="Sens" k="sens" opts={[{v:'hausse',l:'↑ Hausse = Bon'},{v:'baisse',l:'↓ Baisse = Bon'}]}/>
+                <S label="Fréquence" k="frequence_mesure" opts={[
+                  {v:'journalier',l:'Journalier'},{v:'hebdo',l:'Hebdomadaire'},
+                  {v:'mensuel',l:'Mensuel'},{v:'trimestriel',l:'Trimestriel'},{v:'annuel',l:'Annuel'}
+                ]}/>
+                <S label="Responsable" k="responsable_id" opts={utilisateurs.map(u=>({v:u.id,l:`${u.prenom} ${u.nom}`}))}/>
+                <F label="Formule de calcul" k="formule" ph="NC closes / NC totales * 100"/>
+              </>}
+
+              {/* ACCIDENT */}
+              {formType==='accident' && <>
+                <S label="Type" k="type" opts={[
+                  {v:'accident',l:'🔴 Accident'},{v:'incident',l:'🟡 Incident'},
+                  {v:'presqu_accident',l:'🟠 Presqu'accident'},{v:'maladie_pro',l:'🔵 Maladie pro'},
+                  {v:'danger_grave',l:'⛔ Danger grave'}
+                ]}/>
+                <S label="Gravité" k="gravite_sst" opts={[
+                  {v:'sans_arret',l:'Sans arrêt'},{v:'leger',l:'Léger'},{v:'moyen',l:'Moyen'},
+                  {v:'grave',l:'Grave'},{v:'mortel',l:'Mortel'}
+                ]}/>
+                <F label="Titre *" k="titre" ph="Description courte" required/>
+                <F label="Date" k="date_accident" type="datetime-local"/>
+                <S label="Atelier" k="atelier_id" opts={ateliers.map(a=>({v:String(a.id),l:`${a.code} — ${a.libelle}`}))}/>
+                <F label="Victime" k="victime_nom" ph="Nom de la victime"/>
+                <F label="Jours d'arrêt" k="nb_jours_arret" type="number" ph="0"/>
+                <div style={{gridColumn:'1/-1'}}><label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>Description</label>
+                  <textarea value={form.description||''} onChange={e=>setForm({...form,description:e.target.value})} rows={3}
+                    style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13,boxSizing:'border-box',resize:'vertical'}}/></div>
+                <div style={{gridColumn:'1/-1'}}><label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>Cause immédiate</label>
+                  <textarea value={form.cause_immediate||''} onChange={e=>setForm({...form,cause_immediate:e.target.value})} rows={2}
+                    style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13,boxSizing:'border-box',resize:'vertical'}}/></div>
+                <div style={{gridColumn:'1/-1'}}><label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>Action immédiate</label>
+                  <textarea value={form.action_immediate||''} onChange={e=>setForm({...form,action_immediate:e.target.value})} rows={2}
+                    style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13,boxSizing:'border-box',resize:'vertical'}}/></div>
+              </>}
+
+              {/* HABILITATION */}
+              {formType==='habilitation' && <>
+                <S label="Employé *" k="utilisateur_id" required opts={utilisateurs.map(u=>({v:u.id,l:`${u.prenom} ${u.nom}`}))}/>
+                <F label="Type habilitation *" k="type_habilitation" ph="CACES R489, Habilitation électrique..." required/>
+                <F label="N° habilitation" k="numero" ph="HE-B1-2026-001"/>
+                <F label="Organisme" k="organisme_delivrant" ph="AFPA, APAVE..."/>
+                <F label="Date obtention" k="date_obtention" type="date"/>
+                <F label="Date expiration" k="date_expiration" type="date"/>
+                <div style={{gridColumn:'1/-1'}}><F label="Notes" k="notes" ph="Conditions, restrictions..."/></div>
+              </>}
+
+            </div>
+
+            <div style={{display:'flex',gap:10,paddingTop:16,borderTop:'1px solid #f3f4f6'}}>
+              <button onClick={sauvegarder}
+                style={{background:'#b45309',color:'#fff',border:'none',padding:'12px 32px',borderRadius:10,cursor:'pointer',fontWeight:800,fontSize:14}}>
+                ✓ Enregistrer
+              </button>
+              <button onClick={()=>setShowForm(false)}
+                style={{background:'#f3f4f6',border:'none',padding:'12px 20px',borderRadius:10,cursor:'pointer'}}>
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

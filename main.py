@@ -26,6 +26,14 @@ app = FastAPI(title="NAIdo API", version="4.0", lifespan=lifespan)
 
 # Import stock routes module
 from stock_routes import inventaire_handler, resume_handler, mouvement_handler
+# Import QHSE routes module
+from qhse_routes import (
+    qhse_dashboard, get_processus_list, create_processus, update_processus,
+    get_nc_list, create_nc, update_nc,
+    get_documents_list, get_audits_list, create_audit,
+    get_risques_list, get_indicateurs,
+    get_accidents_list, get_habilitations_list
+)
 
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
@@ -769,6 +777,304 @@ async def transfert_stock(payload: dict, user=Depends(get_current_user)):
         raise HTTPException(400, str(e))
     except Exception as e:
         raise HTTPException(500, str(e))
+
+
+# ══════════════════════════════════════════════════════════════
+# ROUTES QHSE
+# ══════════════════════════════════════════════════════════════
+
+@app.get("/api/qhse/dashboard")
+async def get_qhse_dashboard(user=Depends(get_current_user)):
+    return await qhse_dashboard(pool)
+
+# ── PROCESSUS ─────────────────────────────────────────────────
+@app.get("/api/qhse/processus")
+async def api_get_processus(type_processus: Optional[str]=None, search: Optional[str]=None, user=Depends(get_current_user)):
+    return await get_processus_list(pool, type_processus, search)
+
+@app.post("/api/qhse/processus")
+async def api_create_processus(payload: dict, user=Depends(get_current_user)):
+    try: return await create_processus(pool, payload, user.get("id"))
+    except Exception as e: raise HTTPException(400, str(e))
+
+@app.put("/api/qhse/processus/{proc_id}")
+async def api_update_processus(proc_id: str, payload: dict, user=Depends(get_current_user)):
+    result = await update_processus(pool, proc_id, payload)
+    if not result: raise HTTPException(404, "Processus introuvable")
+    return result
+
+@app.delete("/api/qhse/processus/{proc_id}")
+async def api_delete_processus(proc_id: str, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        await conn.execute("UPDATE processus SET actif=false WHERE id=$1", proc_id)
+    return {"success": True}
+
+# ── NON-CONFORMITÉS ───────────────────────────────────────────
+@app.get("/api/qhse/nc")
+async def api_get_nc(statut: Optional[str]=None, type_nc: Optional[str]=None,
+                     gravite: Optional[str]=None, search: Optional[str]=None,
+                     user=Depends(get_current_user)):
+    return await get_nc_list(pool, statut, type_nc, gravite, search)
+
+@app.post("/api/qhse/nc")
+async def api_create_nc(payload: dict, user=Depends(get_current_user)):
+    try: return await create_nc(pool, payload, user.get("id"))
+    except Exception as e: raise HTTPException(400, str(e))
+
+@app.put("/api/qhse/nc/{nc_id}")
+async def api_update_nc(nc_id: str, payload: dict, user=Depends(get_current_user)):
+    result = await update_nc(pool, nc_id, payload)
+    if not result: raise HTTPException(404, "NC introuvable")
+    return result
+
+@app.get("/api/qhse/nc/{nc_id}")
+async def api_get_nc_detail(nc_id: str, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT * FROM non_conformites WHERE id=$1", nc_id)
+        if not row: raise HTTPException(404, "NC introuvable")
+        return dict(row)
+
+# ── DOCUMENTS ─────────────────────────────────────────────────
+@app.get("/api/qhse/documents")
+async def api_get_documents(processus_id: Optional[str]=None, type_document: Optional[str]=None,
+                            statut: Optional[str]=None, search: Optional[str]=None,
+                            user=Depends(get_current_user)):
+    return await get_documents_list(pool, processus_id, type_document, statut, search)
+
+@app.post("/api/qhse/documents")
+async def api_create_document(payload: dict, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        d = payload
+        if not d.get("code") or not d.get("titre"):
+            raise HTTPException(400, "Code et titre requis")
+        try:
+            row = await conn.fetchrow("""
+                INSERT INTO documents_qhse (
+                    code, titre, type_document, processus_id,
+                    normes_applicables, version, description,
+                    redacteur_id, date_redaction, date_prochaine_revision,
+                    statut, mots_cles
+                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'brouillon',$11)
+                RETURNING *
+            """,
+                d["code"].upper(), d["titre"], d.get("type_document","procedure"),
+                d.get("processus_id") or None,
+                json.dumps(safe_json(d.get("normes_applicables"), [])),
+                d.get("version","v1"), d.get("description"),
+                d.get("redacteur_id") or user.get("id"),
+                d.get("date_redaction") or None,
+                d.get("date_prochaine_revision") or None,
+                d.get("mots_cles")
+            )
+            return dict(row)
+        except asyncpg.UniqueViolationError:
+            raise HTTPException(400, "Code document déjà existant")
+
+@app.put("/api/qhse/documents/{doc_id}/statut")
+async def api_update_doc_statut(doc_id: str, payload: dict, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        statut = payload.get("statut")
+        extra = ""
+        if statut == "approuve":
+            extra = ", date_approbation=CURRENT_DATE, approbateur_id='" + user.get("id","") + "'"
+        elif statut == "en_verification":
+            extra = ", date_verification=CURRENT_DATE"
+        row = await conn.fetchrow(
+            f"UPDATE documents_qhse SET statut=$1{extra}, updated_at=NOW() WHERE id=$2 RETURNING *",
+            statut, doc_id
+        )
+        return dict(row)
+
+# ── AUDITS ────────────────────────────────────────────────────
+@app.get("/api/qhse/audits")
+async def api_get_audits(statut: Optional[str]=None, norme: Optional[str]=None, user=Depends(get_current_user)):
+    return await get_audits_list(pool, statut, norme)
+
+@app.post("/api/qhse/audits")
+async def api_create_audit(payload: dict, user=Depends(get_current_user)):
+    try: return await create_audit(pool, payload, user.get("id"))
+    except Exception as e: raise HTTPException(400, str(e))
+
+@app.put("/api/qhse/audits/{audit_id}")
+async def api_update_audit(audit_id: str, payload: dict, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        d = payload
+        row = await conn.fetchrow("""
+            UPDATE audits SET statut=$1, date_realisation=$2,
+                nb_ecarts_majeurs=$3, nb_ecarts_mineurs=$4,
+                nb_observations=$5, nb_points_forts=$6, conclusion=$7
+            WHERE id=$8 RETURNING *
+        """,
+            d.get("statut"), d.get("date_realisation") or None,
+            int(d.get("nb_ecarts_majeurs",0) or 0), int(d.get("nb_ecarts_mineurs",0) or 0),
+            int(d.get("nb_observations",0) or 0), int(d.get("nb_points_forts",0) or 0),
+            d.get("conclusion"), audit_id
+        )
+        return dict(row)
+
+# ── RISQUES ───────────────────────────────────────────────────
+@app.get("/api/qhse/risques")
+async def api_get_risques(type: Optional[str]=None, categorie: Optional[str]=None, user=Depends(get_current_user)):
+    return await get_risques_list(pool, type, categorie)
+
+@app.post("/api/qhse/risques")
+async def api_create_risque(payload: dict, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        d = payload
+        row = await conn.fetchrow("""
+            INSERT INTO risques_opportunites (
+                type, categorie, titre, description,
+                processus_id, norme_ref,
+                probabilite, gravite, detectabilite,
+                plan_traitement, responsable_id, date_echeance, statut
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+            RETURNING *
+        """,
+            d.get("type","risque"), d.get("categorie","qualite"),
+            d["titre"], d.get("description"),
+            d.get("processus_id") or None, d.get("norme_ref"),
+            int(d.get("probabilite",1) or 1), int(d.get("gravite",1) or 1),
+            int(d.get("detectabilite",1) or 1),
+            d.get("plan_traitement"),
+            d.get("responsable_id") or None,
+            d.get("date_echeance") or None,
+            d.get("statut","identifie")
+        )
+        return dict(row)
+
+@app.put("/api/qhse/risques/{risque_id}")
+async def api_update_risque(risque_id: str, payload: dict, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        d = payload
+        row = await conn.fetchrow("""
+            UPDATE risques_opportunites SET
+                statut=$1, plan_traitement=$2,
+                probabilite_residuelle=$3, gravite_residuelle=$4,
+                criticite_residuelle=$5
+            WHERE id=$6 RETURNING *
+        """,
+            d.get("statut"), d.get("plan_traitement"),
+            int(d.get("probabilite_residuelle",1) or 1),
+            int(d.get("gravite_residuelle",1) or 1),
+            int(d.get("probabilite_residuelle",1) or 1) * int(d.get("gravite_residuelle",1) or 1),
+            risque_id
+        )
+        return dict(row)
+
+# ── INDICATEURS ───────────────────────────────────────────────
+@app.get("/api/qhse/indicateurs")
+async def api_get_indicateurs(processus_id: Optional[str]=None, user=Depends(get_current_user)):
+    return await get_indicateurs(pool, processus_id)
+
+@app.post("/api/qhse/indicateurs")
+async def api_create_indicateur(payload: dict, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        d = payload
+        row = await conn.fetchrow("""
+            INSERT INTO indicateurs_qhse (
+                code, libelle, processus_id, norme_associee,
+                formule, unite, frequence_mesure,
+                objectif_valeur, seuil_alerte, sens, responsable_id
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+            RETURNING *
+        """,
+            d["code"].upper(), d["libelle"],
+            d.get("processus_id") or None, d.get("norme_associee"),
+            d.get("formule"), d.get("unite"), d.get("frequence_mesure","mensuel"),
+            float(d.get("objectif_valeur",0) or 0),
+            float(d.get("seuil_alerte",0) or 0) if d.get("seuil_alerte") else None,
+            d.get("sens","hausse"),
+            d.get("responsable_id") or None
+        )
+        return dict(row)
+
+@app.post("/api/qhse/indicateurs/{ind_id}/valeur")
+async def api_saisir_valeur(ind_id: str, payload: dict, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("""
+            INSERT INTO valeurs_indicateurs (indicateur_id, periode, valeur, commentaire, saisi_par)
+            VALUES ($1,$2,$3,$4,$5)
+            ON CONFLICT (indicateur_id, periode) DO UPDATE SET valeur=$3, commentaire=$4
+            RETURNING *
+        """,
+            ind_id, payload.get("periode") or date.today().isoformat(),
+            float(payload["valeur"]), payload.get("commentaire"),
+            user.get("id")
+        )
+        return dict(row)
+
+@app.get("/api/qhse/indicateurs/{ind_id}/historique")
+async def api_historique_indicateur(ind_id: str, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT * FROM valeurs_indicateurs WHERE indicateur_id=$1 ORDER BY periode DESC LIMIT 24",
+            ind_id
+        )
+        return [dict(r) for r in rows]
+
+# ── ACCIDENTS SST ─────────────────────────────────────────────
+@app.get("/api/qhse/accidents")
+async def api_get_accidents(type: Optional[str]=None, statut: Optional[str]=None, user=Depends(get_current_user)):
+    return await get_accidents_list(pool, type, statut)
+
+@app.post("/api/qhse/accidents")
+async def api_create_accident(payload: dict, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        d = payload
+        row = await conn.fetchrow("""
+            INSERT INTO accidents_incidents (
+                type, gravite_sst, titre, description,
+                atelier_id, machine_id, victime_nom, victime_id,
+                temoins, date_accident, nb_jours_arret,
+                cause_immediate, action_immediate, cout_estime
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+            RETURNING *
+        """,
+            d.get("type","incident"), d.get("gravite_sst","leger"),
+            d["titre"], d.get("description",""),
+            int_or_none(d.get("atelier_id")), int_or_none(d.get("machine_id")),
+            d.get("victime_nom"), d.get("victime_id") or None,
+            d.get("temoins"),
+            d.get("date_accident") or datetime.utcnow().isoformat(),
+            int(d.get("nb_jours_arret",0) or 0),
+            d.get("cause_immediate"), d.get("action_immediate"),
+            float(d.get("cout_estime",0) or 0)
+        )
+        return dict(row)
+
+# ── HABILITATIONS ─────────────────────────────────────────────
+@app.get("/api/qhse/habilitations")
+async def api_get_habilitations(utilisateur_id: Optional[str]=None,
+                                expiration_proche: bool=False,
+                                user=Depends(get_current_user)):
+    return await get_habilitations_list(pool, utilisateur_id, expiration_proche)
+
+@app.post("/api/qhse/habilitations")
+async def api_create_habilitation(payload: dict, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        d = payload
+        row = await conn.fetchrow("""
+            INSERT INTO habilitations (
+                utilisateur_id, type_habilitation, numero,
+                organisme_delivrant, date_obtention, date_expiration,
+                statut, notes
+            ) VALUES ($1,$2,$3,$4,$5,$6,'valide',$7)
+            RETURNING *
+        """,
+            d["utilisateur_id"], d["type_habilitation"], d.get("numero"),
+            d.get("organisme_delivrant"),
+            d.get("date_obtention") or None,
+            d.get("date_expiration") or None,
+            d.get("notes")
+        )
+        return dict(row)
+
+# ── NORMES ────────────────────────────────────────────────────
+@app.get("/api/qhse/normes")
+async def api_get_normes(user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("SELECT * FROM normes_qhse WHERE actif=true ORDER BY code")
+        return [dict(r) for r in rows]
 
 # ── HEALTH CHECK ───────────────────────────────────────────────
 @app.get("/api/health")
