@@ -1,13 +1,12 @@
-import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
-import { useAuth } from './hooks/useAuth';
+import { useAuth } from './hooks/useAuth.jsx';
 
-import Login        from './pages/Login';
-import Operateur    from './pages/Operateur';
-import Regleur      from './pages/Regleur';
-import Qualite      from './pages/Qualite';
-import ChefAtelier  from './pages/ChefAtelier';
+import Login       from './pages/Login';
+import Operateur   from './pages/Operateur';
+import Regleur     from './pages/Regleur';
+import Qualite     from './pages/Qualite';
+import ChefAtelier from './pages/ChefAtelier';
 
 function PrivateRoute({ children, roles }) {
   const { user } = useAuth();
@@ -16,9 +15,27 @@ function PrivateRoute({ children, roles }) {
   return children;
 }
 
-export default function App() {
+function RedirectParRole() {
   const { user } = useAuth();
+  if (!user) return <Navigate to="/login" replace />;
+  const map = {
+    operateur:    '/operateur',
+    regleur:      '/regleur',
+    qualite:      '/qualite',
+    chef_atelier: '/chef',
+    super_admin:  '/chef',
+    directeur:    '/chef',
+    magasinier:   '/chef',
+    achat:        '/chef',
+    vente:        '/chef',
+    qhse:         '/chef',
+    technicien:   '/chef',
+    rh:           '/chef',
+  };
+  return <Navigate to={map[user.role] || '/chef'} replace />;
+}
 
+export default function App() {
   return (
     <>
       <Toaster position="top-center" toastOptions={{ duration: 3000 }} />
@@ -44,18 +61,14 @@ export default function App() {
         }/>
 
         <Route path="/chef/*" element={
-          <PrivateRoute roles={['chef_atelier']}>
+          <PrivateRoute roles={['chef_atelier','super_admin','directeur','magasinier','achat','vente','qhse','technicien','rh']}>
             <ChefAtelier />
           </PrivateRoute>
         }/>
 
-        {/* Redirection auto selon rôle */}
-        <Route path="/" element={
-          user ? <Navigate to={`/${user.role === 'chef_atelier' ? 'chef' : user.role}`} replace />
-               : <Navigate to="/login" replace />
-        }/>
-
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="/super_admin/*" element={<RedirectParRole />} />
+        <Route path="/" element={<RedirectParRole />} />
+        <Route path="*" element={<RedirectParRole />} />
       </Routes>
     </>
   );
