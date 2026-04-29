@@ -1570,11 +1570,11 @@ function BonsCession() {
   const imprimer = (bon) => {
     const lignesHtml = (bon.lignes || []).map(l => `
       <tr>
-        <td style="padding:8px;border:1px solid #ddd">${l.article_code || '—'}</td>
+        <td style="padding:8px;border:1px solid #ddd;font-family:monospace;font-weight:bold">${l.article_code || '—'}</td>
         <td style="padding:8px;border:1px solid #ddd">${l.designation || l.article_designation || '—'}</td>
-        <td style="padding:8px;border:1px solid #ddd;text-align:center">${parseFloat(l.qte_prevue||0).toFixed(3)}</td>
-        <td style="padding:8px;border:1px solid #ddd;text-align:center">${parseFloat(l.poids_reel_kg||l.poids_theorique_kg||0).toFixed(3)} kg</td>
-        <td style="padding:8px;border:1px solid #ddd">${l.notes||'—'}</td>
+        <td style="padding:8px;border:1px solid #ddd;text-align:center">${l.unite_code || l.unite || '—'}</td>
+        <td style="padding:8px;border:1px solid #ddd;text-align:center;font-weight:bold;font-size:14px">${parseFloat(l.qte_prevue||0).toFixed(3)}</td>
+        <td style="padding:8px;border:1px solid #ddd;color:#666">${l.notes||'—'}</td>
       </tr>
     `).join('');
 
@@ -1642,8 +1642,8 @@ function BonsCession() {
           <tr>
             <th>Code</th>
             <th>Désignation</th>
+            <th>Unité</th>
             <th>Quantité</th>
-            <th>Poids (kg)</th>
             <th>Observations</th>
           </tr>
         </thead>
@@ -1652,19 +1652,16 @@ function BonsCession() {
 
       <div class="signatures">
         <div class="sig-box">
-          <label>EXPÉDITEUR</label>
+          <label>RESPONSABLE ATELIER EXPÉDITEUR</label>
+          <p style="font-size:12px;font-weight:bold;margin:8px 0 4px">${bon.demandeur || '.................................'}</p>
           <div class="sig-line"></div>
-          <p style="font-size:11px;color:#666;margin-top:4px">Nom & Signature</p>
+          <p style="font-size:11px;color:#666;margin-top:4px">Signature électronique / Cachet</p>
         </div>
         <div class="sig-box">
-          <label>TRANSPORTEUR / LIVREUR</label>
+          <label>RESPONSABLE RÉCEPTIONNAIRE</label>
+          <p style="font-size:12px;font-weight:bold;margin:8px 0 4px">${bon.destinataire || '.................................'}</p>
           <div class="sig-line"></div>
-          <p style="font-size:11px;color:#666;margin-top:4px">Nom & Signature</p>
-        </div>
-        <div class="sig-box">
-          <label>RÉCEPTIONNAIRE</label>
-          <div class="sig-line"></div>
-          <p style="font-size:11px;color:#666;margin-top:4px">Nom & Signature</p>
+          <p style="font-size:11px;color:#666;margin-top:4px">Signature électronique / Cachet</p>
         </div>
       </div>
 
