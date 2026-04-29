@@ -114,6 +114,8 @@ const MENU = [
   { id:'separator3',  label:'QHSE & MAINTENANCE',  separator:true },
   { id:'qhse',        label:'QHSE / NC',           icon:'qhse',        color:'#b45309' },
   { id:'gmao',        label:'GMAO / Maintenance',  icon:'gmao',        color:'#92400e' },
+  { id:'separator4b', label:'RESSOURCES HUMAINES', separator:true },
+  { id:'rh',          label:'RH — Employés & Paie',  icon:'users',       color:'#0891b2' },
   { id:'separator4',  label:'ADMIN & IA',          separator:true },
   { id:'kpi',         label:'KPI & Rapports',      icon:'kpi',         color:'#be185d' },
   { id:'ia',          label:'Assistant IA',        icon:'ia',          color:'#1e40af' },
@@ -4075,6 +4077,7 @@ export default function ChefAtelier() {
     achat:       <Achat />,
     cession:     <BonsCession />,
     qhse:        <QHSE />,
+    rh:          <RH />,
     gmao:        <GMAO />,
     kpi:         <KPIRapports />,
     ia:          <AssistantIA />,
@@ -4796,6 +4799,433 @@ function Achat() {
         </table>
         {commandes.length===0&&<div style={{textAlign:'center',padding:40,color:'#9ca3af'}}><div style={{fontSize:36,marginBottom:8}}>🛒</div><p>Aucune commande — créez la première</p></div>}
       </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// MODULE RH
+// ══════════════════════════════════════════════════════════════
+function RH() {
+  const [onglet, setOnglet] = useState('dashboard');
+  const [dashboard, setDashboard] = useState({});
+  const [employes, setEmployes] = useState([]);
+  const [postes, setPostes] = useState([]);
+  const [ateliers, setAteliers] = useState([]);
+  const [contrats, setContrats] = useState([]);
+  const [conges, setConges] = useState([]);
+  const [bulletins, setBulletins] = useState([]);
+  const [showForm, setShowForm] = useState(false);
+  const [formType, setFormType] = useState('');
+  const [form, setForm] = useState({});
+  const [search, setSearch] = useState('');
+  const [detail, setDetail] = useState(null);
+
+  const charger = async () => {
+    try { const {data} = await axios.get(`${API}/rh/dashboard`); setDashboard(data); } catch {}
+    try { const {data} = await axios.get(`${API}/rh/postes`); setPostes(data); } catch {}
+    try { const {data} = await axios.get(`${API}/ateliers`); setAteliers(data); } catch {}
+  };
+
+  const chargerOnglet = async (tab) => {
+    setOnglet(tab); setDetail(null);
+    try {
+      if (tab==='employes') { const {data}=await axios.get(`${API}/rh/employes${search?`?search=${search}`:''}`); setEmployes(data); }
+      else if (tab==='contrats') { const {data}=await axios.get(`${API}/rh/contrats`); setContrats(data); }
+      else if (tab==='conges') { const {data}=await axios.get(`${API}/rh/conges`); setConges(data); }
+      else if (tab==='paie') { const {data}=await axios.get(`${API}/rh/bulletins`); setBulletins(data); }
+    } catch(e) { toast.error('Erreur: '+e.message); }
+  };
+
+  useEffect(() => { charger(); chargerOnglet('dashboard'); }, []);
+
+  const ouvrir = (type, data={}) => { setFormType(type); setForm(data); setShowForm(true); };
+
+  const sauvegarder = async () => {
+    try {
+      const urls = { employe:'/rh/employes', contrat:'/rh/contrats', conge:'/rh/conges', bulletin:'/rh/bulletins', poste:'/rh/postes' };
+      const url = urls[formType];
+      if (!url) return;
+      if (form.id) await axios.put(`${API}${url}/${form.id}`, form);
+      else await axios.post(`${API}${url}`, form);
+      toast.success('Enregistré ✓');
+      setShowForm(false);
+      chargerOnglet(formType==='employe'?'employes':formType==='contrat'?'contrats':formType==='conge'?'conges':formType==='bulletin'?'paie':'employes');
+      charger();
+    } catch(e) { toast.error(e.response?.data?.error||'Erreur'); }
+  };
+
+  const F = ({label,k,type='text',ph='',required=false}) => (
+    <div>
+      <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>{label}{required&&<span style={{color:'#dc2626'}}> *</span>}</label>
+      <input type={type} value={form[k]||''} onChange={e=>setForm({...form,[k]:e.target.value})} placeholder={ph}
+        style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13,boxSizing:'border-box'}}/>
+    </div>
+  );
+  const S = ({label,k,opts,required=false}) => (
+    <div>
+      <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>{label}{required&&<span style={{color:'#dc2626'}}> *</span>}</label>
+      <select value={form[k]||''} onChange={e=>setForm({...form,[k]:e.target.value})}
+        style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13}}>
+        <option value="">-- Sélectionner --</option>
+        {opts.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
+      </select>
+    </div>
+  );
+
+  const STATUT_EMP = {
+    actif:{bg:'#dcfce7',tx:'#15803d'}, conge:{bg:'#dbeafe',tx:'#1d4ed8'},
+    suspendu:{bg:'#fef3c7',tx:'#92400e'}, demissionne:{bg:'#fee2e2',tx:'#dc2626'},
+    licencie:{bg:'#fee2e2',tx:'#dc2626'}, retraite:{bg:'#f3f4f6',tx:'#6b7280'}
+  };
+  const STATUT_CONGE = {
+    en_attente:{bg:'#fef3c7',tx:'#92400e'}, approuve:{bg:'#dcfce7',tx:'#15803d'},
+    refuse:{bg:'#fee2e2',tx:'#dc2626'}, annule:{bg:'#f3f4f6',tx:'#6b7280'}
+  };
+
+  return (
+    <div>
+      {/* Navigation */}
+      <div style={{display:'flex',gap:0,marginBottom:20,borderBottom:'2px solid #e5e7eb',overflowX:'auto'}}>
+        {[
+          {id:'dashboard',label:'📊 Tableau de bord'},
+          {id:'employes',label:'👥 Employés'},
+          {id:'contrats',label:'📋 Contrats'},
+          {id:'conges',label:'🏖 Congés'},
+          {id:'paie',label:'💰 Paie'},
+        ].map(o=>(
+          <button key={o.id} onClick={()=>chargerOnglet(o.id)} style={{
+            padding:'10px 18px',border:'none',background:'none',cursor:'pointer',
+            fontSize:12,whiteSpace:'nowrap',
+            fontWeight:onglet===o.id?700:400,
+            color:onglet===o.id?'#0891b2':'#6b7280',
+            borderBottom:onglet===o.id?'3px solid #0891b2':'3px solid transparent',
+          }}>{o.label}</button>
+        ))}
+      </div>
+
+      {/* ══ DASHBOARD ══ */}
+      {onglet==='dashboard' && (
+        <div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:12,marginBottom:24}}>
+            {[
+              {icon:'👥',label:'Employés actifs',value:dashboard.nb_employes||0,color:'#0891b2',bg:'#e0f2fe'},
+              {icon:'♂',label:'Hommes',value:dashboard.nb_hommes||0,color:'#1d4ed8',bg:'#dbeafe'},
+              {icon:'♀',label:'Femmes',value:dashboard.nb_femmes||0,color:'#9d174d',bg:'#fce7f3'},
+              {icon:'📋',label:'CDI',value:dashboard.nb_cdi||0,color:'#15803d',bg:'#dcfce7'},
+              {icon:'⏳',label:'CDD',value:dashboard.nb_cdd||0,color:'#92400e',bg:'#fef3c7'},
+              {icon:'🏖',label:'Congés en attente',value:dashboard.conges_en_attente||0,color:dashboard.conges_en_attente>0?'#d97706':'#15803d',bg:dashboard.conges_en_attente>0?'#fef3c7':'#dcfce7'},
+              {icon:'⚠',label:'Contrats expirant',value:dashboard.contrats_expiration||0,color:dashboard.contrats_expiration>0?'#dc2626':'#15803d',bg:dashboard.contrats_expiration>0?'#fee2e2':'#dcfce7'},
+              {icon:'💰',label:'Masse salariale mois',value:`${parseFloat(dashboard.masse_salariale_mois||0).toLocaleString('fr-FR')} FCFA`,color:'#0891b2',bg:'#e0f2fe'},
+            ].map(k=>(
+              <div key={k.label} style={{background:k.bg,borderRadius:12,padding:'14px 16px'}}>
+                <div style={{fontSize:11,color:'#6b7280',marginBottom:4}}>{k.icon} {k.label}</div>
+                <div style={{fontSize:k.label.includes('salariale')?13:26,fontWeight:800,color:k.color}}>{k.value}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{display:'flex',gap:12,justifyContent:'center',flexWrap:'wrap'}}>
+            {[
+              {label:'+ Nouvel employé',color:'#0891b2',action:()=>ouvrir('employe',{statut:'actif'})},
+              {label:'+ Nouveau poste',color:'#6d28d9',action:()=>ouvrir('poste',{})},
+              {label:'+ Demande congé',color:'#15803d',action:()=>ouvrir('conge',{type_conge:'annuel'})},
+              {label:'+ Générer bulletin',color:'#92400e',action:()=>ouvrir('bulletin',{})},
+            ].map(b=>(
+              <button key={b.label} onClick={b.action}
+                style={{background:b.color,color:'#fff',border:'none',padding:'10px 20px',borderRadius:8,cursor:'pointer',fontWeight:700}}>
+                {b.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ══ EMPLOYÉS ══ */}
+      {onglet==='employes' && (
+        <div>
+          <div style={{display:'flex',gap:10,marginBottom:16,alignItems:'center'}}>
+            <input value={search} onChange={e=>{setSearch(e.target.value);}} onKeyDown={e=>e.key==='Enter'&&chargerOnglet('employes')}
+              placeholder="🔍 Nom, prénom, matricule..."
+              style={{flex:1,border:'1px solid #d1d5db',borderRadius:8,padding:'9px 14px',fontSize:13}}/>
+            <button onClick={()=>chargerOnglet('employes')} style={{background:'#f3f4f6',border:'1px solid #d1d5db',padding:'9px 14px',borderRadius:8,cursor:'pointer'}}>🔍</button>
+            <button onClick={()=>ouvrir('employe',{statut:'actif',nationalite:'Ivoirienne'})}
+              style={{background:'#0891b2',color:'#fff',border:'none',padding:'9px 20px',borderRadius:8,cursor:'pointer',fontWeight:700}}>
+              + Nouvel employé
+            </button>
+          </div>
+          <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',overflow:'auto'}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:13,minWidth:700}}>
+              <thead>
+                <tr style={{background:'#e0f2fe'}}>
+                  {['Matricule','Nom Prénom','Poste','Département','Atelier','Contrat','Ancienneté','Statut','Actions'].map(h=>(
+                    <th key={h} style={{padding:'10px 14px',textAlign:'left',fontWeight:700,color:'#0891b2',borderBottom:'2px solid #bae6fd',whiteSpace:'nowrap'}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {employes.map((e,i)=>{
+                  const sc=STATUT_EMP[e.statut]||{bg:'#f3f4f6',tx:'#374151'};
+                  return (
+                    <tr key={e.id} style={{borderBottom:'1px solid #e0f2fe',background:i%2===0?'#fff':'#f0f9ff'}}>
+                      <td style={{padding:'9px 14px',fontFamily:'monospace',fontWeight:700,color:'#0891b2',fontSize:12}}>{e.matricule}</td>
+                      <td style={{padding:'9px 14px',fontWeight:600}}>{e.nom} {e.prenom}</td>
+                      <td style={{padding:'9px 14px',fontSize:12}}>{e.poste_libelle||'—'}</td>
+                      <td style={{padding:'9px 14px',fontSize:11,color:'#6b7280'}}>{e.departement||'—'}</td>
+                      <td style={{padding:'9px 14px',fontSize:11,color:'#6b7280'}}>{e.atelier_code||'—'}</td>
+                      <td style={{padding:'9px 14px'}}>{e.type_contrat?<span style={{background:'#dbeafe',color:'#1d4ed8',padding:'2px 6px',borderRadius:20,fontSize:11,fontWeight:700}}>{e.type_contrat}</span>:'—'}</td>
+                      <td style={{padding:'9px 14px',fontSize:12,color:'#6b7280'}}>{e.anciennete_ans!=null?`${e.anciennete_ans} an(s)`:'—'}</td>
+                      <td style={{padding:'9px 14px'}}><span style={{background:sc.bg,color:sc.tx,padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:700}}>{e.statut}</span></td>
+                      <td style={{padding:'9px 14px'}}>
+                        <div style={{display:'flex',gap:5}}>
+                          <button onClick={()=>ouvrir('employe',{...e})}
+                            style={{background:'#fef3c7',color:'#92400e',border:'none',padding:'3px 8px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>✏</button>
+                          <button onClick={()=>ouvrir('contrat',{employe_id:e.id,type_contrat:'CDI',salaire_base:e.salaire_base||''})}
+                            style={{background:'#dbeafe',color:'#1d4ed8',border:'none',padding:'3px 8px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>📋</button>
+                          <button onClick={()=>ouvrir('bulletin',{employe_id:e.id,salaire_base:e.salaire_base||'',prime_transport:e.prime_transport||'',prime_logement:e.prime_logement||''})}
+                            style={{background:'#dcfce7',color:'#15803d',border:'none',padding:'3px 8px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>💰</button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {employes.length===0&&<div style={{textAlign:'center',padding:40,color:'#9ca3af'}}><div style={{fontSize:36,marginBottom:8}}>👥</div><p>Aucun employé — créez le premier</p></div>}
+          </div>
+        </div>
+      )}
+
+      {/* ══ CONTRATS ══ */}
+      {onglet==='contrats' && (
+        <div>
+          <div style={{display:'flex',justifyContent:'flex-end',marginBottom:16}}>
+            <button onClick={()=>ouvrir('contrat',{type_contrat:'CDI'})}
+              style={{background:'#0891b2',color:'#fff',border:'none',padding:'9px 20px',borderRadius:8,cursor:'pointer',fontWeight:700}}>
+              + Nouveau contrat
+            </button>
+          </div>
+          <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',overflow:'auto'}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:13,minWidth:600}}>
+              <thead>
+                <tr style={{background:'#e0f2fe'}}>
+                  {['Employé','Type','Début','Fin','Salaire base','Avantages','Statut'].map(h=>(
+                    <th key={h} style={{padding:'10px 14px',textAlign:'left',fontWeight:700,color:'#0891b2',borderBottom:'2px solid #bae6fd'}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {contrats.map((c,i)=>{
+                  const finDate = c.date_fin ? new Date(c.date_fin) : null;
+                  const joursRestants = finDate ? Math.ceil((finDate-new Date())/86400000) : null;
+                  return (
+                    <tr key={c.id} style={{borderBottom:'1px solid #e0f2fe',background:i%2===0?'#fff':'#f0f9ff'}}>
+                      <td style={{padding:'9px 14px',fontWeight:600}}>{c.employe_nom}</td>
+                      <td style={{padding:'9px 14px'}}><span style={{background:'#dbeafe',color:'#1d4ed8',padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:700}}>{c.type_contrat}</span></td>
+                      <td style={{padding:'9px 14px',fontSize:12}}>{c.date_debut?new Date(c.date_debut).toLocaleDateString('fr-FR'):'—'}</td>
+                      <td style={{padding:'9px 14px',fontSize:12,color:joursRestants!==null&&joursRestants<30?'#dc2626':'#374151',fontWeight:joursRestants!==null&&joursRestants<30?700:400}}>
+                        {finDate?finDate.toLocaleDateString('fr-FR'):'Indéterminée'}
+                        {joursRestants!==null&&joursRestants<30&&<span style={{fontSize:10,marginLeft:4}}>({joursRestants}j)</span>}
+                      </td>
+                      <td style={{padding:'9px 14px',fontWeight:700}}>{parseFloat(c.salaire_base||0).toLocaleString('fr-FR')} FCFA</td>
+                      <td style={{padding:'9px 14px',fontSize:11,color:'#6b7280'}}>
+                        {c.prime_transport>0?`Transport: ${c.prime_transport} `:''}
+                        {c.prime_logement>0?`Logement: ${c.prime_logement}`:''}
+                        {!c.prime_transport&&!c.prime_logement?'—':''}
+                      </td>
+                      <td style={{padding:'9px 14px'}}><span style={{background:c.statut==='actif'?'#dcfce7':'#fee2e2',color:c.statut==='actif'?'#15803d':'#dc2626',padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:700}}>{c.statut}</span></td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {contrats.length===0&&<div style={{textAlign:'center',padding:40,color:'#9ca3af'}}><div style={{fontSize:36,marginBottom:8}}>📋</div><p>Aucun contrat</p></div>}
+          </div>
+        </div>
+      )}
+
+      {/* ══ CONGÉS ══ */}
+      {onglet==='conges' && (
+        <div>
+          <div style={{display:'flex',justifyContent:'flex-end',marginBottom:16}}>
+            <button onClick={()=>ouvrir('conge',{type_conge:'annuel'})}
+              style={{background:'#0891b2',color:'#fff',border:'none',padding:'9px 20px',borderRadius:8,cursor:'pointer',fontWeight:700}}>
+              + Demande de congé
+            </button>
+          </div>
+          <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',overflow:'auto'}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:13,minWidth:600}}>
+              <thead>
+                <tr style={{background:'#e0f2fe'}}>
+                  {['Employé','Type','Début','Fin','Jours','Motif','Statut','Actions'].map(h=>(
+                    <th key={h} style={{padding:'10px 14px',textAlign:'left',fontWeight:700,color:'#0891b2',borderBottom:'2px solid #bae6fd'}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {conges.map((c,i)=>{
+                  const sc=STATUT_CONGE[c.statut]||{bg:'#f3f4f6',tx:'#374151'};
+                  return (
+                    <tr key={c.id} style={{borderBottom:'1px solid #e0f2fe',background:i%2===0?'#fff':'#f0f9ff'}}>
+                      <td style={{padding:'9px 14px',fontWeight:600}}>{c.employe_nom}</td>
+                      <td style={{padding:'9px 14px',fontSize:11}}>{c.type_conge}</td>
+                      <td style={{padding:'9px 14px',fontSize:12}}>{new Date(c.date_debut).toLocaleDateString('fr-FR')}</td>
+                      <td style={{padding:'9px 14px',fontSize:12}}>{new Date(c.date_fin).toLocaleDateString('fr-FR')}</td>
+                      <td style={{padding:'9px 14px',textAlign:'center',fontWeight:700}}>{c.nb_jours}</td>
+                      <td style={{padding:'9px 14px',fontSize:11,color:'#6b7280',maxWidth:150}}>{c.motif||'—'}</td>
+                      <td style={{padding:'9px 14px'}}><span style={{background:sc.bg,color:sc.tx,padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:700}}>{c.statut}</span></td>
+                      <td style={{padding:'9px 14px'}}>
+                        {c.statut==='en_attente'&&(
+                          <div style={{display:'flex',gap:4}}>
+                            <button onClick={async()=>{await axios.put(`${API}/rh/conges/${c.id}/valider`,{statut:'approuve'});chargerOnglet('conges');toast.success('Congé approuvé');}}
+                              style={{background:'#dcfce7',color:'#15803d',border:'none',padding:'3px 8px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>✓</button>
+                            <button onClick={async()=>{await axios.put(`${API}/rh/conges/${c.id}/valider`,{statut:'refuse'});chargerOnglet('conges');toast.success('Congé refusé');}}
+                              style={{background:'#fee2e2',color:'#dc2626',border:'none',padding:'3px 8px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>✗</button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {conges.length===0&&<div style={{textAlign:'center',padding:40,color:'#9ca3af'}}><div style={{fontSize:36,marginBottom:8}}>🏖</div><p>Aucune demande de congé</p></div>}
+          </div>
+        </div>
+      )}
+
+      {/* ══ PAIE ══ */}
+      {onglet==='paie' && (
+        <div>
+          <div style={{display:'flex',justifyContent:'flex-end',marginBottom:16}}>
+            <button onClick={()=>ouvrir('bulletin',{periode:new Date().toISOString().slice(0,7)+'-01'})}
+              style={{background:'#0891b2',color:'#fff',border:'none',padding:'9px 20px',borderRadius:8,cursor:'pointer',fontWeight:700}}>
+              + Générer bulletin
+            </button>
+          </div>
+          <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',overflow:'auto'}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:13,minWidth:700}}>
+              <thead>
+                <tr style={{background:'#e0f2fe'}}>
+                  {['Employé','Période','Salaire brut','CNPS','ITS','Net à payer','Statut','Actions'].map(h=>(
+                    <th key={h} style={{padding:'10px 14px',textAlign:'left',fontWeight:700,color:'#0891b2',borderBottom:'2px solid #bae6fd',whiteSpace:'nowrap'}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {bulletins.map((b,i)=>(
+                  <tr key={b.id} style={{borderBottom:'1px solid #e0f2fe',background:i%2===0?'#fff':'#f0f9ff'}}>
+                    <td style={{padding:'9px 14px',fontWeight:600}}>{b.employe_nom}</td>
+                    <td style={{padding:'9px 14px',fontFamily:'monospace',fontSize:12}}>{b.periode?new Date(b.periode).toLocaleDateString('fr-FR',{month:'long',year:'numeric'}):'—'}</td>
+                    <td style={{padding:'9px 14px'}}>{parseFloat(b.salaire_brut||0).toLocaleString('fr-FR')} FCFA</td>
+                    <td style={{padding:'9px 14px',color:'#dc2626'}}>{parseFloat(b.cotisation_cnps||0).toLocaleString('fr-FR')}</td>
+                    <td style={{padding:'9px 14px',color:'#dc2626'}}>{parseFloat(b.impot_sur_salaire||0).toLocaleString('fr-FR')}</td>
+                    <td style={{padding:'9px 14px',fontWeight:800,color:'#15803d',fontSize:14}}>{parseFloat(b.salaire_net||0).toLocaleString('fr-FR')} FCFA</td>
+                    <td style={{padding:'9px 14px'}}><span style={{background:b.statut==='paye'?'#dcfce7':b.statut==='valide'?'#dbeafe':'#f3f4f6',color:b.statut==='paye'?'#15803d':b.statut==='valide'?'#1d4ed8':'#6b7280',padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:700}}>{b.statut}</span></td>
+                    <td style={{padding:'9px 14px'}}>
+                      <div style={{display:'flex',gap:4}}>
+                        {b.statut==='brouillon'&&<button onClick={async()=>{await axios.put(`${API}/rh/bulletins/${b.id}/statut`,{statut:'valide'});chargerOnglet('paie');toast.success('Validé');}}
+                          style={{background:'#dbeafe',color:'#1d4ed8',border:'none',padding:'3px 8px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>Valider</button>}
+                        {b.statut==='valide'&&<button onClick={async()=>{await axios.put(`${API}/rh/bulletins/${b.id}/statut`,{statut:'paye'});chargerOnglet('paie');toast.success('Payé');}}
+                          style={{background:'#dcfce7',color:'#15803d',border:'none',padding:'3px 8px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>Marquer payé</button>}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {bulletins.length===0&&<div style={{textAlign:'center',padding:40,color:'#9ca3af'}}><div style={{fontSize:36,marginBottom:8}}>💰</div><p>Aucun bulletin — générez les bulletins de paie</p></div>}
+          </div>
+        </div>
+      )}
+
+      {/* ══ FORMULAIRES ══ */}
+      {showForm && (
+        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:60,overflowY:'auto'}}>
+          <div style={{background:'#fff',borderRadius:14,width:'95%',maxWidth:700,padding:24,maxHeight:'85vh',overflowY:'auto'}}>
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:20}}>
+              <h3 style={{margin:0,color:'#0891b2',fontSize:16,fontWeight:800}}>
+                {formType==='employe'?'👤 Fiche Employé':formType==='contrat'?'📋 Contrat':formType==='conge'?'🏖 Congé':formType==='bulletin'?'💰 Bulletin de paie':'📌 Poste'}
+              </h3>
+              <button onClick={()=>setShowForm(false)} style={{background:'none',border:'none',fontSize:20,cursor:'pointer',color:'#9ca3af'}}>✕</button>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:12,marginBottom:16}}>
+
+              {formType==='employe' && <>
+                <F label="Nom *" k="nom" ph="NOM" required/>
+                <F label="Prénom *" k="prenom" ph="Prénom" required/>
+                <F label="Date naissance" k="date_naissance" type="date"/>
+                <F label="Lieu naissance" k="lieu_naissance" ph="Abidjan"/>
+                <S label="Sexe" k="sexe" opts={[{v:'M',l:'Masculin'},{v:'F',l:'Féminin'}]}/>
+                <S label="Situation familiale" k="situation_familiale" opts={[{v:'celibataire',l:'Célibataire'},{v:'marie',l:'Marié(e)'},{v:'divorce',l:'Divorcé(e)'},{v:'veuf',l:'Veuf/Veuve'}]}/>
+                <F label="Nb enfants" k="nb_enfants" type="number" ph="0"/>
+                <F label="Téléphone" k="telephone" ph="+225..."/>
+                <F label="Email" k="email" type="email" ph="email@nai.ci"/>
+                <S label="Poste" k="poste_id" opts={postes.map(p=>({v:String(p.id),l:`${p.intitule} — ${p.departement||''}`.trim()}))}/>
+                <S label="Atelier" k="atelier_id" opts={ateliers.map(a=>({v:String(a.id),l:`${a.code} — ${a.libelle}`}))}/>
+                <F label="Date embauche" k="date_embauche" type="date"/>
+                <S label="Statut" k="statut" opts={[{v:'actif',l:'Actif'},{v:'conge',l:'En congé'},{v:'suspendu',l:'Suspendu'},{v:'demissionne',l:'Démissionné'},{v:'licencie',l:'Licencié'},{v:'retraite',l:'Retraite'}]}/>
+                <F label="N° CNI" k="num_cni" ph="CI-..."/>
+                <F label="N° CNPS" k="num_cnps" ph="CNPS-..."/>
+                <div style={{gridColumn:'1/-1'}}><F label="Adresse" k="adresse" ph="Quartier, Commune..."/></div>
+              </>}
+
+              {formType==='contrat' && <>
+                <S label="Employé *" k="employe_id" required opts={employes.map(e=>({v:e.id,l:`${e.matricule} — ${e.nom} ${e.prenom}`}))}/>
+                <S label="Type contrat *" k="type_contrat" required opts={[{v:'CDI',l:'CDI'},{v:'CDD',l:'CDD'},{v:'Stage',l:'Stage'},{v:'Apprentissage',l:'Apprentissage'},{v:'Interim',l:'Intérim'},{v:'Prestation',l:'Prestation'}]}/>
+                <F label="Date début *" k="date_debut" type="date" required/>
+                <F label="Date fin" k="date_fin" type="date"/>
+                <F label="Salaire base (FCFA)" k="salaire_base" type="number" ph="0"/>
+                <S label="Temps de travail" k="temps_travail" opts={[{v:'plein',l:'Temps plein'},{v:'partiel',l:'Temps partiel'},{v:'mi_temps',l:'Mi-temps'}]}/>
+                <F label="Prime transport (FCFA)" k="prime_transport" type="number" ph="0"/>
+                <F label="Prime logement (FCFA)" k="prime_logement" type="number" ph="0"/>
+                <F label="Période d'essai (mois)" k="periode_essai_mois" type="number" ph="0"/>
+              </>}
+
+              {formType==='conge' && <>
+                <S label="Employé *" k="employe_id" required opts={employes.map(e=>({v:e.id,l:`${e.matricule} — ${e.nom} ${e.prenom}`}))}/>
+                <S label="Type congé" k="type_conge" opts={[{v:'annuel',l:'Congé annuel'},{v:'maladie',l:'Maladie'},{v:'maternite',l:'Maternité'},{v:'paternite',l:'Paternité'},{v:'sans_solde',l:'Sans solde'},{v:'exceptionnel',l:'Exceptionnel'},{v:'recuperation',l:'Récupération'}]}/>
+                <F label="Date début *" k="date_debut" type="date" required/>
+                <F label="Date fin *" k="date_fin" type="date" required/>
+                <div style={{gridColumn:'1/-1'}}><F label="Motif" k="motif" ph="Motif de la demande..."/></div>
+              </>}
+
+              {formType==='bulletin' && <>
+                <S label="Employé *" k="employe_id" required opts={employes.map(e=>({v:e.id,l:`${e.matricule} — ${e.nom} ${e.prenom}`}))}/>
+                <F label="Période *" k="periode" type="date" ph="2026-04-01" required/>
+                <F label="Salaire base (FCFA)" k="salaire_base" type="number" ph="0"/>
+                <F label="Prime transport" k="prime_transport" type="number" ph="0"/>
+                <F label="Prime logement" k="prime_logement" type="number" ph="0"/>
+                <F label="Prime performance" k="prime_performance" type="number" ph="0"/>
+                <F label="Heures supp." k="heures_supp" type="number" ph="0"/>
+                <F label="Taux heure supp." k="taux_heures_supp" type="number" ph="0"/>
+                <F label="Autres retenues" k="autres_retenues" type="number" ph="0"/>
+                <div style={{gridColumn:'1/-1',background:'#f0f9ff',borderRadius:8,padding:12,fontSize:12,color:'#0891b2'}}>
+                  💡 Les cotisations CNPS (6.3%) et l'ITS seront calculés automatiquement selon la législation ivoirienne.
+                </div>
+              </>}
+
+              {formType==='poste' && <>
+                <F label="Code *" k="code" ph="RH-001" required/>
+                <F label="Intitulé *" k="intitule" ph="Responsable Production" required/>
+                <F label="Département" k="departement" ph="Production, RH, Finance..."/>
+                <F label="Niveau" k="niveau" ph="Cadre, Agent de maîtrise..."/>
+                <div style={{gridColumn:'1/-1'}}><F label="Description" k="description" ph="Description du poste..."/></div>
+              </>}
+
+            </div>
+            <div style={{display:'flex',gap:10,paddingTop:16,borderTop:'1px solid #f3f4f6'}}>
+              <button onClick={sauvegarder}
+                style={{background:'#0891b2',color:'#fff',border:'none',padding:'12px 32px',borderRadius:10,cursor:'pointer',fontWeight:800,fontSize:14}}>
+                ✓ Enregistrer
+              </button>
+              <button onClick={()=>setShowForm(false)}
+                style={{background:'#f3f4f6',border:'none',padding:'12px 20px',borderRadius:10,cursor:'pointer'}}>
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

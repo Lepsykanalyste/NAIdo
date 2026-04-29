@@ -116,11 +116,9 @@ async def get_nc_list(pool, statut=None, type_nc=None, gravite=None, search=None
     async with pool.acquire() as conn:
         q = """
             SELECT nc.*,
-                p.libelle AS processus_libelle,
                 ud.nom||' '||ud.prenom AS detecteur_nom,
                 ur.nom||' '||ur.prenom AS responsable_nom
             FROM non_conformites nc
-            LEFT JOIN processus p ON p.id = nc.processus_id
             LEFT JOIN utilisateurs ud ON ud.id = nc.detecteur_id
             LEFT JOIN utilisateurs ur ON ur.id = nc.responsable_traitement_id
             WHERE 1=1
@@ -146,21 +144,19 @@ async def create_nc(pool, data: dict, user_id: str):
     async with pool.acquire() as conn:
         row = await conn.fetchrow("""
             INSERT INTO non_conformites (
-                source, type_nc, gravite, titre, description,
-                produit_concerne, lot_concerne, quantite_concernee, unite,
-                processus_id, atelier_id, machine_id,
+                type_nc, gravite, titre, description,
+                produit_concerne, lot_concerne,
+                atelier_id, machine_id,
                 date_detection, detecteur_id, responsable_traitement_id,
                 action_immediate, normes_applicables,
                 gravite_score, occurrence_score, detectabilite_score,
                 delai_traitement_jours, notes
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
             RETURNING *
         """,
-            data.get("source","interne"), data.get("type_nc","qualite"),
+            data.get("type_nc","qualite"),
             data.get("gravite","mineure"), data["titre"], data.get("description",""),
             data.get("produit_concerne"), data.get("lot_concerne"),
-            float(data.get("quantite_concernee",0) or 0), data.get("unite"),
-            data.get("processus_id") or None,
             int_or_none(data.get("atelier_id")), int_or_none(data.get("machine_id")),
             data.get("date_detection") or date.today().isoformat(),
             data.get("detecteur_id") or user_id,
@@ -193,6 +189,9 @@ async def update_nc(pool, nc_id: str, data: dict):
         if "gravite_score" in data: add("gravite_score", int(data["gravite_score"] or 1))
         if "occurrence_score" in data: add("occurrence_score", int(data["occurrence_score"] or 1))
         if "detectabilite_score" in data: add("detectabilite_score", int(data["detectabilite_score"] or 1))
+        if "gravite_amdec" in data: add("gravite_amdec", int(data["gravite_amdec"] or 1))
+        if "occurrence_amdec" in data: add("occurrence_amdec", int(data["occurrence_amdec"] or 1))
+        if "detectabilite_amdec" in data: add("detectabilite_amdec", int(data["detectabilite_amdec"] or 1))
         if "responsable_traitement_id" in data: add("responsable_traitement_id", data["responsable_traitement_id"] or None)
         if "cout_nc" in data: add("cout_nc", float(data["cout_nc"] or 0))
 
