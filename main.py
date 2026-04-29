@@ -24,6 +24,9 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="NAIdo API", version="4.0", lifespan=lifespan)
 
+# Import stock routes module
+from stock_routes import inventaire_handler, resume_handler, mouvement_handler
+
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 # ── AUTH ───────────────────────────────────────────────────────
@@ -294,30 +297,19 @@ async def get_ateliers(user=Depends(get_current_user)):
 
 # ── ROUTES STOCK ───────────────────────────────────────────────
 @app.get("/api/stock/inventaire")
-async def get_inventaire(search: Optional[str] = None, user=Depends(get_current_user)):
-    async with pool.acquire() as conn:
-        q = """
-            SELECT a.id, a.code, a.designation, a.type_article,
-                COALESCE(a.stock_mini,0) AS stock_mini,
-                f.libelle AS famille, um.code AS unite,
-                COALESCE(SUM(sa.qte_disponible),0) AS stock_total_dispo,
-                COALESCE(SUM(sa.qte_reservee),0) AS stock_total_reserve,
-                COALESCE(SUM(sa.valeur_stock),0) AS valeur_totale,
-                CASE WHEN COALESCE(SUM(sa.qte_disponible),0) <= COALESCE(a.stock_mini,0)
-                     AND COALESCE(a.stock_mini,0) > 0 THEN true ELSE false END AS alerte_stock_bas
-            FROM articles a
-            LEFT JOIN familles_articles f ON f.id=a.famille_id
-            LEFT JOIN unites_mesure um ON um.id=a.unite_mesure_id
-            LEFT JOIN stock_articles sa ON sa.article_id=a.id
-            WHERE a.actif=true
-        """
-        params = []
-        if search:
-            params.append(f"%{search}%")
-            q += f" AND (a.code ILIKE $1 OR a.designation ILIKE $1)"
-        q += " GROUP BY a.id,f.libelle,um.code ORDER BY a.type_article,a.code"
-        rows = await conn.fetch(q, *params)
-        return [dict(r) for r in rows]
+async def get_inventaire(
+    search: Optional[str] = None,
+    atelier_id: Optional[str] = None,
+    type_article: Optional[str] = None,
+    user=Depends(get_current_user)
+):
+    """Inventaire par emplacement/atelier"""
+    return await inventaire_handler(pool, search, atelier_id, type_article)
+
+@app.get("/api/stock/resume")
+async def get_stock_resume(user=Depends(get_current_user)):
+    """KPIs stock globaux"""
+    return await resume_handler(pool)
 
 @app.get("/api/stock/lots")
 async def get_lots(statut: Optional[str] = None, search: Optional[str] = None, user=Depends(get_current_user)):
@@ -343,14 +335,27 @@ async def get_lots(statut: Optional[str] = None, search: Optional[str] = None, u
 
 @app.post("/api/stock/entree")
 async def entree_stock(payload: dict, user=Depends(get_current_user)):
+    """Entrée manuelle en stock"""
+    try:
+        t = payload.get("type_mouvement", "entree_manuelle")
+        if t not in ("entree_manuelle","entree_achat","entree_production","retour"):
+            t = "entree_manuelle"
+        return await mouvement_handler(pool, payload, t, user.get("id"))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+@app.post("/api/stock/entree_raw")
+async def entree_stock_raw(payload: dict, user=Depends(get_current_user)):
     async with pool.acquire() as conn:
         async with conn.transaction():
             article_id = payload.get("article_id")
-            emplacement_id = payload.get("emplacement_id")
+            emplacement_id = int(payload["emplacement_id"]) if payload.get("emplacement_id") not in (None, "", "null") else None
             qte = float(payload.get("qte", 0))
-            prix = float(payload.get("prix_unitaire", 0))
-            numero_lot = payload.get("numero_lot")
-            date_dlc = payload.get("date_dlc")
+            prix = float(payload.get("prix_unitaire", 0) or 0)
+            numero_lot = payload.get("numero_lot") or None
+            date_dlc = payload.get("date_dlc") or None
 
             if not article_id or qte <= 0:
                 raise HTTPException(400, "Article et quantité requis")
@@ -374,20 +379,52 @@ async def entree_stock(payload: dict, user=Depends(get_current_user)):
             if emplacement_id:
                 await conn.execute("""
                     INSERT INTO stock_articles (article_id,emplacement_id,qte_disponible,valeur_stock,derniere_entree)
-                    VALUES ($1,$2,$3,$4,NOW())
+                    VALUES ($1,$2,$3,$3*$4,NOW())
                     ON CONFLICT (article_id,emplacement_id)
                     DO UPDATE SET qte_disponible=stock_articles.qte_disponible+$3,
                         valeur_stock=stock_articles.valeur_stock+($3*$4), derniere_entree=NOW()
                 """, article_id, emplacement_id, qte, prix)
 
-            return {"success": True, "message": f"Entrée de {qte} enregistrée"}
+            # Journal
+            try:
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS journal_stock (
+                        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                        article_id UUID, emplacement_id INTEGER,
+                        type VARCHAR(10), qte NUMERIC(12,3),
+                        prix_unitaire NUMERIC(12,4) DEFAULT 0,
+                        numero_lot VARCHAR(100), notes TEXT,
+                        cree_par UUID, created_at TIMESTAMPTZ DEFAULT NOW()
+                    )
+                """)
+                await conn.execute(
+                    "INSERT INTO journal_stock (article_id,emplacement_id,type,qte,prix_unitaire,numero_lot,notes,cree_par) VALUES ($1,$2,'entree',$3,$4,$5,$6,$7)",
+                    article_id, emplacement_id, qte, prix, numero_lot,
+                    payload.get("notes"), user.get("id")
+                )
+            except Exception as je:
+                print(f"Journal: {je}")
+            return {"success": True, "message": f"Entree de {qte} enregistree"}
 
 @app.post("/api/stock/sortie")
 async def sortie_stock(payload: dict, user=Depends(get_current_user)):
+    """Sortie manuelle du stock"""
+    try:
+        t = payload.get("type_mouvement", "sortie_manuelle")
+        if t not in ("sortie_manuelle","sortie_vente","sortie_production","rebut"):
+            t = "sortie_manuelle"
+        return await mouvement_handler(pool, payload, t, user.get("id"))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+@app.post("/api/stock/sortie_raw")
+async def sortie_stock_raw(payload: dict, user=Depends(get_current_user)):
     async with pool.acquire() as conn:
         async with conn.transaction():
             article_id = payload.get("article_id")
-            emplacement_id = payload.get("emplacement_id")
+            emplacement_id = int(payload["emplacement_id"]) if payload.get("emplacement_id") not in (None, "", "null") else None
             qte = float(payload.get("qte", 0))
             if not article_id or qte <= 0:
                 raise HTTPException(400, "Article et quantité requis")
@@ -410,7 +447,15 @@ async def sortie_stock(payload: dict, user=Depends(get_current_user)):
                     "UPDATE stock_articles SET qte_disponible=GREATEST(0,qte_disponible-$1),derniere_sortie=NOW() WHERE article_id=$2",
                     qte, article_id
                 )
-            return {"success": True}
+            # Journal
+            try:
+                await conn.execute(
+                    "INSERT INTO journal_stock (article_id,emplacement_id,type,qte,notes,cree_par) VALUES ($1,$2,'sortie',$3,$4,$5) ON CONFLICT DO NOTHING",
+                    article_id, emplacement_id, qte, payload.get("notes"), user.get("id")
+                )
+            except Exception as je:
+                print(f"Journal sortie: {je}")
+            return {"success": True, "message": f"Sortie de {qte} enregistree"}
 
 @app.get("/api/emplacements")
 async def get_emplacements(user=Depends(get_current_user)):
@@ -617,6 +662,113 @@ async def update_commande_statut(cmd_id: str, payload: dict, user=Depends(get_cu
             payload["statut"], cmd_id
         )
         return dict(row)
+
+
+# ── MOUVEMENTS STOCK ──────────────────────────────────────────
+@app.get("/api/stock/mouvements")
+async def get_mouvements(limit: int = 50, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        try:
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS journal_stock (
+                    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                    article_id UUID REFERENCES articles(id),
+                    emplacement_id INTEGER,
+                    type VARCHAR(10) NOT NULL,
+                    qte NUMERIC(12,3) NOT NULL,
+                    prix_unitaire NUMERIC(12,4) DEFAULT 0,
+                    numero_lot VARCHAR(100),
+                    notes TEXT,
+                    cree_par UUID,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                )
+            """)
+            rows = await conn.fetch("""
+                SELECT j.id, j.created_at, j.type, j.qte, j.numero_lot, j.notes,
+                    j.prix_unitaire,
+                    a.code AS article_code, a.designation AS article_designation,
+                    e.code AS emplacement_code
+                FROM journal_stock j
+                JOIN articles a ON a.id=j.article_id
+                LEFT JOIN emplacements_stock e ON e.id=j.emplacement_id
+                ORDER BY j.created_at DESC
+                LIMIT $1
+            """, limit)
+            return [dict(r) for r in rows]
+        except Exception as e:
+            print(f"Erreur mouvements: {e}")
+            return []
+
+
+@app.post("/api/stock/lots")
+async def creer_lot(payload: dict, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            d = payload
+            if not d.get("article_id"):
+                raise HTTPException(400, "Article requis")
+            if not d.get("numero_lot"):
+                raise HTTPException(400, "Numéro de lot requis")
+            qte = float(d.get("qte_initiale", 0))
+            if qte <= 0:
+                raise HTTPException(400, "Quantité requise")
+            
+            emplacement_id = int(d["emplacement_id"]) if d.get("emplacement_id") not in (None,"","null") else None
+            prix = float(d.get("prix_unitaire", 0) or 0)
+            
+            try:
+                row = await conn.fetchrow("""
+                    INSERT INTO lots_stock (
+                        article_id, emplacement_id, numero_lot,
+                        qte_initiale, qte_disponible, prix_unitaire,
+                        date_fabrication, date_dlc, date_dluo,
+                        date_reception, statut
+                    ) VALUES ($1,$2,$3,$4,$4,$5,$6,$7,$8,CURRENT_DATE,'disponible')
+                    RETURNING *
+                """,
+                    d["article_id"], emplacement_id, d["numero_lot"],
+                    qte, prix,
+                    d.get("date_fabrication") or None,
+                    d.get("date_dlc") or None,
+                    d.get("date_dluo") or None,
+                )
+            except asyncpg.UniqueViolationError:
+                raise HTTPException(400, "Ce numéro de lot existe déjà")
+            
+            if emplacement_id:
+                await conn.execute("""
+                    INSERT INTO stock_articles (article_id,emplacement_id,qte_disponible,valeur_stock,derniere_entree)
+                    VALUES ($1,$2,$3,$3*$4,NOW())
+                    ON CONFLICT (article_id,emplacement_id)
+                    DO UPDATE SET
+                        qte_disponible=stock_articles.qte_disponible+$3,
+                        valeur_stock=stock_articles.valeur_stock+($3*$4),
+                        derniere_entree=NOW()
+                """, d["article_id"], emplacement_id, qte, prix)
+            
+            return dict(row)
+
+@app.put("/api/stock/lots/{lot_id}")
+async def update_lot_statut(lot_id: str, payload: dict, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        valid = ['disponible','quarantaine','bloque','perime','epuise']
+        if payload.get("statut") not in valid:
+            raise HTTPException(400, "Statut invalide")
+        row = await conn.fetchrow(
+            "UPDATE lots_stock SET statut=$1 WHERE id=$2 RETURNING *",
+            payload["statut"], lot_id
+        )
+        return dict(row)
+
+@app.post("/api/stock/transfert")
+async def transfert_stock(payload: dict, user=Depends(get_current_user)):
+    """Transfert entre emplacements (= bon de cession automatique)"""
+    try:
+        return await mouvement_handler(pool, payload, "transfert", user.get("id"))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, str(e))
 
 # ── HEALTH CHECK ───────────────────────────────────────────────
 @app.get("/api/health")

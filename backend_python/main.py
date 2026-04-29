@@ -24,6 +24,9 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="NAIdo API", version="4.0", lifespan=lifespan)
 
+# Import stock routes module
+from stock_routes import inventaire_handler, resume_handler, mouvement_handler
+
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 # ── AUTH ───────────────────────────────────────────────────────
@@ -294,30 +297,19 @@ async def get_ateliers(user=Depends(get_current_user)):
 
 # ── ROUTES STOCK ───────────────────────────────────────────────
 @app.get("/api/stock/inventaire")
-async def get_inventaire(search: Optional[str] = None, user=Depends(get_current_user)):
-    async with pool.acquire() as conn:
-        q = """
-            SELECT a.id, a.code, a.designation, a.type_article,
-                COALESCE(a.stock_mini,0) AS stock_mini,
-                f.libelle AS famille, um.code AS unite,
-                COALESCE(SUM(sa.qte_disponible),0) AS stock_total_dispo,
-                COALESCE(SUM(sa.qte_reservee),0) AS stock_total_reserve,
-                COALESCE(SUM(sa.valeur_stock),0) AS valeur_totale,
-                CASE WHEN COALESCE(SUM(sa.qte_disponible),0) <= COALESCE(a.stock_mini,0)
-                     AND COALESCE(a.stock_mini,0) > 0 THEN true ELSE false END AS alerte_stock_bas
-            FROM articles a
-            LEFT JOIN familles_articles f ON f.id=a.famille_id
-            LEFT JOIN unites_mesure um ON um.id=a.unite_mesure_id
-            LEFT JOIN stock_articles sa ON sa.article_id=a.id
-            WHERE a.actif=true
-        """
-        params = []
-        if search:
-            params.append(f"%{search}%")
-            q += f" AND (a.code ILIKE $1 OR a.designation ILIKE $1)"
-        q += " GROUP BY a.id,f.libelle,um.code ORDER BY a.type_article,a.code"
-        rows = await conn.fetch(q, *params)
-        return [dict(r) for r in rows]
+async def get_inventaire(
+    search: Optional[str] = None,
+    atelier_id: Optional[str] = None,
+    type_article: Optional[str] = None,
+    user=Depends(get_current_user)
+):
+    """Inventaire par emplacement/atelier"""
+    return await inventaire_handler(pool, search, atelier_id, type_article)
+
+@app.get("/api/stock/resume")
+async def get_stock_resume(user=Depends(get_current_user)):
+    """KPIs stock globaux"""
+    return await resume_handler(pool)
 
 @app.get("/api/stock/lots")
 async def get_lots(statut: Optional[str] = None, search: Optional[str] = None, user=Depends(get_current_user)):
@@ -343,6 +335,19 @@ async def get_lots(statut: Optional[str] = None, search: Optional[str] = None, u
 
 @app.post("/api/stock/entree")
 async def entree_stock(payload: dict, user=Depends(get_current_user)):
+    """Entrée manuelle en stock"""
+    try:
+        t = payload.get("type_mouvement", "entree_manuelle")
+        if t not in ("entree_manuelle","entree_achat","entree_production","retour"):
+            t = "entree_manuelle"
+        return await mouvement_handler(pool, payload, t, user.get("id"))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+@app.post("/api/stock/entree_raw")
+async def entree_stock_raw(payload: dict, user=Depends(get_current_user)):
     async with pool.acquire() as conn:
         async with conn.transaction():
             article_id = payload.get("article_id")
@@ -403,6 +408,19 @@ async def entree_stock(payload: dict, user=Depends(get_current_user)):
 
 @app.post("/api/stock/sortie")
 async def sortie_stock(payload: dict, user=Depends(get_current_user)):
+    """Sortie manuelle du stock"""
+    try:
+        t = payload.get("type_mouvement", "sortie_manuelle")
+        if t not in ("sortie_manuelle","sortie_vente","sortie_production","rebut"):
+            t = "sortie_manuelle"
+        return await mouvement_handler(pool, payload, t, user.get("id"))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+@app.post("/api/stock/sortie_raw")
+async def sortie_stock_raw(payload: dict, user=Depends(get_current_user)):
     async with pool.acquire() as conn:
         async with conn.transaction():
             article_id = payload.get("article_id")
@@ -741,6 +759,16 @@ async def update_lot_statut(lot_id: str, payload: dict, user=Depends(get_current
             payload["statut"], lot_id
         )
         return dict(row)
+
+@app.post("/api/stock/transfert")
+async def transfert_stock(payload: dict, user=Depends(get_current_user)):
+    """Transfert entre emplacements (= bon de cession automatique)"""
+    try:
+        return await mouvement_handler(pool, payload, "transfert", user.get("id"))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception as e:
+        raise HTTPException(500, str(e))
 
 # ── HEALTH CHECK ───────────────────────────────────────────────
 @app.get("/api/health")

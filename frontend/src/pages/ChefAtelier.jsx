@@ -2722,6 +2722,7 @@ function GMAO() {
 function Stock() {
   const [onglet, setOnglet] = useState('inventaire');
   const [inventaire, setInventaire] = useState([]);
+  const [resume, setResume] = useState({});
   const [lots, setLots] = useState([]);
   const [mouvements, setMouvements] = useState([]);
   const [emplacements, setEmplacements] = useState([]);
@@ -2749,9 +2750,13 @@ function Stock() {
 
   const charger = async () => {
     setLoading(true);
-    // Chaque requête indépendante pour isoler les erreurs
-    try { const {data} = await axios.get(`${API}/stock/inventaire${filtreArt?`?search=${filtreArt}`:''}`); setInventaire(data); } 
+    const params = new URLSearchParams();
+    if (filtreArt) params.append('search', filtreArt);
+    if (filtreEmpl) params.append('emplacement_id', filtreEmpl);
+    try { const {data} = await axios.get(`${API}/stock/inventaire?${params}`); setInventaire(data); } 
     catch(e) { console.error('inventaire:',e.message); setInventaire([]); }
+    try { const {data} = await axios.get(`${API}/stock/resume`); setResume(data); }
+    catch(e) { console.error('resume:',e.message); }
     try { const {data} = await axios.get(`${API}/stock/lots?statut=${filtreStatut}${filtreArt?`&search=${filtreArt}`:''}`); setLots(data); }
     catch(e) { console.error('lots:',e.message); setLots([]); }
     try { const {data} = await axios.get(`${API}/emplacements`); setEmplacements(data); }
@@ -2795,6 +2800,7 @@ function Stock() {
         emplacement_id: formMvt.emplacement_id || null,
         qte: parseFloat(formMvt.qte),
         notes: formMvt.notes || null,
+        type_mouvement: typeMvt === 'entree' ? 'entree_manuelle' : 'sortie_manuelle',
       };
       if (typeMvt === 'entree') {
         payload.numero_lot = formMvt.numero_lot || null;
@@ -2831,15 +2837,16 @@ function Stock() {
       {/* KPI résumé */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:12, marginBottom:20 }}>
         {[
-          { label:'Articles en stock', value:inventaire.length, color:'#1d4ed8', bg:'#dbeafe', icon:'📦' },
-          { label:'Alertes stock bas', value:alertesBas, color: alertesBas>0?'#dc2626':'#15803d', bg: alertesBas>0?'#fee2e2':'#dcfce7', icon:'⚠' },
-          { label:'Lots actifs', value:lots.filter(l=>l.statut==='disponible').length, color:'#15803d', bg:'#dcfce7', icon:'🏷' },
-          { label:'Lots expirés', value:lotsExpires, color: lotsExpires>0?'#dc2626':'#15803d', bg: lotsExpires>0?'#fee2e2':'#dcfce7', icon:'⏰' },
-          { label:'DLC < 30 jours', value:lotsProches, color: lotsProches>0?'#d97706':'#15803d', bg: lotsProches>0?'#fef3c7':'#dcfce7', icon:'📅' },
+          { label:'Articles en stock', value: resume.nb_articles || inventaire.length, color:'#1d4ed8', bg:'#dbeafe', icon:'📦' },
+          { label:'Valeur totale', value: `${parseFloat(resume.valeur_totale||0).toLocaleString('fr-FR')} FCFA`, color:'#15803d', bg:'#dcfce7', icon:'💰' },
+          { label:'Alertes stock bas', value: resume.nb_alertes || alertesBas, color: (resume.nb_alertes||alertesBas)>0?'#dc2626':'#15803d', bg: (resume.nb_alertes||alertesBas)>0?'#fee2e2':'#dcfce7', icon:'⚠' },
+          { label:'Lots actifs', value: resume.nb_lots_actifs || lots.filter(l=>l.statut==='disponible').length, color:'#15803d', bg:'#dcfce7', icon:'🏷' },
+          { label:'Lots expirés', value: resume.nb_lots_expires || lotsExpires, color: (resume.nb_lots_expires||lotsExpires)>0?'#dc2626':'#15803d', bg: (resume.nb_lots_expires||lotsExpires)>0?'#fee2e2':'#dcfce7', icon:'⏰' },
+          { label:'DLC < 30 jours', value: resume.nb_lots_proches || lotsProches, color: (resume.nb_lots_proches||lotsProches)>0?'#d97706':'#15803d', bg: (resume.nb_lots_proches||lotsProches)>0?'#fef3c7':'#dcfce7', icon:'📅' },
         ].map(k => (
           <div key={k.label} style={{ background:k.bg, borderRadius:12, padding:'14px 16px' }}>
             <div style={{ fontSize:11, color:'#6b7280', marginBottom:4 }}>{k.icon} {k.label}</div>
-            <div style={{ fontSize:26, fontWeight:800, color:k.color }}>{k.value}</div>
+            <div style={{ fontSize:k.label==='Valeur totale'?14:26, fontWeight:800, color:k.color }}>{k.value}</div>
           </div>
         ))}
       </div>
@@ -2868,7 +2875,7 @@ function Stock() {
 
       {/* Formulaire entrée/sortie rapide */}
       {showMvt && (
-        <div style={{ background:'#fff', borderRadius:12, padding:20, border:`2px solid ${typeMvt==='entree'?'#86efac':'#fca5a5'}`, marginBottom:16 }}>
+        <div style={{ background:'#fff', borderRadius:12, padding:20, border:`2px solid ${typeMvt==='entree'?'#86efac':'#fca5a5'}`, marginBottom:16, position:'relative', zIndex:10 }}>
           <div style={{ display:'flex', justifyContent:'space-between', marginBottom:14 }}>
             <h4 style={{ margin:0, color:typeMvt==='entree'?'#15803d':'#dc2626', fontWeight:700, fontSize:15 }}>
               {typeMvt==='entree' ? '+ Entrée stock' : '− Sortie stock'}
@@ -2936,7 +2943,7 @@ function Stock() {
 
       {/* Formulaire nouveau lot */}
       {showLot && (
-        <div style={{ background:'#fff', borderRadius:12, padding:20, border:'2px solid #93c5fd', marginBottom:16 }}>
+        <div style={{ background:'#fff', borderRadius:12, padding:20, border:'2px solid #93c5fd', marginBottom:16, position:'relative', zIndex:10 }}>
           <div style={{ display:'flex', justifyContent:'space-between', marginBottom:14 }}>
             <h4 style={{ margin:0, color:'#0369a1', fontWeight:700, fontSize:15 }}>🏷 Créer un nouveau lot</h4>
             <button onClick={() => setShowLot(false)} style={{ background:'none', border:'none', fontSize:18, cursor:'pointer', color:'#9ca3af' }}>✕</button>
@@ -3010,7 +3017,7 @@ function Stock() {
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13, minWidth:700 }}>
             <thead>
               <tr style={{ background:'#eff6ff' }}>
-                {['Code','Article','Famille','Unité','Stock dispo','Réservé','Stock mini','Valeur','⚠','Actions'].map(h => (
+                {['Code','Article','Emplacement','Atelier','Unité','Stock dispo','Valeur','⚠','Actions'].map(h => (
                   <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:700, color:'#1d4ed8', borderBottom:'2px solid #bfdbfe', whiteSpace:'nowrap' }}>{h}</th>
                 ))}
               </tr>
@@ -3018,16 +3025,20 @@ function Stock() {
             <tbody>
               {inventaire.map((a, i) => (
                 <tr key={a.id} style={{ borderBottom:'1px solid #eff6ff', background: a.alerte_stock_bas ? '#fff7ed' : i%2===0?'#fff':'#f8faff' }}>
-                  <td style={{ padding:'9px 14px', fontFamily:'monospace', fontWeight:700, color:'#1d4ed8', fontSize:12 }}>{a.code}</td>
-                  <td style={{ padding:'9px 14px', fontWeight:500 }}>{a.designation}</td>
-                  <td style={{ padding:'9px 14px', color:'#6b7280', fontSize:12 }}>{a.famille||'—'}</td>
-                  <td style={{ padding:'9px 14px' }}><span style={{ fontFamily:'monospace', background:'#dbeafe', color:'#1d4ed8', padding:'2px 6px', borderRadius:4, fontSize:12 }}>{a.unite||'—'}</span></td>
-                  <td style={{ padding:'9px 14px', fontWeight:800, fontSize:15, color: parseFloat(a.stock_total_dispo||0) === 0 ? '#dc2626' : '#15803d' }}>
-                    {parseFloat(a.stock_total_dispo||0).toFixed(3)}
+                  <td style={{ padding:'9px 14px', fontFamily:'monospace', fontWeight:700, color:'#1d4ed8', fontSize:12 }}>{a.article_code||a.code}</td>
+                  <td style={{ padding:'9px 14px', fontWeight:500, fontSize:12 }}>{a.designation}</td>
+                  <td style={{ padding:'9px 14px' }}>
+                    <span style={{ fontFamily:'monospace', background:'#e0e7ff', color:'#4338ca', padding:'2px 8px', borderRadius:6, fontSize:11, fontWeight:700 }}>
+                      {a.emplacement_code||'—'}
+                    </span>
+                    <div style={{ fontSize:10, color:'#9ca3af', marginTop:2 }}>{a.emplacement_libelle||''}</div>
                   </td>
-                  <td style={{ padding:'9px 14px', color:'#6b7280' }}>{parseFloat(a.stock_total_reserve||0).toFixed(3)}</td>
-                  <td style={{ padding:'9px 14px', color:'#9ca3af' }}>{parseFloat(a.stock_mini||0).toFixed(3)}</td>
-                  <td style={{ padding:'9px 14px', fontWeight:600 }}>{parseFloat(a.valeur_totale||0).toFixed(2)} FCFA</td>
+                  <td style={{ padding:'9px 14px', fontSize:11, color:'#6b7280' }}>{a.atelier_code||'—'}</td>
+                  <td style={{ padding:'9px 14px' }}><span style={{ fontFamily:'monospace', background:'#dbeafe', color:'#1d4ed8', padding:'2px 6px', borderRadius:4, fontSize:12 }}>{a.unite||'—'}</span></td>
+                  <td style={{ padding:'9px 14px', fontWeight:800, fontSize:15, color: parseFloat(a.qte_disponible||0) === 0 ? '#dc2626' : '#15803d' }}>
+                    {parseFloat(a.qte_disponible||0).toFixed(3)}
+                  </td>
+                  <td style={{ padding:'9px 14px', fontWeight:600 }}>{parseFloat(a.valeur_stock||0).toLocaleString('fr-FR')} FCFA</td>
                   <td style={{ padding:'9px 14px', textAlign:'center' }}>
                     {a.alerte_stock_bas && <span style={{ color:'#d97706', fontWeight:700 }}>⚠</span>}
                   </td>
