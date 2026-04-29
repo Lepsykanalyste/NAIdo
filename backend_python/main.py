@@ -346,11 +346,11 @@ async def entree_stock(payload: dict, user=Depends(get_current_user)):
     async with pool.acquire() as conn:
         async with conn.transaction():
             article_id = payload.get("article_id")
-            emplacement_id = payload.get("emplacement_id")
+            emplacement_id = int(payload["emplacement_id"]) if payload.get("emplacement_id") not in (None, "", "null") else None
             qte = float(payload.get("qte", 0))
-            prix = float(payload.get("prix_unitaire", 0))
-            numero_lot = payload.get("numero_lot")
-            date_dlc = payload.get("date_dlc")
+            prix = float(payload.get("prix_unitaire", 0) or 0)
+            numero_lot = payload.get("numero_lot") or None
+            date_dlc = payload.get("date_dlc") or None
 
             if not article_id or qte <= 0:
                 raise HTTPException(400, "Article et quantité requis")
@@ -387,7 +387,7 @@ async def sortie_stock(payload: dict, user=Depends(get_current_user)):
     async with pool.acquire() as conn:
         async with conn.transaction():
             article_id = payload.get("article_id")
-            emplacement_id = payload.get("emplacement_id")
+            emplacement_id = int(payload["emplacement_id"]) if payload.get("emplacement_id") not in (None, "", "null") else None
             qte = float(payload.get("qte", 0))
             if not article_id or qte <= 0:
                 raise HTTPException(400, "Article et quantité requis")
