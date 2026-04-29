@@ -114,8 +114,7 @@ const MENU = [
   { id:'separator3',  label:'QHSE & MAINTENANCE',  separator:true },
   { id:'qhse',        label:'QHSE / NC',           icon:'qhse',        color:'#b45309' },
   { id:'gmao',        label:'GMAO / Maintenance',  icon:'gmao',        color:'#92400e' },
-  { id:'separator3b', label:'GMAO & MAINTENANCE', separator:true },
-  { id:'gmao',        label:'GMAO / Maintenance',    icon:'tool',        color:'#059669' },
+
   { id:'separator4b', label:'RESSOURCES HUMAINES', separator:true },
   { id:'rh',          label:'RH — Employés & Paie',  icon:'users',       color:'#0891b2' },
   { id:'separator4',  label:'ADMIN & IA',          separator:true },
