@@ -106,6 +106,11 @@ const MENU = [
   { id:'matieres',    label:'Matières Premières',   icon:'articles',    color:'#1d4ed8' },
   { id:'stock',       label:'Stock',               icon:'stock',       color:'#6d28d9' },
   { id:'cession',     label:'Bons de Cession',     icon:'cession',     color:'#4338ca' },
+  { id:'separator2b', label:'VENTE & ACHAT',        separator:true },
+  { id:'clients',     label:'Clients',             icon:'articles',    color:'#0369a1' },
+  { id:'vente',       label:'Ventes',              icon:'stock',       color:'#15803d' },
+  { id:'fournisseurs',label:'Fournisseurs',         icon:'articles',    color:'#6d28d9' },
+  { id:'achat',       label:'Commandes Achat',     icon:'stock',       color:'#9333ea' },
   { id:'separator3',  label:'QHSE & MAINTENANCE',  separator:true },
   { id:'qhse',        label:'QHSE / NC',           icon:'qhse',        color:'#b45309' },
   { id:'gmao',        label:'GMAO / Maintenance',  icon:'gmao',        color:'#92400e' },
@@ -2987,6 +2992,10 @@ export default function ChefAtelier() {
     articles:    <Articles />,
     matieres:    <MatieresPremières />,
     stock:       <Stock />,
+    clients:     <Clients />,
+    vente:       <Vente />,
+    fournisseurs:<Fournisseurs />,
+    achat:       <Achat />,
     cession:     <BonsCession />,
     qhse:        <QHSE />,
     gmao:        <GMAO />,
@@ -3111,6 +3120,604 @@ export default function ChefAtelier() {
         <footer style={{ background:'#fff', borderTop:'1px solid #e5e7eb', padding:'8px 24px', fontSize:11, color:'#9ca3af', textAlign:'center', flexShrink:0 }}>
           © 2026 NAIdo v3.0 — Logiciel créé par SOPHOPSY pour Green Industry
         </footer>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// MODULE CLIENTS
+// ══════════════════════════════════════════════════════════════
+function Clients() {
+  const [clients, setClients] = useState([]);
+  const [search, setSearch] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState({ code:'',type:'B2B',raison_sociale:'',contact_nom:'',telephone:'',email:'',adresse:'',ville:'',pays:'Algérie',nif:'',rc:'',condition_paiement:'30_jours',delai_paiement_jours:'30',credit_limite:'0',notes:'' });
+
+  const charger = async () => {
+    try { const {data} = await axios.get(`${API}/vente/clients${search?`?search=${search}`:''}`); setClients(data); }
+    catch {}
+  };
+  useEffect(() => { charger(); }, [search]);
+
+  const ouvrir = (c=null) => {
+    setEditing(c);
+    setForm(c ? { code:c.code,type:c.type,raison_sociale:c.raison_sociale,contact_nom:c.contact_nom||'',telephone:c.telephone||'',email:c.email||'',adresse:c.adresse||'',ville:c.ville||'',pays:c.pays||'Algérie',nif:c.nif||'',rc:c.rc||'',condition_paiement:c.condition_paiement||'30_jours',delai_paiement_jours:c.delai_paiement_jours||30,credit_limite:c.credit_limite||0,notes:c.notes||'' }
+      : { code:'',type:'B2B',raison_sociale:'',contact_nom:'',telephone:'',email:'',adresse:'',ville:'',pays:'Algérie',nif:'',rc:'',condition_paiement:'30_jours',delai_paiement_jours:'30',credit_limite:'0',notes:'' });
+    setShowForm(true);
+  };
+
+  const sauvegarder = async () => {
+    if (!form.code||!form.raison_sociale) return toast.error('Code et raison sociale requis');
+    try {
+      if (editing) await axios.put(`${API}/vente/clients/${editing.id}`, form);
+      else await axios.post(`${API}/vente/clients`, form);
+      toast.success(editing ? 'Client mis à jour' : 'Client créé');
+      setShowForm(false); charger();
+    } catch(e) { toast.error(e.response?.data?.error||'Erreur'); }
+  };
+
+  const TYPE_COLORS = { B2B:{bg:'#dbeafe',tx:'#1d4ed8'}, B2C:{bg:'#dcfce7',tx:'#15803d'}, B2G:{bg:'#fef3c7',tx:'#92400e'} };
+
+  return (
+    <div>
+      <div style={{display:'flex',gap:10,marginBottom:16,alignItems:'center'}}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Rechercher un client..."
+          style={{flex:1,border:'1px solid #d1d5db',borderRadius:8,padding:'9px 14px',fontSize:13}}/>
+        <button onClick={()=>ouvrir()} style={{background:'#0369a1',color:'#fff',border:'none',padding:'9px 20px',borderRadius:8,cursor:'pointer',fontWeight:700}}>
+          + Nouveau client
+        </button>
+      </div>
+
+      {showForm && (
+        <div style={{background:'#fff',borderRadius:12,border:'2px solid #93c5fd',marginBottom:16}}>
+          <div style={{background:'linear-gradient(135deg,#0369a1,#1d4ed8)',padding:'14px 24px',borderRadius:'12px 12px 0 0',display:'flex',justifyContent:'space-between'}}>
+            <span style={{color:'#fff',fontWeight:800,fontSize:15}}>{editing?'✏ Modifier client':'👤 Nouveau client'}</span>
+            <button onClick={()=>setShowForm(false)} style={{background:'rgba(255,255,255,0.2)',border:'none',color:'#fff',borderRadius:6,padding:'4px 12px',cursor:'pointer'}}>✕</button>
+          </div>
+          <div style={{padding:20,display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:12}}>
+            {[['Code *','code','text'],['Raison sociale *','raison_sociale','text'],['Type','type','select-type'],['Contact','contact_nom','text'],['Téléphone','telephone','text'],['Email','email','email'],['Adresse','adresse','text'],['Ville','ville','text'],['Pays','pays','text'],['NIF','nif','text'],['RC','rc','text'],['Crédit limite','credit_limite','number'],['Notes','notes','text']].map(([label,key,type])=>(
+              <div key={key}>
+                <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>{label}</label>
+                {type==='select-type'?(
+                  <select value={form[key]} onChange={e=>setForm({...form,[key]:e.target.value})} style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13}}>
+                    <option value="B2B">B2B — Entreprise</option>
+                    <option value="B2C">B2C — Particulier</option>
+                    <option value="B2G">B2G — Gouvernement</option>
+                  </select>
+                ):(
+                  <input type={type} value={form[key]||''} onChange={e=>setForm({...form,[key]:e.target.value})}
+                    style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13,boxSizing:'border-box'}}/>
+                )}
+              </div>
+            ))}
+          </div>
+          <div style={{padding:'0 20px 20px',display:'flex',gap:10}}>
+            <button onClick={sauvegarder} style={{background:'#0369a1',color:'#fff',border:'none',padding:'11px 32px',borderRadius:10,cursor:'pointer',fontWeight:700,fontSize:14}}>
+              {editing?'✓ Enregistrer':'✓ Créer'}
+            </button>
+            <button onClick={()=>setShowForm(false)} style={{background:'#f3f4f6',border:'none',padding:'11px 20px',borderRadius:10,cursor:'pointer'}}>Annuler</button>
+          </div>
+        </div>
+      )}
+
+      <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',overflow:'auto'}}>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:13,minWidth:600}}>
+          <thead>
+            <tr style={{background:'#eff6ff'}}>
+              {['Code','Raison sociale','Type','Téléphone','Ville','Solde','Actions'].map(h=>(
+                <th key={h} style={{padding:'10px 14px',textAlign:'left',fontWeight:700,color:'#0369a1',borderBottom:'2px solid #bfdbfe',whiteSpace:'nowrap'}}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {clients.map((c,i)=>(
+              <tr key={c.id} style={{borderBottom:'1px solid #eff6ff',background:i%2===0?'#fff':'#f8faff'}}>
+                <td style={{padding:'9px 14px',fontFamily:'monospace',fontWeight:700,color:'#0369a1',fontSize:12}}>{c.code}</td>
+                <td style={{padding:'9px 14px',fontWeight:500}}>{c.raison_sociale}</td>
+                <td style={{padding:'9px 14px'}}>
+                  <span style={{background:TYPE_COLORS[c.type]?.bg||'#f3f4f6',color:TYPE_COLORS[c.type]?.tx||'#374151',padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:700}}>{c.type}</span>
+                </td>
+                <td style={{padding:'9px 14px',color:'#6b7280'}}>{c.telephone||'—'}</td>
+                <td style={{padding:'9px 14px',color:'#6b7280'}}>{c.ville||'—'}</td>
+                <td style={{padding:'9px 14px',fontWeight:700,color:parseFloat(c.solde_actuel||0)<0?'#dc2626':'#374151'}}>
+                  {parseFloat(c.solde_actuel||0).toFixed(2)} DZD
+                </td>
+                <td style={{padding:'9px 14px'}}>
+                  <button onClick={()=>ouvrir(c)} style={{background:'#fef3c7',color:'#92400e',border:'none',padding:'4px 10px',borderRadius:6,cursor:'pointer',fontSize:11,fontWeight:600}}>✏ Modifier</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {clients.length===0&&<div style={{textAlign:'center',padding:40,color:'#9ca3af'}}><div style={{fontSize:36,marginBottom:8}}>👤</div><p>Aucun client — créez le premier</p></div>}
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// MODULE FOURNISSEURS
+// ══════════════════════════════════════════════════════════════
+function Fournisseurs() {
+  const [fournisseurs, setFournisseurs] = useState([]);
+  const [search, setSearch] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState({ code:'',raison_sociale:'',contact_nom:'',telephone:'',email:'',adresse:'',ville:'',pays:'Algérie',nif:'',condition_paiement:'30_jours',delai_paiement_jours:'30',notes:'' });
+
+  const charger = async () => {
+    try { const {data} = await axios.get(`${API}/achat/fournisseurs${search?`?search=${search}`:''}`); setFournisseurs(data); }
+    catch {}
+  };
+  useEffect(() => { charger(); }, [search]);
+
+  const ouvrir = (f=null) => {
+    setEditing(f);
+    setForm(f ? { code:f.code,raison_sociale:f.raison_sociale,contact_nom:f.contact_nom||'',telephone:f.telephone||'',email:f.email||'',adresse:f.adresse||'',ville:f.ville||'',pays:f.pays||'Algérie',nif:f.nif||'',condition_paiement:f.condition_paiement||'30_jours',delai_paiement_jours:f.delai_paiement_jours||30,notes:f.notes||'' }
+      : { code:'',raison_sociale:'',contact_nom:'',telephone:'',email:'',adresse:'',ville:'',pays:'Algérie',nif:'',condition_paiement:'30_jours',delai_paiement_jours:'30',notes:'' });
+    setShowForm(true);
+  };
+
+  const sauvegarder = async () => {
+    if (!form.code||!form.raison_sociale) return toast.error('Code et raison sociale requis');
+    try {
+      if (editing) await axios.put(`${API}/achat/fournisseurs/${editing.id}`, form);
+      else await axios.post(`${API}/achat/fournisseurs`, form);
+      toast.success(editing ? 'Fournisseur mis à jour' : 'Fournisseur créé');
+      setShowForm(false); charger();
+    } catch(e) { toast.error(e.response?.data?.error||'Erreur'); }
+  };
+
+  return (
+    <div>
+      <div style={{display:'flex',gap:10,marginBottom:16,alignItems:'center'}}>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="🔍 Rechercher un fournisseur..."
+          style={{flex:1,border:'1px solid #d1d5db',borderRadius:8,padding:'9px 14px',fontSize:13}}/>
+        <button onClick={()=>ouvrir()} style={{background:'#6d28d9',color:'#fff',border:'none',padding:'9px 20px',borderRadius:8,cursor:'pointer',fontWeight:700}}>
+          + Nouveau fournisseur
+        </button>
+      </div>
+
+      {showForm && (
+        <div style={{background:'#fff',borderRadius:12,border:'2px solid #c4b5fd',marginBottom:16}}>
+          <div style={{background:'linear-gradient(135deg,#6d28d9,#7c3aed)',padding:'14px 24px',borderRadius:'12px 12px 0 0',display:'flex',justifyContent:'space-between'}}>
+            <span style={{color:'#fff',fontWeight:800,fontSize:15}}>{editing?'✏ Modifier fournisseur':'🏭 Nouveau fournisseur'}</span>
+            <button onClick={()=>setShowForm(false)} style={{background:'rgba(255,255,255,0.2)',border:'none',color:'#fff',borderRadius:6,padding:'4px 12px',cursor:'pointer'}}>✕</button>
+          </div>
+          <div style={{padding:20,display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:12}}>
+            {[['Code *','code'],['Raison sociale *','raison_sociale'],['Contact','contact_nom'],['Téléphone','telephone'],['Email','email'],['Adresse','adresse'],['Ville','ville'],['NIF','nif'],['Notes','notes']].map(([label,key])=>(
+              <div key={key}>
+                <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>{label}</label>
+                <input value={form[key]||''} onChange={e=>setForm({...form,[key]:e.target.value})}
+                  style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13,boxSizing:'border-box'}}/>
+              </div>
+            ))}
+          </div>
+          <div style={{padding:'0 20px 20px',display:'flex',gap:10}}>
+            <button onClick={sauvegarder} style={{background:'#6d28d9',color:'#fff',border:'none',padding:'11px 32px',borderRadius:10,cursor:'pointer',fontWeight:700}}>{editing?'✓ Enregistrer':'✓ Créer'}</button>
+            <button onClick={()=>setShowForm(false)} style={{background:'#f3f4f6',border:'none',padding:'11px 20px',borderRadius:10,cursor:'pointer'}}>Annuler</button>
+          </div>
+        </div>
+      )}
+
+      <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',overflow:'auto'}}>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+          <thead>
+            <tr style={{background:'#f5f3ff'}}>
+              {['Code','Raison sociale','Contact','Téléphone','Ville','Actions'].map(h=>(
+                <th key={h} style={{padding:'10px 14px',textAlign:'left',fontWeight:700,color:'#6d28d9',borderBottom:'2px solid #c4b5fd'}}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {fournisseurs.map((f,i)=>(
+              <tr key={f.id} style={{borderBottom:'1px solid #f5f3ff',background:i%2===0?'#fff':'#faf5ff'}}>
+                <td style={{padding:'9px 14px',fontFamily:'monospace',fontWeight:700,color:'#6d28d9',fontSize:12}}>{f.code}</td>
+                <td style={{padding:'9px 14px',fontWeight:500}}>{f.raison_sociale}</td>
+                <td style={{padding:'9px 14px',color:'#6b7280'}}>{f.contact_nom||'—'}</td>
+                <td style={{padding:'9px 14px',color:'#6b7280'}}>{f.telephone||'—'}</td>
+                <td style={{padding:'9px 14px',color:'#6b7280'}}>{f.ville||'—'}</td>
+                <td style={{padding:'9px 14px'}}>
+                  <button onClick={()=>ouvrir(f)} style={{background:'#fef3c7',color:'#92400e',border:'none',padding:'4px 10px',borderRadius:6,cursor:'pointer',fontSize:11,fontWeight:600}}>✏ Modifier</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {fournisseurs.length===0&&<div style={{textAlign:'center',padding:40,color:'#9ca3af'}}><div style={{fontSize:36,marginBottom:8}}>🏭</div><p>Aucun fournisseur — créez le premier</p></div>}
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// MODULE VENTE — inspiré de Leinad Sale
+// ══════════════════════════════════════════════════════════════
+function Vente() {
+  const [onglet, setOnglet] = useState('liste');
+  const [ventes, setVentes] = useState([]);
+  const [clients, setClients] = useState([]);
+  const [articles, setArticles] = useState([]);
+  const [stats, setStats] = useState({});
+  const [filtreStatut, setFiltreStatut] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [lignes, setLignes] = useState([]);
+  const [form, setForm] = useState({ type_vente:'B2B',client_id:'',date_livraison_prevue:'',mode_paiement:'virement',taux_tva:'19',montant_remise:'0',reference_client:'',notes:'' });
+
+  const charger = async () => {
+    try {
+      const [v,c,a,s] = await Promise.all([
+        axios.get(`${API}/vente/ventes${filtreStatut?`?statut=${filtreStatut}`:''}`),
+        axios.get(`${API}/vente/clients`),
+        axios.get(`${API}/articles`),
+        axios.get(`${API}/vente/ventes/stats/resume`),
+      ]);
+      setVentes(v.data); setClients(c.data); setArticles(a.data); setStats(s.data);
+    } catch {}
+  };
+  useEffect(()=>{ charger(); },[filtreStatut]);
+
+  const ajouterLigne = () => setLignes([...lignes,{article_id:'',designation:'',quantite:'1',prix_unitaire_ht:'0',taux_remise:'0',taux_tva:'19'}]);
+
+  const creerVente = async () => {
+    if (!lignes.length) return toast.error('Ajoutez au moins un article');
+    try {
+      await axios.post(`${API}/vente/ventes`,{...form,lignes});
+      toast.success('Vente créée');
+      setShowForm(false); setLignes([]); charger();
+    } catch(e) { toast.error(e.response?.data?.error||'Erreur'); }
+  };
+
+  const changerStatut = async (id, statut) => {
+    try { await axios.put(`${API}/vente/ventes/${id}/statut`,{statut}); toast.success(`Statut → ${statut}`); charger(); }
+    catch(e) { toast.error(e.response?.data?.error||'Erreur'); }
+  };
+
+  const STATUT = { brouillon:{bg:'#f3f4f6',tx:'#6b7280'}, confirme:{bg:'#dbeafe',tx:'#1d4ed8'}, livre:{bg:'#fef3c7',tx:'#92400e'}, facture:{bg:'#f5f3ff',tx:'#7e22ce'}, paye:{bg:'#dcfce7',tx:'#15803d'}, annule:{bg:'#fee2e2',tx:'#dc2626'} };
+
+  const totalLignes = lignes.reduce((s,l)=>{
+    const ht = (parseFloat(l.quantite)||0)*(parseFloat(l.prix_unitaire_ht)||0)*(1-(parseFloat(l.taux_remise)||0)/100);
+    return s + ht*(1+(parseFloat(l.taux_tva)||19)/100);
+  },0);
+
+  return (
+    <div>
+      {/* KPIs */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:12,marginBottom:20}}>
+        {[
+          {label:'CA TTC (année)',value:`${parseFloat(stats.ca_ttc||0).toLocaleString('fr-FR')} DZD`,color:'#15803d',bg:'#dcfce7',icon:'💰'},
+          {label:'Nb ventes',value:stats.nb_ventes||0,color:'#1d4ed8',bg:'#dbeafe',icon:'📋'},
+          {label:'Encaissé',value:`${parseFloat(stats.total_encaisse||0).toLocaleString('fr-FR')} DZD`,color:'#0369a1',bg:'#e0f2fe',icon:'✅'},
+          {label:'Restant dû',value:`${parseFloat(stats.total_restant||0).toLocaleString('fr-FR')} DZD`,color:parseFloat(stats.total_restant||0)>0?'#dc2626':'#15803d',bg:'#fee2e2',icon:'⏳'},
+          {label:'Brouillons',value:stats.nb_brouillon||0,color:'#6b7280',bg:'#f3f4f6',icon:'📝'},
+        ].map(k=>(
+          <div key={k.label} style={{background:k.bg,borderRadius:12,padding:'14px 16px'}}>
+            <div style={{fontSize:11,color:'#6b7280',marginBottom:4}}>{k.icon} {k.label}</div>
+            <div style={{fontSize:20,fontWeight:800,color:k.color}}>{k.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Actions */}
+      <div style={{display:'flex',gap:10,marginBottom:16,flexWrap:'wrap',alignItems:'center'}}>
+        <div style={{display:'flex',gap:0,flex:1}}>
+          {['','brouillon','confirme','livre','facture','paye','annule'].map(s=>(
+            <button key={s} onClick={()=>setFiltreStatut(s)} style={{padding:'7px 14px',border:'1px solid #e5e7eb',background:filtreStatut===s?'#1d4ed8':'#fff',color:filtreStatut===s?'#fff':'#6b7280',cursor:'pointer',fontSize:12,fontWeight:filtreStatut===s?700:400,borderRadius:s===''?'8px 0 0 8px':s==='annule'?'0 8px 8px 0':'0'}}>
+              {s||'Tous'}
+            </button>
+          ))}
+        </div>
+        <button onClick={()=>{ setShowForm(true); setLignes([]); }} style={{background:'#15803d',color:'#fff',border:'none',padding:'9px 20px',borderRadius:8,cursor:'pointer',fontWeight:700,whiteSpace:'nowrap'}}>
+          + Nouvelle vente
+        </button>
+      </div>
+
+      {/* Formulaire création vente */}
+      {showForm && (
+        <div style={{background:'#fff',borderRadius:12,border:'2px solid #86efac',marginBottom:16}}>
+          <div style={{background:'linear-gradient(135deg,#15803d,#16a34a)',padding:'14px 24px',borderRadius:'12px 12px 0 0',display:'flex',justifyContent:'space-between'}}>
+            <span style={{color:'#fff',fontWeight:800,fontSize:15}}>🧾 Nouvelle Vente</span>
+            <button onClick={()=>setShowForm(false)} style={{background:'rgba(255,255,255,0.2)',border:'none',color:'#fff',borderRadius:6,padding:'4px 12px',cursor:'pointer'}}>✕</button>
+          </div>
+          <div style={{padding:20}}>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:12,marginBottom:16}}>
+              <div>
+                <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>Client</label>
+                <select value={form.client_id} onChange={e=>setForm({...form,client_id:e.target.value})} style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13}}>
+                  <option value="">-- Client --</option>
+                  {clients.map(c=><option key={c.id} value={c.id}>{c.code} — {c.raison_sociale}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>Type</label>
+                <select value={form.type_vente} onChange={e=>setForm({...form,type_vente:e.target.value})} style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13}}>
+                  {['B2B','B2C','B2G'].map(t=><option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>Mode paiement</label>
+                <select value={form.mode_paiement} onChange={e=>setForm({...form,mode_paiement:e.target.value})} style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13}}>
+                  {[['especes','Espèces'],['cheque','Chèque'],['virement','Virement'],['traite','Traite'],['mixte','Mixte']].map(([v,l])=><option key={v} value={v}>{l}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>Date livraison prévue</label>
+                <input type="date" value={form.date_livraison_prevue} onChange={e=>setForm({...form,date_livraison_prevue:e.target.value})} style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13,boxSizing:'border-box'}}/>
+              </div>
+              <div>
+                <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>Référence client</label>
+                <input value={form.reference_client} onChange={e=>setForm({...form,reference_client:e.target.value})} style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13,boxSizing:'border-box'}}/>
+              </div>
+              <div>
+                <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>Notes</label>
+                <input value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13,boxSizing:'border-box'}}/>
+              </div>
+            </div>
+
+            {/* Lignes de vente */}
+            <div style={{background:'#f8faff',borderRadius:10,padding:14,marginBottom:12}}>
+              <div style={{display:'flex',justifyContent:'space-between',marginBottom:10}}>
+                <span style={{fontWeight:700,color:'#1d4ed8',fontSize:13}}>Lignes de vente</span>
+                <button onClick={ajouterLigne} style={{background:'#1d4ed8',color:'#fff',border:'none',padding:'5px 14px',borderRadius:6,cursor:'pointer',fontSize:12,fontWeight:700}}>+ Ajouter ligne</button>
+              </div>
+              {lignes.map((l,i)=>(
+                <div key={i} style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr 1fr auto',gap:8,marginBottom:8,alignItems:'end'}}>
+                  <div>
+                    <label style={{fontSize:10,color:'#6b7280',display:'block',marginBottom:2}}>Article</label>
+                    <select value={l.article_id} onChange={e=>{
+                      const art = articles.find(a=>a.id===e.target.value);
+                      const nl=[...lignes]; nl[i]={...nl[i],article_id:e.target.value,designation:art?.designation||'',prix_unitaire_ht:art?.prix_vente||'0'};
+                      setLignes(nl);
+                    }} style={{width:'100%',border:'1px solid #d1d5db',borderRadius:6,padding:'8px',fontSize:12}}>
+                      <option value="">-- Article --</option>
+                      {articles.map(a=><option key={a.id} value={a.id}>{a.code} — {a.designation}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{fontSize:10,color:'#6b7280',display:'block',marginBottom:2}}>Qté</label>
+                    <input type="number" value={l.quantite} onChange={e=>{const nl=[...lignes];nl[i]={...nl[i],quantite:e.target.value};setLignes(nl);}} style={{width:'100%',border:'1px solid #d1d5db',borderRadius:6,padding:'8px',fontSize:12,textAlign:'center',boxSizing:'border-box'}}/>
+                  </div>
+                  <div>
+                    <label style={{fontSize:10,color:'#6b7280',display:'block',marginBottom:2}}>Prix HT</label>
+                    <input type="number" value={l.prix_unitaire_ht} onChange={e=>{const nl=[...lignes];nl[i]={...nl[i],prix_unitaire_ht:e.target.value};setLignes(nl);}} style={{width:'100%',border:'1px solid #d1d5db',borderRadius:6,padding:'8px',fontSize:12,textAlign:'center',boxSizing:'border-box'}}/>
+                  </div>
+                  <div>
+                    <label style={{fontSize:10,color:'#6b7280',display:'block',marginBottom:2}}>TVA %</label>
+                    <input type="number" value={l.taux_tva} onChange={e=>{const nl=[...lignes];nl[i]={...nl[i],taux_tva:e.target.value};setLignes(nl);}} style={{width:'100%',border:'1px solid #d1d5db',borderRadius:6,padding:'8px',fontSize:12,textAlign:'center',boxSizing:'border-box'}}/>
+                  </div>
+                  <button onClick={()=>setLignes(lignes.filter((_,j)=>j!==i))} style={{background:'#fee2e2',color:'#dc2626',border:'none',padding:'8px 10px',borderRadius:6,cursor:'pointer',fontWeight:700}}>✕</button>
+                </div>
+              ))}
+              {lignes.length>0&&(
+                <div style={{textAlign:'right',fontWeight:800,fontSize:15,color:'#15803d',marginTop:8,paddingTop:8,borderTop:'2px solid #dcfce7'}}>
+                  Total TTC : {totalLignes.toLocaleString('fr-FR',{minimumFractionDigits:2})} DZD
+                </div>
+              )}
+            </div>
+
+            <div style={{display:'flex',gap:10}}>
+              <button onClick={creerVente} style={{background:'#15803d',color:'#fff',border:'none',padding:'12px 32px',borderRadius:10,cursor:'pointer',fontWeight:800,fontSize:14}}>✓ Créer la vente</button>
+              <button onClick={()=>setShowForm(false)} style={{background:'#f3f4f6',border:'none',padding:'12px 20px',borderRadius:10,cursor:'pointer'}}>Annuler</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Liste ventes */}
+      <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',overflow:'auto'}}>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:13,minWidth:700}}>
+          <thead>
+            <tr style={{background:'#f0fdf4'}}>
+              {['N° Vente','Client','Type','Date','Montant TTC','Payé','Statut','Actions'].map(h=>(
+                <th key={h} style={{padding:'10px 14px',textAlign:'left',fontWeight:700,color:'#15803d',borderBottom:'2px solid #86efac',whiteSpace:'nowrap'}}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {ventes.map((v,i)=>{
+              const sc=STATUT[v.statut]||STATUT.brouillon;
+              return (
+                <tr key={v.id} style={{borderBottom:'1px solid #f0fdf4',background:i%2===0?'#fff':'#f8fff8'}}>
+                  <td style={{padding:'9px 14px',fontFamily:'monospace',fontWeight:700,color:'#15803d',fontSize:12}}>{v.numero_vente}</td>
+                  <td style={{padding:'9px 14px',fontSize:12}}>{v.client_nom||<span style={{color:'#9ca3af'}}>—</span>}</td>
+                  <td style={{padding:'9px 14px'}}><span style={{background:'#dbeafe',color:'#1d4ed8',padding:'2px 6px',borderRadius:20,fontSize:11,fontWeight:700}}>{v.type_vente}</span></td>
+                  <td style={{padding:'9px 14px',fontSize:12,color:'#6b7280'}}>{new Date(v.date_vente).toLocaleDateString('fr-FR')}</td>
+                  <td style={{padding:'9px 14px',fontWeight:700}}>{parseFloat(v.montant_ttc||0).toLocaleString('fr-FR')} DZD</td>
+                  <td style={{padding:'9px 14px',fontWeight:700,color:parseFloat(v.solde_restant||0)>0?'#dc2626':'#15803d'}}>
+                    {parseFloat(v.montant_paye||0).toLocaleString('fr-FR')} DZD
+                  </td>
+                  <td style={{padding:'9px 14px'}}><span style={{background:sc.bg,color:sc.tx,padding:'3px 10px',borderRadius:20,fontSize:11,fontWeight:700}}>{v.statut}</span></td>
+                  <td style={{padding:'9px 14px'}}>
+                    <div style={{display:'flex',gap:4}}>
+                      {v.statut==='brouillon'&&<button onClick={()=>changerStatut(v.id,'confirme')} style={{background:'#dbeafe',color:'#1d4ed8',border:'none',padding:'3px 8px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>Confirmer</button>}
+                      {v.statut==='confirme'&&<button onClick={()=>changerStatut(v.id,'livre')} style={{background:'#fef3c7',color:'#92400e',border:'none',padding:'3px 8px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>Livrer</button>}
+                      {v.statut==='livre'&&<button onClick={()=>changerStatut(v.id,'paye')} style={{background:'#dcfce7',color:'#15803d',border:'none',padding:'3px 8px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>Payer</button>}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {ventes.length===0&&<div style={{textAlign:'center',padding:40,color:'#9ca3af'}}><div style={{fontSize:36,marginBottom:8}}>🧾</div><p>Aucune vente — créez la première</p></div>}
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// MODULE ACHAT — inspiré de Leinad PurchaseOrder
+// ══════════════════════════════════════════════════════════════
+function Achat() {
+  const [commandes, setCommandes] = useState([]);
+  const [fournisseurs, setFournisseurs] = useState([]);
+  const [articles, setArticles] = useState([]);
+  const [filtreStatut, setFiltreStatut] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [lignes, setLignes] = useState([]);
+  const [form, setForm] = useState({ fournisseur_id:'',date_commande:new Date().toISOString().split('T')[0],date_livraison_prevue:'',taux_tva:'19',reference_fournisseur:'',notes:'' });
+
+  const charger = async () => {
+    try {
+      const [c,f,a] = await Promise.all([
+        axios.get(`${API}/achat/commandes${filtreStatut?`?statut=${filtreStatut}`:''}`),
+        axios.get(`${API}/achat/fournisseurs`),
+        axios.get(`${API}/articles`),
+      ]);
+      setCommandes(c.data); setFournisseurs(f.data); setArticles(a.data);
+    } catch {}
+  };
+  useEffect(()=>{ charger(); },[filtreStatut]);
+
+  const ajouterLigne = () => setLignes([...lignes,{article_id:'',designation:'',quantite_commandee:'1',prix_unitaire_ht:'0',taux_tva:'19'}]);
+
+  const creerCommande = async () => {
+    if (!lignes.length) return toast.error('Ajoutez au moins un article');
+    try {
+      await axios.post(`${API}/achat/commandes`,{...form,lignes});
+      toast.success('Commande créée');
+      setShowForm(false); setLignes([]); charger();
+    } catch(e) { toast.error(e.response?.data?.error||'Erreur'); }
+  };
+
+  const changerStatut = async (id,statut) => {
+    try { await axios.put(`${API}/achat/commandes/${id}/statut`,{statut}); toast.success(`Statut → ${statut}`); charger(); }
+    catch(e) { toast.error(e.response?.data?.error||'Erreur'); }
+  };
+
+  const STATUT = { brouillon:{bg:'#f3f4f6',tx:'#6b7280'}, envoye:{bg:'#dbeafe',tx:'#1d4ed8'}, confirme:{bg:'#fef3c7',tx:'#92400e'}, receptionne_partiel:{bg:'#f5f3ff',tx:'#7e22ce'}, receptionne:{bg:'#dcfce7',tx:'#15803d'}, annule:{bg:'#fee2e2',tx:'#dc2626'} };
+
+  const totalLignes = lignes.reduce((s,l)=>{
+    const ht=(parseFloat(l.quantite_commandee)||0)*(parseFloat(l.prix_unitaire_ht)||0);
+    return s+ht*(1+(parseFloat(l.taux_tva)||19)/100);
+  },0);
+
+  return (
+    <div>
+      <div style={{display:'flex',gap:10,marginBottom:16,flexWrap:'wrap',alignItems:'center'}}>
+        <div style={{display:'flex',gap:0,flex:1}}>
+          {['','brouillon','envoye','confirme','receptionne','annule'].map(s=>(
+            <button key={s} onClick={()=>setFiltreStatut(s)} style={{padding:'7px 14px',border:'1px solid #e5e7eb',background:filtreStatut===s?'#6d28d9':'#fff',color:filtreStatut===s?'#fff':'#6b7280',cursor:'pointer',fontSize:12,fontWeight:filtreStatut===s?700:400,borderRadius:s===''?'8px 0 0 8px':s==='annule'?'0 8px 8px 0':'0'}}>
+              {s||'Tous'}
+            </button>
+          ))}
+        </div>
+        <button onClick={()=>{ setShowForm(true); setLignes([]); }} style={{background:'#6d28d9',color:'#fff',border:'none',padding:'9px 20px',borderRadius:8,cursor:'pointer',fontWeight:700,whiteSpace:'nowrap'}}>
+          + Nouvelle commande
+        </button>
+      </div>
+
+      {showForm && (
+        <div style={{background:'#fff',borderRadius:12,border:'2px solid #c4b5fd',marginBottom:16}}>
+          <div style={{background:'linear-gradient(135deg,#6d28d9,#7c3aed)',padding:'14px 24px',borderRadius:'12px 12px 0 0',display:'flex',justifyContent:'space-between'}}>
+            <span style={{color:'#fff',fontWeight:800,fontSize:15}}>🛒 Nouvelle Commande Achat</span>
+            <button onClick={()=>setShowForm(false)} style={{background:'rgba(255,255,255,0.2)',border:'none',color:'#fff',borderRadius:6,padding:'4px 12px',cursor:'pointer'}}>✕</button>
+          </div>
+          <div style={{padding:20}}>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))',gap:12,marginBottom:16}}>
+              <div>
+                <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>Fournisseur</label>
+                <select value={form.fournisseur_id} onChange={e=>setForm({...form,fournisseur_id:e.target.value})} style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13}}>
+                  <option value="">-- Fournisseur --</option>
+                  {fournisseurs.map(f=><option key={f.id} value={f.id}>{f.code} — {f.raison_sociale}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>Date commande</label>
+                <input type="date" value={form.date_commande} onChange={e=>setForm({...form,date_commande:e.target.value})} style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13,boxSizing:'border-box'}}/>
+              </div>
+              <div>
+                <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>Livraison prévue</label>
+                <input type="date" value={form.date_livraison_prevue} onChange={e=>setForm({...form,date_livraison_prevue:e.target.value})} style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13,boxSizing:'border-box'}}/>
+              </div>
+              <div>
+                <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>Réf. fournisseur</label>
+                <input value={form.reference_fournisseur} onChange={e=>setForm({...form,reference_fournisseur:e.target.value})} style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13,boxSizing:'border-box'}}/>
+              </div>
+              <div>
+                <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>Notes</label>
+                <input value={form.notes} onChange={e=>setForm({...form,notes:e.target.value})} style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13,boxSizing:'border-box'}}/>
+              </div>
+            </div>
+
+            <div style={{background:'#f5f3ff',borderRadius:10,padding:14,marginBottom:12}}>
+              <div style={{display:'flex',justifyContent:'space-between',marginBottom:10}}>
+                <span style={{fontWeight:700,color:'#6d28d9',fontSize:13}}>Lignes de commande</span>
+                <button onClick={ajouterLigne} style={{background:'#6d28d9',color:'#fff',border:'none',padding:'5px 14px',borderRadius:6,cursor:'pointer',fontSize:12,fontWeight:700}}>+ Ajouter ligne</button>
+              </div>
+              {lignes.map((l,i)=>(
+                <div key={i} style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr auto',gap:8,marginBottom:8,alignItems:'end'}}>
+                  <div>
+                    <label style={{fontSize:10,color:'#6b7280',display:'block',marginBottom:2}}>Article</label>
+                    <select value={l.article_id} onChange={e=>{
+                      const art=articles.find(a=>a.id===e.target.value);
+                      const nl=[...lignes]; nl[i]={...nl[i],article_id:e.target.value,designation:art?.designation||'',prix_unitaire_ht:art?.prix_achat||'0'};
+                      setLignes(nl);
+                    }} style={{width:'100%',border:'1px solid #d1d5db',borderRadius:6,padding:'8px',fontSize:12}}>
+                      <option value="">-- Article / MP --</option>
+                      {articles.map(a=><option key={a.id} value={a.id}>{a.code} — {a.designation}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{fontSize:10,color:'#6b7280',display:'block',marginBottom:2}}>Qté commandée</label>
+                    <input type="number" value={l.quantite_commandee} onChange={e=>{const nl=[...lignes];nl[i]={...nl[i],quantite_commandee:e.target.value};setLignes(nl);}} style={{width:'100%',border:'1px solid #d1d5db',borderRadius:6,padding:'8px',fontSize:12,textAlign:'center',boxSizing:'border-box'}}/>
+                  </div>
+                  <div>
+                    <label style={{fontSize:10,color:'#6b7280',display:'block',marginBottom:2}}>Prix HT</label>
+                    <input type="number" value={l.prix_unitaire_ht} onChange={e=>{const nl=[...lignes];nl[i]={...nl[i],prix_unitaire_ht:e.target.value};setLignes(nl);}} style={{width:'100%',border:'1px solid #d1d5db',borderRadius:6,padding:'8px',fontSize:12,textAlign:'center',boxSizing:'border-box'}}/>
+                  </div>
+                  <button onClick={()=>setLignes(lignes.filter((_,j)=>j!==i))} style={{background:'#fee2e2',color:'#dc2626',border:'none',padding:'8px 10px',borderRadius:6,cursor:'pointer',fontWeight:700}}>✕</button>
+                </div>
+              ))}
+              {lignes.length>0&&(
+                <div style={{textAlign:'right',fontWeight:800,fontSize:15,color:'#6d28d9',marginTop:8,paddingTop:8,borderTop:'2px solid #c4b5fd'}}>
+                  Total TTC : {totalLignes.toLocaleString('fr-FR',{minimumFractionDigits:2})} DZD
+                </div>
+              )}
+            </div>
+            <div style={{display:'flex',gap:10}}>
+              <button onClick={creerCommande} style={{background:'#6d28d9',color:'#fff',border:'none',padding:'12px 32px',borderRadius:10,cursor:'pointer',fontWeight:800,fontSize:14}}>✓ Créer la commande</button>
+              <button onClick={()=>setShowForm(false)} style={{background:'#f3f4f6',border:'none',padding:'12px 20px',borderRadius:10,cursor:'pointer'}}>Annuler</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',overflow:'auto'}}>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:13,minWidth:700}}>
+          <thead>
+            <tr style={{background:'#f5f3ff'}}>
+              {['N° Commande','Fournisseur','Date','Livraison','Montant TTC','Statut','Actions'].map(h=>(
+                <th key={h} style={{padding:'10px 14px',textAlign:'left',fontWeight:700,color:'#6d28d9',borderBottom:'2px solid #c4b5fd',whiteSpace:'nowrap'}}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {commandes.map((c,i)=>{
+              const sc=STATUT[c.statut]||STATUT.brouillon;
+              return (
+                <tr key={c.id} style={{borderBottom:'1px solid #f5f3ff',background:i%2===0?'#fff':'#faf5ff'}}>
+                  <td style={{padding:'9px 14px',fontFamily:'monospace',fontWeight:700,color:'#6d28d9',fontSize:12}}>{c.numero_commande}</td>
+                  <td style={{padding:'9px 14px',fontSize:12}}>{c.fournisseur_nom||'—'}</td>
+                  <td style={{padding:'9px 14px',fontSize:12,color:'#6b7280'}}>{c.date_commande?new Date(c.date_commande).toLocaleDateString('fr-FR'):'—'}</td>
+                  <td style={{padding:'9px 14px',fontSize:12,color:'#6b7280'}}>{c.date_livraison_prevue?new Date(c.date_livraison_prevue).toLocaleDateString('fr-FR'):'—'}</td>
+                  <td style={{padding:'9px 14px',fontWeight:700}}>{parseFloat(c.montant_ttc||0).toLocaleString('fr-FR')} DZD</td>
+                  <td style={{padding:'9px 14px'}}><span style={{background:sc.bg,color:sc.tx,padding:'3px 10px',borderRadius:20,fontSize:11,fontWeight:700}}>{c.statut}</span></td>
+                  <td style={{padding:'9px 14px'}}>
+                    <div style={{display:'flex',gap:4}}>
+                      {c.statut==='brouillon'&&<button onClick={()=>changerStatut(c.id,'envoye')} style={{background:'#dbeafe',color:'#1d4ed8',border:'none',padding:'3px 8px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>Envoyer</button>}
+                      {c.statut==='envoye'&&<button onClick={()=>changerStatut(c.id,'confirme')} style={{background:'#fef3c7',color:'#92400e',border:'none',padding:'3px 8px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>Confirmer</button>}
+                      {c.statut==='confirme'&&<button onClick={()=>changerStatut(c.id,'receptionne')} style={{background:'#dcfce7',color:'#15803d',border:'none',padding:'3px 8px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>Réceptionner</button>}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {commandes.length===0&&<div style={{textAlign:'center',padding:40,color:'#9ca3af'}}><div style={{fontSize:36,marginBottom:8}}>🛒</div><p>Aucune commande — créez la première</p></div>}
       </div>
     </div>
   );
