@@ -2758,7 +2758,7 @@ function QHSE() {
               {formType==='accident' && <>
                 <S label="Type" k="type" opts={[
                   {v:'accident',l:'🔴 Accident'},{v:'incident',l:'🟡 Incident'},
-                  {v:'presqu_accident',l:'🟠 Presqu'accident'},{v:'maladie_pro',l:'🔵 Maladie pro'},
+                  {v:'presqu_accident',l:'🟠 Presqu-accident'},{v:'maladie_pro',l:'🔵 Maladie pro'},
                   {v:'danger_grave',l:'⛔ Danger grave'}
                 ]}/>
                 <S label="Gravité" k="gravite_sst" opts={[
