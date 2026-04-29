@@ -648,8 +648,15 @@ function Articles() {
     if (!form.designation.trim()) return toast.error('Désignation obligatoire');
     try {
       const payload = new FormData();
-      Object.entries(form).forEach(([k, v]) => { if (v !== '' && v !== null && v !== undefined) payload.append(k, String(v)); });
-      if (composition.length > 0) payload.append('composition', JSON.stringify(composition));
+      // Exclure les champs tableau/objet du form - ils seront gérés séparément
+      const champsExclus = ['matieres_principales', 'composition'];
+      Object.entries(form).forEach(([k, v]) => {
+        if (champsExclus.includes(k)) return;
+        if (v !== '' && v !== null && v !== undefined && !Array.isArray(v))
+          payload.append(k, String(v));
+      });
+      // Composition : toujours envoyer comme JSON valide
+      payload.append('composition', JSON.stringify(composition.length > 0 ? composition : []));
       if (modeEditArt && editArtId) {
         await axios.put(`${API}/articles/${editArtId}`, payload, { headers: { 'Content-Type': 'multipart/form-data' } });
         toast.success(`✓ ${form.designation} mis à jour`);
@@ -1126,7 +1133,11 @@ function MatieresPremières() {
     if (!form.designation.trim()) return toast.error('Désignation obligatoire');
     try {
       const fd = new FormData();
-      Object.entries(form).forEach(([k, v]) => { if (v !== '' && v !== null && v !== undefined) fd.append(k, String(v)); });
+      Object.entries(form).forEach(([k, v]) => {
+        if (Array.isArray(v)) return; // Skip les tableaux
+        if (v !== '' && v !== null && v !== undefined)
+          fd.append(k, String(v));
+      });
       if (files.fiche_technique) fd.append('fiche_technique', files.fiche_technique);
       if (files.fiche_securite) fd.append('fiche_securite', files.fiche_securite);
       if (files.photo) fd.append('photo', files.photo);
