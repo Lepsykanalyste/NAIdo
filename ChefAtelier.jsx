@@ -1489,139 +1489,477 @@ function MatieresPremières() {
 
 
 function BonsCession() {
-  const [mouvements, setMouvements] = useState([]);
-  const [showForm, setShowForm] = useState(false);
+  const [bons, setBons] = useState([]);
   const [ateliers, setAteliers] = useState([]);
   const [articles, setArticles] = useState([]);
-  const [lignes, setLignes] = useState([{article_id:'',qte_prevue:'',poids_theorique_kg:''}]);
-  const [form, setForm] = useState({ type_mouvement:'cession_atelier', atelier_source_id:'', atelier_dest_id:'', date_mouvement:new Date().toISOString().split('T')[0], notes:'' });
+  const [showForm, setShowForm] = useState(false);
+  const [detail, setDetail] = useState(null);
+  const [filtreStatut, setFiltreStatut] = useState('');
+  const [lignes, setLignes] = useState([{ article_id:'', designation:'', qte_prevue:'', unite_id:'', poids_theorique_kg:'', notes:'' }]);
+  const [form, setForm] = useState({
+    type_mouvement:'cession_interne',
+    atelier_source_id:'', atelier_dest_id:'',
+    date_mouvement: new Date().toISOString().split('T')[0],
+    demandeur:'', destinataire:'', motif:'', notes:''
+  });
 
-  useEffect(() => {
-    Promise.all([
-      axios.get(`${API}/mouvements`),
-      axios.get(`${API}/ateliers`),
-      axios.get(`${API}/articles`),
-    ]).then(([m,a,art]) => { setMouvements(m.data); setAteliers(a.data); setArticles(art.data); }).catch(() => {});
-  }, []);
+  const TYPE_LABELS = {
+    cession_interne: '🔄 Cession interne',
+    retour_production: '↩ Retour production',
+    transfert_mp: '📦 Transfert MP',
+    livraison_interne: '🚚 Livraison interne',
+  };
+
+  const STATUT_COLORS = {
+    brouillon:   { bg:'#f3f4f6', tx:'#6b7280' },
+    valide:      { bg:'#dcfce7', tx:'#15803d' },
+    receptionne: { bg:'#dbeafe', tx:'#1d4ed8' },
+    annule:      { bg:'#fee2e2', tx:'#dc2626' },
+  };
+
+  const charger = async () => {
+    try {
+      const [m, a, arts] = await Promise.all([
+        axios.get(`${API}/mouvements${filtreStatut ? `?statut=${filtreStatut}` : ''}`),
+        axios.get(`${API}/ateliers`),
+        axios.get(`${API}/articles`),
+      ]);
+      setBons(m.data); setAteliers(a.data); setArticles(arts.data);
+    } catch {}
+  };
+
+  useEffect(() => { charger(); }, [filtreStatut]);
 
   const creer = async () => {
     const lignesValides = lignes.filter(l => l.article_id && l.qte_prevue);
     if (!lignesValides.length) return toast.error('Ajoutez au moins une ligne');
+    if (!form.atelier_source_id || !form.atelier_dest_id) return toast.error('Source et destination requises');
     try {
       await axios.post(`${API}/mouvements`, { ...form, lignes: lignesValides });
-      toast.success('Bon créé');
+      toast.success('Bon de cession créé');
       setShowForm(false);
-      const { data } = await axios.get(`${API}/mouvements`);
-      setMouvements(data);
-    } catch (err) { toast.error(err.response?.data?.error || 'Erreur'); }
+      setLignes([{ article_id:'', designation:'', qte_prevue:'', unite_id:'', poids_theorique_kg:'', notes:'' }]);
+      charger();
+    } catch(e) { toast.error(e.response?.data?.error || 'Erreur'); }
   };
 
   const valider = async (id) => {
     try {
       await axios.put(`${API}/mouvements/${id}/valider`);
-      toast.success('Bon validé');
-      const { data } = await axios.get(`${API}/mouvements`);
-      setMouvements(data);
-    } catch (err) { toast.error(err.response?.data?.error || 'Erreur'); }
+      toast.success('Bon validé ✓');
+      charger();
+      if (detail?.id === id) setDetail({ ...detail, statut:'valide' });
+    } catch(e) { toast.error(e.response?.data?.error || 'Erreur validation'); }
   };
 
-  const TYPE_LABELS = { cession_atelier:'Bon de Cession', livraison_mp:'Livraison MP', livraison_pf_interne:'Livraison Interne', reception_achat:'Bon de Réception', expedition_vente:"Bon d'Expédition", retour_atelier:'Bon de Retour' };
-  const SCOLOR = { brouillon:'#f3f4f6', valide:'#dcfce7', receptionne:'#e0e7ff', annule:'#fee2e2' };
-  const STEXT  = { brouillon:'#374151', valide:'#15803d', receptionne:'#4338ca', annule:'#dc2626' };
+  const receptionner = async (id) => {
+    try {
+      await axios.put(`${API}/mouvements/${id}/receptionner`);
+      toast.success('Réception confirmée ✓');
+      charger();
+    } catch(e) { toast.error(e.response?.data?.error || 'Erreur'); }
+  };
+
+  const voirDetail = async (bon) => {
+    try {
+      const { data } = await axios.get(`${API}/mouvements/${bon.id}`);
+      setDetail(data);
+    } catch { setDetail(bon); }
+  };
+
+  const imprimer = (bon) => {
+    const lignesHtml = (bon.lignes || []).map(l => `
+      <tr>
+        <td style="padding:8px;border:1px solid #ddd">${l.article_code || '—'}</td>
+        <td style="padding:8px;border:1px solid #ddd">${l.designation || l.article_designation || '—'}</td>
+        <td style="padding:8px;border:1px solid #ddd;text-align:center">${parseFloat(l.qte_prevue||0).toFixed(3)}</td>
+        <td style="padding:8px;border:1px solid #ddd;text-align:center">${parseFloat(l.poids_reel_kg||l.poids_theorique_kg||0).toFixed(3)} kg</td>
+        <td style="padding:8px;border:1px solid #ddd">${l.notes||'—'}</td>
+      </tr>
+    `).join('');
+
+    const html = `<!DOCTYPE html><html><head>
+      <meta charset="utf-8">
+      <title>Bon de Cession ${bon.numero_bon}</title>
+      <style>
+        body { font-family: Arial, sans-serif; margin: 20px; color: #333; }
+        .header { display: flex; justify-content: space-between; margin-bottom: 24px; border-bottom: 3px solid #4338ca; padding-bottom: 16px; }
+        .title { font-size: 22px; font-weight: bold; color: #4338ca; }
+        .subtitle { font-size: 13px; color: #666; margin-top: 4px; }
+        .numero { font-size: 18px; font-weight: bold; color: #4338ca; text-align: right; }
+        .date { font-size: 12px; color: #666; }
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; background: #f8f9ff; padding: 16px; border-radius: 8px; }
+        .info-item label { font-size: 11px; color: #666; font-weight: bold; text-transform: uppercase; }
+        .info-item p { margin: 4px 0 0; font-size: 14px; font-weight: 600; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
+        thead tr { background: #4338ca; color: white; }
+        thead th { padding: 10px; text-align: left; font-size: 12px; }
+        tbody tr:nth-child(even) { background: #f8f9ff; }
+        .statut { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: bold; background: #dcfce7; color: #15803d; }
+        .signatures { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-top: 40px; }
+        .sig-box { border: 1px solid #ddd; border-radius: 8px; padding: 16px; text-align: center; }
+        .sig-box label { font-size: 11px; color: #666; font-weight: bold; }
+        .sig-line { border-top: 1px solid #333; margin-top: 40px; }
+        .footer { text-align: center; font-size: 11px; color: #999; margin-top: 32px; border-top: 1px solid #ddd; padding-top: 12px; }
+      </style>
+    </head><body>
+      <div class="header">
+        <div>
+          <div class="title">GREEN INDUSTRY</div>
+          <div class="subtitle">BON DE CESSION / MOUVEMENT INTER-ATELIERS</div>
+        </div>
+        <div>
+          <div class="numero">${bon.numero_bon}</div>
+          <div class="date">Date : ${new Date(bon.date_mouvement||bon.created_at).toLocaleDateString('fr-FR')}</div>
+          <div class="date">Statut : <span class="statut">${bon.statut?.toUpperCase()}</span></div>
+        </div>
+      </div>
+
+      <div class="info-grid">
+        <div class="info-item">
+          <label>Type de mouvement</label>
+          <p>${TYPE_LABELS[bon.type_mouvement] || bon.type_mouvement}</p>
+        </div>
+        <div class="info-item">
+          <label>Date</label>
+          <p>${new Date(bon.date_mouvement||bon.created_at).toLocaleDateString('fr-FR')}</p>
+        </div>
+        <div class="info-item">
+          <label>Atelier source</label>
+          <p>${bon.source_code || '—'} — ${bon.source_libelle || '—'}</p>
+        </div>
+        <div class="info-item">
+          <label>Atelier destination</label>
+          <p>${bon.dest_code || '—'} — ${bon.dest_libelle || '—'}</p>
+        </div>
+        ${bon.demandeur ? `<div class="info-item"><label>Demandeur</label><p>${bon.demandeur}</p></div>` : ''}
+        ${bon.destinataire ? `<div class="info-item"><label>Destinataire</label><p>${bon.destinataire}</p></div>` : ''}
+        ${bon.motif ? `<div class="info-item" style="grid-column:1/-1"><label>Motif</label><p>${bon.motif}</p></div>` : ''}
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Désignation</th>
+            <th>Quantité</th>
+            <th>Poids (kg)</th>
+            <th>Observations</th>
+          </tr>
+        </thead>
+        <tbody>${lignesHtml}</tbody>
+      </table>
+
+      <div class="signatures">
+        <div class="sig-box">
+          <label>EXPÉDITEUR</label>
+          <div class="sig-line"></div>
+          <p style="font-size:11px;color:#666;margin-top:4px">Nom & Signature</p>
+        </div>
+        <div class="sig-box">
+          <label>TRANSPORTEUR / LIVREUR</label>
+          <div class="sig-line"></div>
+          <p style="font-size:11px;color:#666;margin-top:4px">Nom & Signature</p>
+        </div>
+        <div class="sig-box">
+          <label>RÉCEPTIONNAIRE</label>
+          <div class="sig-line"></div>
+          <p style="font-size:11px;color:#666;margin-top:4px">Nom & Signature</p>
+        </div>
+      </div>
+
+      ${bon.notes ? `<p style="margin-top:20px;padding:12px;background:#fffbeb;border-radius:8px;font-size:13px"><strong>Notes :</strong> ${bon.notes}</p>` : ''}
+
+      <div class="footer">
+        NAIdo ERP/MES — Green Industry © ${new Date().getFullYear()} — Document généré le ${new Date().toLocaleString('fr-FR')}
+      </div>
+    </body></html>`;
+
+    const w = window.open('', '_blank');
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(() => w.print(), 500);
+  };
 
   return (
     <div>
-      <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:20 }}>
-        <button onClick={() => setShowForm(true)} style={{ background:'#4338ca', color:'#fff', border:'none', padding:'8px 16px', borderRadius:8, cursor:'pointer', fontWeight:600 }}>+ Nouveau bon</button>
+      {/* Header + filtres */}
+      <div style={{ display:'flex', gap:10, marginBottom:16, flexWrap:'wrap', alignItems:'center' }}>
+        <div style={{ display:'flex', gap:0 }}>
+          {['','brouillon','valide','receptionne','annule'].map(s => (
+            <button key={s} onClick={() => setFiltreStatut(s)} style={{
+              padding:'7px 14px', border:'1px solid #e5e7eb',
+              background: filtreStatut===s ? '#4338ca' : '#fff',
+              color: filtreStatut===s ? '#fff' : '#6b7280',
+              cursor:'pointer', fontSize:12, fontWeight: filtreStatut===s ? 700 : 400,
+              borderRadius: s==='' ? '8px 0 0 8px' : s==='annule' ? '0 8px 8px 0' : '0'
+            }}>
+              {s || 'Tous'}
+            </button>
+          ))}
+        </div>
+        <button onClick={() => setShowForm(true)}
+          style={{ background:'#4338ca', color:'#fff', border:'none', padding:'9px 20px', borderRadius:8, cursor:'pointer', fontWeight:700, marginLeft:'auto' }}>
+          + Nouveau bon de cession
+        </button>
       </div>
 
+      {/* Formulaire création */}
       {showForm && (
-        <div style={{ background:'#fff', borderRadius:14, padding:24, border:'1px solid #a5b4fc', marginBottom:16 }}>
-          <h4 style={{ margin:'0 0 16px', color:'#4338ca', fontSize:15, fontWeight:700 }}>Nouveau Bon de Mouvement</h4>
-          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:10, marginBottom:14 }}>
-            <div>
-              <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Type</label>
-              <select value={form.type_mouvement} onChange={e => setForm({...form,type_mouvement:e.target.value})} style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:12 }}>
-                {Object.entries(TYPE_LABELS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Source</label>
-              <select value={form.atelier_source_id} onChange={e => setForm({...form,atelier_source_id:e.target.value})} style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:12 }}>
-                <option value="">Sélectionner...</option>
-                {ateliers.map(a => <option key={a.id} value={a.id}>{a.code} — {a.libelle}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Destination</label>
-              <select value={form.atelier_dest_id} onChange={e => setForm({...form,atelier_dest_id:e.target.value})} style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:12 }}>
-                <option value="">Sélectionner...</option>
-                {ateliers.map(a => <option key={a.id} value={a.id}>{a.code} — {a.libelle}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Date</label>
-              <input type="date" value={form.date_mouvement} onChange={e => setForm({...form,date_mouvement:e.target.value})} style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:12, boxSizing:'border-box' }}/>
-            </div>
+        <div style={{ background:'#fff', borderRadius:14, border:'2px solid #a5b4fc', marginBottom:16 }}>
+          <div style={{ background:'linear-gradient(135deg,#4338ca,#6366f1)', padding:'14px 24px', borderRadius:'12px 12px 0 0', display:'flex', justifyContent:'space-between' }}>
+            <span style={{ color:'#fff', fontWeight:800, fontSize:15 }}>🔄 Nouveau Bon de Cession</span>
+            <button onClick={() => setShowForm(false)} style={{ background:'rgba(255,255,255,0.2)', border:'none', color:'#fff', borderRadius:6, padding:'4px 12px', cursor:'pointer' }}>✕</button>
           </div>
-          <div style={{ marginBottom:14 }}>
-            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
-              <label style={{ fontSize:12, fontWeight:600 }}>Lignes articles</label>
-              <button onClick={() => setLignes([...lignes,{article_id:'',qte_prevue:'',poids_theorique_kg:''}])} style={{ background:'#f0fdf4', border:'1px solid #86efac', color:'#15803d', padding:'3px 10px', borderRadius:6, cursor:'pointer', fontSize:12 }}>+ Ligne</button>
-            </div>
-            {lignes.map((l,i) => (
-              <div key={i} style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr auto', gap:8, marginBottom:6 }}>
-                <select value={l.article_id} onChange={e => { const nl=[...lignes]; nl[i].article_id=e.target.value; const art=articles.find(a=>a.id===e.target.value); if(art) nl[i].poids_theorique_kg=art.poids_theorique_kg||''; setLignes(nl); }} style={{ border:'1px solid #d1d5db', borderRadius:6, padding:'6px', fontSize:12 }}>
-                  <option value="">Article...</option>
-                  {articles.map(a => <option key={a.id} value={a.id}>{a.code} — {a.designation}</option>)}
+          <div style={{ padding:20 }}>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))', gap:12, marginBottom:16 }}>
+              <div>
+                <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Type de mouvement</label>
+                <select value={form.type_mouvement} onChange={e => setForm({...form,type_mouvement:e.target.value})}
+                  style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'9px', fontSize:13 }}>
+                  {Object.entries(TYPE_LABELS).map(([k,v]) => <option key={k} value={k}>{v}</option>)}
                 </select>
-                <input type="number" placeholder="Quantité" value={l.qte_prevue} onChange={e => { const nl=[...lignes]; nl[i].qte_prevue=e.target.value; setLignes(nl); }} style={{ border:'1px solid #d1d5db', borderRadius:6, padding:'6px', fontSize:12, textAlign:'center' }}/>
-                <input type="number" placeholder="Poids (kg)" value={l.poids_theorique_kg} onChange={e => { const nl=[...lignes]; nl[i].poids_theorique_kg=e.target.value; setLignes(nl); }} style={{ border:'1px solid #d1d5db', borderRadius:6, padding:'6px', fontSize:12, textAlign:'center' }}/>
-                {lignes.length > 1 && <button onClick={() => setLignes(lignes.filter((_,idx)=>idx!==i))} style={{ background:'#fee2e2', color:'#dc2626', border:'none', borderRadius:6, padding:'6px 10px', cursor:'pointer' }}>✕</button>}
               </div>
-            ))}
-          </div>
-          <div style={{ display:'flex', gap:8 }}>
-            <button onClick={creer} style={{ background:'#4338ca', color:'#fff', border:'none', padding:'10px 24px', borderRadius:10, cursor:'pointer', fontWeight:700 }}>✓ Créer le bon</button>
-            <button onClick={() => setShowForm(false)} style={{ background:'#f3f4f6', border:'none', padding:'10px 16px', borderRadius:10, cursor:'pointer' }}>Annuler</button>
+              <div>
+                <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Atelier Source *</label>
+                <select value={form.atelier_source_id} onChange={e => setForm({...form,atelier_source_id:e.target.value})}
+                  style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'9px', fontSize:13 }}>
+                  <option value="">-- Sélectionner --</option>
+                  {ateliers.map(a => <option key={a.id} value={a.id}>{a.code} — {a.libelle}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Atelier Destination *</label>
+                <select value={form.atelier_dest_id} onChange={e => setForm({...form,atelier_dest_id:e.target.value})}
+                  style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'9px', fontSize:13 }}>
+                  <option value="">-- Sélectionner --</option>
+                  {ateliers.map(a => <option key={a.id} value={a.id}>{a.code} — {a.libelle}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Date</label>
+                <input type="date" value={form.date_mouvement} onChange={e => setForm({...form,date_mouvement:e.target.value})}
+                  style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'9px', fontSize:13, boxSizing:'border-box' }}/>
+              </div>
+              <div>
+                <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Demandeur</label>
+                <input value={form.demandeur} onChange={e => setForm({...form,demandeur:e.target.value})}
+                  placeholder="Nom du demandeur"
+                  style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'9px', fontSize:13, boxSizing:'border-box' }}/>
+              </div>
+              <div>
+                <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Destinataire</label>
+                <input value={form.destinataire} onChange={e => setForm({...form,destinataire:e.target.value})}
+                  placeholder="Nom du destinataire"
+                  style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'9px', fontSize:13, boxSizing:'border-box' }}/>
+              </div>
+              <div style={{ gridColumn:'1/-1' }}>
+                <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Motif / Objet</label>
+                <input value={form.motif} onChange={e => setForm({...form,motif:e.target.value})}
+                  placeholder="Ex: Approvisionnement production semaine 18"
+                  style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'9px', fontSize:13, boxSizing:'border-box' }}/>
+              </div>
+            </div>
+
+            {/* Lignes articles */}
+            <div style={{ background:'#f8f9ff', borderRadius:10, padding:14, marginBottom:16 }}>
+              <div style={{ display:'flex', justifyContent:'space-between', marginBottom:10 }}>
+                <span style={{ fontWeight:700, color:'#4338ca', fontSize:13 }}>Articles à céder</span>
+                <button onClick={() => setLignes([...lignes, { article_id:'', designation:'', qte_prevue:'', unite_id:'', poids_theorique_kg:'', notes:'' }])}
+                  style={{ background:'#4338ca', color:'#fff', border:'none', padding:'5px 14px', borderRadius:6, cursor:'pointer', fontSize:12, fontWeight:700 }}>
+                  + Ajouter ligne
+                </button>
+              </div>
+              {lignes.map((l, i) => (
+                <div key={i} style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1fr auto', gap:8, marginBottom:8, alignItems:'end' }}>
+                  <div>
+                    <label style={{ fontSize:10, color:'#6b7280', display:'block', marginBottom:2 }}>Article</label>
+                    <select value={l.article_id} onChange={e => {
+                      const art = articles.find(a => a.id === e.target.value);
+                      const nl = [...lignes];
+                      nl[i] = { ...nl[i], article_id:e.target.value, designation:art?.designation||'', poids_theorique_kg:art?.poids_theorique_kg||'' };
+                      setLignes(nl);
+                    }} style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:6, padding:'8px', fontSize:12 }}>
+                      <option value="">-- Article --</option>
+                      {articles.map(a => <option key={a.id} value={a.id}>{a.code} — {a.designation}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize:10, color:'#6b7280', display:'block', marginBottom:2 }}>Quantité</label>
+                    <input type="number" value={l.qte_prevue} onChange={e => { const nl=[...lignes]; nl[i]={...nl[i],qte_prevue:e.target.value}; setLignes(nl); }}
+                      style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:6, padding:'8px', fontSize:12, textAlign:'center', boxSizing:'border-box' }}/>
+                  </div>
+                  <div>
+                    <label style={{ fontSize:10, color:'#6b7280', display:'block', marginBottom:2 }}>Poids (kg)</label>
+                    <input type="number" value={l.poids_theorique_kg} onChange={e => { const nl=[...lignes]; nl[i]={...nl[i],poids_theorique_kg:e.target.value}; setLignes(nl); }}
+                      style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:6, padding:'8px', fontSize:12, textAlign:'center', boxSizing:'border-box' }}/>
+                  </div>
+                  <div>
+                    <label style={{ fontSize:10, color:'#6b7280', display:'block', marginBottom:2 }}>Obs.</label>
+                    <input value={l.notes||''} onChange={e => { const nl=[...lignes]; nl[i]={...nl[i],notes:e.target.value}; setLignes(nl); }}
+                      style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:6, padding:'8px', fontSize:12, boxSizing:'border-box' }}/>
+                  </div>
+                  <button onClick={() => setLignes(lignes.filter((_,j) => j!==i))}
+                    style={{ background:'#fee2e2', color:'#dc2626', border:'none', padding:'8px 10px', borderRadius:6, cursor:'pointer', fontWeight:700 }}>✕</button>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display:'flex', gap:10 }}>
+              <button onClick={creer}
+                style={{ background:'#4338ca', color:'#fff', border:'none', padding:'12px 32px', borderRadius:10, cursor:'pointer', fontWeight:800, fontSize:14 }}>
+                ✓ Créer le bon
+              </button>
+              <button onClick={() => setShowForm(false)}
+                style={{ background:'#f3f4f6', border:'none', padding:'12px 20px', borderRadius:10, cursor:'pointer' }}>
+                Annuler
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      <div style={{ background:'#fff', borderRadius:14, border:'1px solid #e5e7eb', overflow:'hidden' }}>
-        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
+      {/* Détail bon sélectionné */}
+      {detail && (
+        <div style={{ background:'#fff', borderRadius:12, border:'2px solid #a5b4fc', marginBottom:16, padding:20 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+            <div>
+              <span style={{ fontFamily:'monospace', fontWeight:800, fontSize:16, color:'#4338ca' }}>{detail.numero_bon}</span>
+              <span style={{ marginLeft:10, fontSize:12, background: STATUT_COLORS[detail.statut]?.bg, color: STATUT_COLORS[detail.statut]?.tx, padding:'2px 10px', borderRadius:20, fontWeight:700 }}>
+                {detail.statut}
+              </span>
+            </div>
+            <div style={{ display:'flex', gap:8 }}>
+              {detail.statut === 'brouillon' && (
+                <button onClick={() => valider(detail.id)}
+                  style={{ background:'#dcfce7', color:'#15803d', border:'none', padding:'7px 16px', borderRadius:8, cursor:'pointer', fontWeight:700 }}>
+                  ✓ Valider
+                </button>
+              )}
+              {detail.statut === 'valide' && (
+                <button onClick={() => receptionner(detail.id)}
+                  style={{ background:'#dbeafe', color:'#1d4ed8', border:'none', padding:'7px 16px', borderRadius:8, cursor:'pointer', fontWeight:700 }}>
+                  📥 Réceptionner
+                </button>
+              )}
+              <button onClick={() => imprimer(detail)}
+                style={{ background:'#4338ca', color:'#fff', border:'none', padding:'7px 16px', borderRadius:8, cursor:'pointer', fontWeight:700 }}>
+                🖨 Imprimer
+              </button>
+              <button onClick={() => setDetail(null)}
+                style={{ background:'#f3f4f6', border:'none', padding:'7px 14px', borderRadius:8, cursor:'pointer', color:'#6b7280' }}>✕</button>
+            </div>
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:10, marginBottom:14 }}>
+            {[
+              ['Type', TYPE_LABELS[detail.type_mouvement] || detail.type_mouvement],
+              ['Source', `${detail.source_code||''} — ${detail.source_libelle||''}`],
+              ['Destination', `${detail.dest_code||''} — ${detail.dest_libelle||''}`],
+              ['Date', detail.date_mouvement ? new Date(detail.date_mouvement).toLocaleDateString('fr-FR') : '—'],
+              ['Demandeur', detail.demandeur],
+              ['Destinataire', detail.destinataire],
+              ['Motif', detail.motif],
+              ['Poids total', detail.poids_total_kg ? `${detail.poids_total_kg} kg` : null],
+            ].filter(([,v]) => v).map(([l,v]) => (
+              <div key={l} style={{ background:'#f0f4ff', borderRadius:8, padding:'8px 12px' }}>
+                <div style={{ fontSize:10, color:'#818cf8', marginBottom:2 }}>{l}</div>
+                <div style={{ fontWeight:600, fontSize:12, color:'#4338ca' }}>{v}</div>
+              </div>
+            ))}
+          </div>
+          {detail.lignes?.length > 0 && (
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+              <thead>
+                <tr style={{ background:'#eef2ff' }}>
+                  {['Code','Article','Quantité','Poids (kg)','Obs.'].map(h => (
+                    <th key={h} style={{ padding:'8px 12px', textAlign:'left', fontWeight:700, color:'#4338ca', borderBottom:'2px solid #c7d2fe' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {detail.lignes.map((l, i) => (
+                  <tr key={i} style={{ borderBottom:'1px solid #eef2ff', background: i%2===0?'#fff':'#f8f9ff' }}>
+                    <td style={{ padding:'8px 12px', fontFamily:'monospace', color:'#4338ca' }}>{l.article_code || '—'}</td>
+                    <td style={{ padding:'8px 12px' }}>{l.designation || l.article_designation || '—'}</td>
+                    <td style={{ padding:'8px 12px', textAlign:'center', fontWeight:700 }}>{parseFloat(l.qte_prevue||0).toFixed(3)}</td>
+                    <td style={{ padding:'8px 12px', textAlign:'center' }}>{parseFloat(l.poids_reel_kg||l.poids_theorique_kg||0).toFixed(3)}</td>
+                    <td style={{ padding:'8px 12px', color:'#6b7280' }}>{l.notes||'—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* Liste bons */}
+      <div style={{ background:'#fff', borderRadius:12, border:'1px solid #e5e7eb', overflow:'auto' }}>
+        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13, minWidth:700 }}>
           <thead>
             <tr style={{ background:'#eef2ff' }}>
-              {['N° Bon','Type','Source','Destination','Date','Lignes','Statut','Actions'].map(h => (
-                <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontWeight:600, color:'#4338ca', borderBottom:'2px solid #c7d2fe', whiteSpace:'nowrap' }}>{h}</th>
+              {['N° Bon','Type','Source → Destination','Date','Articles','Statut','Actions'].map(h => (
+                <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:700, color:'#4338ca', borderBottom:'2px solid #c7d2fe', whiteSpace:'nowrap' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {mouvements.map((m,i) => (
-              <tr key={m.id} style={{ borderBottom:'1px solid #eef2ff', background:i%2===0?'#fff':'#fafbff' }}>
-                <td style={{ padding:'8px 12px', fontFamily:'monospace', fontWeight:700, color:'#4338ca', fontSize:12 }}>{m.numero_bon}</td>
-                <td style={{ padding:'8px 12px', fontSize:12 }}>{TYPE_LABELS[m.type_mouvement]||m.type_mouvement}</td>
-                <td style={{ padding:'8px 12px' }}>{m.source_code||'—'}</td>
-                <td style={{ padding:'8px 12px' }}>{m.dest_code||'—'}</td>
-                <td style={{ padding:'8px 12px', whiteSpace:'nowrap' }}>{new Date(m.date_mouvement||m.created_at).toLocaleDateString('fr-FR')}</td>
-                <td style={{ padding:'8px 12px', textAlign:'center' }}>{m.nb_lignes}</td>
-                <td style={{ padding:'8px 12px' }}>
-                  <span style={{ background:SCOLOR[m.statut]||'#f3f4f6', color:STEXT[m.statut]||'#374151', padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:600 }}>{m.statut}</span>
-                </td>
-                <td style={{ padding:'8px 12px' }}>
-                  {m.statut==='brouillon' && (
-                    <button onClick={() => valider(m.id)} style={{ background:'#dcfce7', color:'#15803d', border:'1px solid #86efac', padding:'3px 10px', borderRadius:6, cursor:'pointer', fontSize:11, fontWeight:600 }}>✓ Valider</button>
-                  )}
-                </td>
-              </tr>
-            ))}
+            {bons.map((b, i) => {
+              const sc = STATUT_COLORS[b.statut] || STATUT_COLORS.brouillon;
+              return (
+                <tr key={b.id} style={{ borderBottom:'1px solid #eef2ff', background: i%2===0?'#fff':'#f8f9ff', cursor:'pointer' }}>
+                  <td style={{ padding:'9px 14px', fontFamily:'monospace', fontWeight:800, color:'#4338ca', fontSize:12 }}>{b.numero_bon}</td>
+                  <td style={{ padding:'9px 14px', fontSize:12 }}>{TYPE_LABELS[b.type_mouvement] || b.type_mouvement}</td>
+                  <td style={{ padding:'9px 14px', fontSize:12 }}>
+                    <span style={{ fontWeight:600 }}>{b.source_code || '—'}</span>
+                    <span style={{ color:'#9ca3af', margin:'0 6px' }}>→</span>
+                    <span style={{ fontWeight:600 }}>{b.dest_code || '—'}</span>
+                  </td>
+                  <td style={{ padding:'9px 14px', fontSize:12, color:'#6b7280' }}>
+                    {b.date_mouvement ? new Date(b.date_mouvement).toLocaleDateString('fr-FR') : '—'}
+                  </td>
+                  <td style={{ padding:'9px 14px', textAlign:'center' }}>
+                    <span style={{ background:'#e0e7ff', color:'#4338ca', padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:700 }}>
+                      {b.nb_lignes || 0}
+                    </span>
+                  </td>
+                  <td style={{ padding:'9px 14px' }}>
+                    <span style={{ background:sc.bg, color:sc.tx, padding:'3px 10px', borderRadius:20, fontSize:11, fontWeight:700 }}>
+                      {b.statut}
+                    </span>
+                  </td>
+                  <td style={{ padding:'9px 14px' }}>
+                    <div style={{ display:'flex', gap:5 }}>
+                      <button onClick={() => voirDetail(b)}
+                        style={{ background:'#e0e7ff', color:'#4338ca', border:'none', padding:'4px 10px', borderRadius:6, cursor:'pointer', fontSize:11, fontWeight:600 }}>
+                        👁 Voir
+                      </button>
+                      <button onClick={() => imprimer(b)}
+                        style={{ background:'#f5f3ff', color:'#6d28d9', border:'none', padding:'4px 10px', borderRadius:6, cursor:'pointer', fontSize:11, fontWeight:600 }}>
+                        🖨
+                      </button>
+                      {b.statut === 'brouillon' && (
+                        <button onClick={() => valider(b.id)}
+                          style={{ background:'#dcfce7', color:'#15803d', border:'none', padding:'4px 10px', borderRadius:6, cursor:'pointer', fontSize:11, fontWeight:600 }}>
+                          ✓
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
-        {mouvements.length === 0 && (
-          <div style={{ textAlign:'center', padding:48, color:'#9ca3af' }}>
-            <div style={{ fontSize:36, marginBottom:8 }}>📋</div>
-            <p>Aucun bon de mouvement</p>
+        {bons.length === 0 && (
+          <div style={{ textAlign:'center', padding:56, color:'#9ca3af' }}>
+            <div style={{ fontSize:40, marginBottom:12 }}>🔄</div>
+            <p style={{ fontWeight:600 }}>Aucun bon de cession</p>
+            <p style={{ fontSize:12 }}>Créez un bon pour tracer les mouvements inter-ateliers</p>
+            <button onClick={() => setShowForm(true)}
+              style={{ background:'#4338ca', color:'#fff', border:'none', padding:'10px 24px', borderRadius:8, cursor:'pointer', marginTop:12, fontWeight:600 }}>
+              + Créer le premier bon
+            </button>
           </div>
         )}
       </div>
