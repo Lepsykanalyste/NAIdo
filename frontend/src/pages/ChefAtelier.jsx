@@ -3428,17 +3428,6 @@ function KPIRapports() {
   );
 }
 
-function GMAO() {
-  return (
-    <div style={{ background:'#fff', borderRadius:14, padding:48, textAlign:'center', border:'1px solid #fde68a' }}>
-      <div style={{ fontSize:48, marginBottom:12 }}>🔧</div>
-      <h3 style={{ color:'#92400e', margin:'0 0 8px' }}>Module GMAO — En développement</h3>
-      <p style={{ color:'#6b7280' }}>Gestion des équipements, plans de maintenance, ordres de travail</p>
-      <p style={{ color:'#9ca3af', fontSize:13 }}>Les tables sont créées en base de données — interface en cours</p>
-    </div>
-  );
-}
-
 function Stock() {
   const [onglet, setOnglet] = useState('inventaire');
   const [inventaire, setInventaire] = useState([]);
