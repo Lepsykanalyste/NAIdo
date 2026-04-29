@@ -896,7 +896,7 @@ function Articles() {
         <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13, minWidth:700 }}>
           <thead>
             <tr style={{ background:'#faf5ff' }}>
-              {['Code','Désignation','Famille','Unité','Poids théo.','Cadence','Stock','Type','Atelier'].map(h => (
+              {['Code','Désignation','Famille','Unité','Poids théo.','Cadence','Stock','Type','Atelier','Actions'].map(h => (
                 <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:700, color:'#7e22ce', borderBottom:'2px solid #e9d5ff', whiteSpace:'nowrap' }}>{h}</th>
               ))}
             </tr>
@@ -927,6 +927,22 @@ function Articles() {
                   </td>
                   <td style={{ padding:'9px 14px', color:'#6b7280', fontSize:12 }}>
                     {ateliers.find(at => String(at.id) === String(a.atelier_production_id))?.code || '—'}
+                  </td>
+                  <td style={{ padding:'9px 14px' }} onClick={e => e.stopPropagation()}>
+                    <div style={{ display:'flex', gap:5 }}>
+                      <button onClick={() => setDetail(detail?.id===a.id ? null : a)}
+                        style={{ background:'#f5f3ff', color:'#7e22ce', border:'none', padding:'4px 10px', borderRadius:6, cursor:'pointer', fontSize:11, fontWeight:600 }}>
+                        {detail?.id===a.id ? '▲' : '▼ Voir'}
+                      </button>
+                      <button onClick={async () => {
+                          if (!window.confirm('Supprimer "'+a.designation+'" ?')) return;
+                          try { await axios.delete(`${API}/articles/${a.id}`); toast.success('Supprimé'); setDetail(null); chargerArticles(); }
+                          catch { toast.error('Erreur'); }
+                        }}
+                        style={{ background:'#fee2e2', color:'#dc2626', border:'none', padding:'4px 10px', borderRadius:6, cursor:'pointer', fontSize:11 }}>
+                        ✕
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );
@@ -1217,7 +1233,7 @@ function MatieresPremières() {
         <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13, minWidth:700 }}>
           <thead>
             <tr style={{ background:'#eff6ff' }}>
-              {['Code','Désignation','Fournisseur','Unité','Prix achat','Stock','Temp. fusion','Docs','Détail'].map(h => (
+              {['Code','Désignation','Fournisseur','Unité','Prix achat','Stock','Temp. fusion','Docs','Actions'].map(h => (
                 <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:700, color:'#1d4ed8', borderBottom:'2px solid #bfdbfe', whiteSpace:'nowrap' }}>{h}</th>
               ))}
             </tr>
@@ -1261,8 +1277,29 @@ function MatieresPremières() {
                     )}
                   </div>
                 </td>
-                <td style={{ padding:'9px 14px', fontSize:11, color:'#9ca3af' }}>
-                  {detail?.id === m.id ? '▲ Fermer' : '▼ Voir'}
+                <td style={{ padding:'9px 14px' }}>
+                  <div style={{ display:'flex', gap:6 }}>
+                    <button
+                      onClick={e => { e.stopPropagation(); setDetail(detail?.id===m.id ? null : m); }}
+                      style={{ background:'#dbeafe', color:'#1d4ed8', border:'none', padding:'4px 10px', borderRadius:6, cursor:'pointer', fontSize:11, fontWeight:600 }}>
+                      {detail?.id === m.id ? '▲ Fermer' : '▼ Voir'}
+                    </button>
+                    <button
+                      onClick={async e => {
+                        e.stopPropagation();
+                        if (!window.confirm(`Supprimer "${m.designation}" ?`)) return;
+                        try {
+                          await axios.delete(`${API}/articles/${m.id}`);
+                          toast.success('Matière supprimée');
+                          setDetail(null);
+                          const { data } = await axios.get(`${API}/articles?type_article=matiere_premiere`);
+                          setMps(data);
+                        } catch { toast.error('Erreur suppression'); }
+                      }}
+                      style={{ background:'#fee2e2', color:'#dc2626', border:'none', padding:'4px 10px', borderRadius:6, cursor:'pointer', fontSize:11, fontWeight:600 }}>
+                      ✕ Suppr.
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
