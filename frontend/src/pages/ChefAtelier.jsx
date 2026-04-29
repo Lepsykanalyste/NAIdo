@@ -2337,15 +2337,486 @@ function GMAO() {
 }
 
 function Stock() {
+  const [onglet, setOnglet] = useState('inventaire');
+  const [inventaire, setInventaire] = useState([]);
+  const [lots, setLots] = useState([]);
+  const [mouvements, setMouvements] = useState([]);
+  const [emplacements, setEmplacements] = useState([]);
+  const [articles, setArticles] = useState([]);
+  const [loading, setLoading] = useState(false);
+  // Filtres
+  const [filtreArt, setFiltreArt] = useState('');
+  const [filtreEmpl, setFiltreEmpl] = useState('');
+  const [filtreStatut, setFiltreStatut] = useState('disponible');
+  // Formulaire entrée/sortie rapide
+  const [showMvt, setShowMvt] = useState(false);
+  const [typeMvt, setTypeMvt] = useState('entree');
+  const [formMvt, setFormMvt] = useState({
+    article_id:'', emplacement_id:'', qte:'', numero_lot:'',
+    date_dlc:'', prix_unitaire:'', notes:'', type_mouvement:'reception_achat'
+  });
+  // Formulaire nouveau lot
+  const [showLot, setShowLot] = useState(false);
+  const [formLot, setFormLot] = useState({
+    article_id:'', emplacement_id:'', numero_lot:'',
+    qte_initiale:'', prix_unitaire:'0',
+    date_fabrication:'', date_dlc:'', date_dluo:'',
+    fournisseur_id:'', certificat_path:''
+  });
+
+  const charger = async () => {
+    setLoading(true);
+    try {
+      const [inv, ls, empls, arts] = await Promise.all([
+        axios.get(`${API}/stock/inventaire${filtreArt?`?search=${filtreArt}`:''}`),
+        axios.get(`${API}/stock/lots?statut=${filtreStatut}${filtreArt?`&search=${filtreArt}`:''}`),
+        axios.get(`${API}/emplacements`),
+        axios.get(`${API}/articles?exclure_mp=false`),
+      ]);
+      setInventaire(inv.data);
+      setLots(ls.data);
+      setEmplacements(empls.data);
+      setArticles(arts.data);
+    } catch { toast.error('Erreur chargement stock'); }
+    finally { setLoading(false); }
+  };
+
+  const chargerMouvements = async () => {
+    try {
+      const { data } = await axios.get(`${API}/stock/mouvements?limit=50`);
+      setMouvements(data);
+    } catch {}
+  };
+
+  useEffect(() => { charger(); }, [filtreArt, filtreStatut, filtreEmpl]);
+  useEffect(() => { if (onglet === 'mouvements') chargerMouvements(); }, [onglet]);
+
+  const creerLot = async () => {
+    if (!formLot.article_id) return toast.error('Article requis');
+    if (!formLot.numero_lot) return toast.error('Numéro de lot requis');
+    if (!formLot.qte_initiale) return toast.error('Quantité requise');
+    try {
+      await axios.post(`${API}/stock/lots`, formLot);
+      toast.success(`Lot ${formLot.numero_lot} créé`);
+      setShowLot(false);
+      setFormLot({ article_id:'', emplacement_id:'', numero_lot:'', qte_initiale:'', prix_unitaire:'0', date_fabrication:'', date_dlc:'', date_dluo:'', fournisseur_id:'', certificat_path:'' });
+      charger();
+    } catch (err) { toast.error(err.response?.data?.error || 'Erreur'); }
+  };
+
+  const mvtRapide = async () => {
+    if (!formMvt.article_id || !formMvt.qte) return toast.error('Article et quantité requis');
+    try {
+      const endpoint = typeMvt === 'entree' ? `${API}/stock/entree` : `${API}/stock/sortie`;
+      await axios.post(endpoint, formMvt);
+      toast.success(typeMvt === 'entree' ? 'Entrée enregistrée' : 'Sortie enregistrée');
+      setShowMvt(false);
+      charger();
+    } catch (err) { toast.error(err.response?.data?.error || 'Erreur'); }
+  };
+
+  const STATUT_LOT = {
+    disponible: { bg:'#dcfce7', tx:'#15803d' },
+    quarantaine: { bg:'#fef3c7', tx:'#92400e' },
+    bloque:      { bg:'#fee2e2', tx:'#dc2626' },
+    perime:      { bg:'#f3f4f6', tx:'#6b7280' },
+    epuise:      { bg:'#f3f4f6', tx:'#9ca3af' },
+  };
+
+  const stockTotal = inventaire.reduce((s, i) => s + parseFloat(i.stock_total_dispo || 0), 0);
+  const alertesBas = inventaire.filter(i => i.alerte_stock_bas).length;
+  const lotsExpires = lots.filter(l => l.date_dlc && new Date(l.date_dlc) < new Date()).length;
+  const lotsProches = lots.filter(l => {
+    if (!l.date_dlc) return false;
+    const diff = (new Date(l.date_dlc) - new Date()) / 86400000;
+    return diff >= 0 && diff <= 30;
+  }).length;
+
   return (
-    <div style={{ background:'#fff', borderRadius:14, padding:48, textAlign:'center', border:'1px solid #e0e7ff' }}>
-      <div style={{ fontSize:48, marginBottom:12 }}>📦</div>
-      <h3 style={{ color:'#4338ca', margin:'0 0 8px' }}>Module Stock — En développement</h3>
-      <p style={{ color:'#6b7280' }}>Stock multi-dépôts, lots, FIFO/FEFO alimentaire</p>
-      <p style={{ color:'#9ca3af', fontSize:13 }}>Les tables sont créées — interface en cours</p>
+    <div>
+      {/* KPI résumé */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:12, marginBottom:20 }}>
+        {[
+          { label:'Articles en stock', value:inventaire.length, color:'#1d4ed8', bg:'#dbeafe', icon:'📦' },
+          { label:'Alertes stock bas', value:alertesBas, color: alertesBas>0?'#dc2626':'#15803d', bg: alertesBas>0?'#fee2e2':'#dcfce7', icon:'⚠' },
+          { label:'Lots actifs', value:lots.filter(l=>l.statut==='disponible').length, color:'#15803d', bg:'#dcfce7', icon:'🏷' },
+          { label:'Lots expirés', value:lotsExpires, color: lotsExpires>0?'#dc2626':'#15803d', bg: lotsExpires>0?'#fee2e2':'#dcfce7', icon:'⏰' },
+          { label:'DLC < 30 jours', value:lotsProches, color: lotsProches>0?'#d97706':'#15803d', bg: lotsProches>0?'#fef3c7':'#dcfce7', icon:'📅' },
+        ].map(k => (
+          <div key={k.label} style={{ background:k.bg, borderRadius:12, padding:'14px 16px' }}>
+            <div style={{ fontSize:11, color:'#6b7280', marginBottom:4 }}>{k.icon} {k.label}</div>
+            <div style={{ fontSize:26, fontWeight:800, color:k.color }}>{k.value}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Barre actions */}
+      <div style={{ display:'flex', gap:10, marginBottom:16, flexWrap:'wrap', alignItems:'center' }}>
+        <input value={filtreArt} onChange={e => setFiltreArt(e.target.value)}
+          placeholder="🔍 Filtrer par article..."
+          style={{ flex:1, minWidth:200, border:'1px solid #d1d5db', borderRadius:8, padding:'9px 14px', fontSize:13 }}/>
+        <button onClick={() => { setTypeMvt('entree'); setShowMvt(true); }}
+          style={{ background:'#15803d', color:'#fff', border:'none', padding:'9px 18px', borderRadius:8, cursor:'pointer', fontWeight:700 }}>
+          + Entrée
+        </button>
+        <button onClick={() => { setTypeMvt('sortie'); setShowMvt(true); }}
+          style={{ background:'#dc2626', color:'#fff', border:'none', padding:'9px 18px', borderRadius:8, cursor:'pointer', fontWeight:700 }}>
+          − Sortie
+        </button>
+        <button onClick={() => setShowLot(true)}
+          style={{ background:'#0369a1', color:'#fff', border:'none', padding:'9px 18px', borderRadius:8, cursor:'pointer', fontWeight:700 }}>
+          🏷 Nouveau lot
+        </button>
+        <button onClick={charger} style={{ background:'#f3f4f6', color:'#374151', border:'1px solid #d1d5db', padding:'9px 14px', borderRadius:8, cursor:'pointer' }}>
+          🔄
+        </button>
+      </div>
+
+      {/* Formulaire entrée/sortie rapide */}
+      {showMvt && (
+        <div style={{ background:'#fff', borderRadius:12, padding:20, border:`2px solid ${typeMvt==='entree'?'#86efac':'#fca5a5'}`, marginBottom:16 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', marginBottom:14 }}>
+            <h4 style={{ margin:0, color:typeMvt==='entree'?'#15803d':'#dc2626', fontWeight:700, fontSize:15 }}>
+              {typeMvt==='entree' ? '+ Entrée stock' : '− Sortie stock'}
+            </h4>
+            <button onClick={() => setShowMvt(false)} style={{ background:'none', border:'none', fontSize:18, cursor:'pointer', color:'#9ca3af' }}>✕</button>
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:12, marginBottom:12 }}>
+            <div>
+              <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Article *</label>
+              <select value={formMvt.article_id} onChange={e => setFormMvt({...formMvt,article_id:e.target.value})}
+                style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'9px', fontSize:13 }}>
+                <option value="">-- Sélectionner --</option>
+                {articles.map(a => <option key={a.id} value={a.id}>{a.code} — {a.designation}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Emplacement</label>
+              <select value={formMvt.emplacement_id} onChange={e => setFormMvt({...formMvt,emplacement_id:e.target.value})}
+                style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'9px', fontSize:13 }}>
+                <option value="">-- Sélectionner --</option>
+                {emplacements.map(e => <option key={e.id} value={e.id}>{e.code} — {e.libelle}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Quantité *</label>
+              <input type="number" step="0.001" value={formMvt.qte} onChange={e => setFormMvt({...formMvt,qte:e.target.value})}
+                placeholder="0.000" style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'9px', fontSize:13, textAlign:'center', boxSizing:'border-box' }}/>
+            </div>
+            {typeMvt === 'entree' && (
+              <>
+                <div>
+                  <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>N° Lot</label>
+                  <input value={formMvt.numero_lot} onChange={e => setFormMvt({...formMvt,numero_lot:e.target.value})}
+                    placeholder="LOT-20260429-001"
+                    style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'9px', fontSize:13, fontFamily:'monospace', boxSizing:'border-box' }}/>
+                </div>
+                <div>
+                  <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Date DLC</label>
+                  <input type="date" value={formMvt.date_dlc} onChange={e => setFormMvt({...formMvt,date_dlc:e.target.value})}
+                    style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'9px', fontSize:13, boxSizing:'border-box' }}/>
+                </div>
+                <div>
+                  <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Prix unitaire</label>
+                  <input type="number" value={formMvt.prix_unitaire} onChange={e => setFormMvt({...formMvt,prix_unitaire:e.target.value})}
+                    placeholder="0" style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'9px', fontSize:13, textAlign:'center', boxSizing:'border-box' }}/>
+                </div>
+              </>
+            )}
+            <div>
+              <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Notes</label>
+              <input value={formMvt.notes} onChange={e => setFormMvt({...formMvt,notes:e.target.value})}
+                placeholder="Motif, référence..."
+                style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'9px', fontSize:13, boxSizing:'border-box' }}/>
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:10 }}>
+            <button onClick={mvtRapide}
+              style={{ background:typeMvt==='entree'?'#15803d':'#dc2626', color:'#fff', border:'none', padding:'10px 28px', borderRadius:10, cursor:'pointer', fontWeight:700, fontSize:14 }}>
+              ✓ Confirmer {typeMvt==='entree'?'l\'entrée':'la sortie'}
+            </button>
+            <button onClick={() => setShowMvt(false)} style={{ background:'#f3f4f6', border:'none', padding:'10px 20px', borderRadius:10, cursor:'pointer' }}>Annuler</button>
+          </div>
+        </div>
+      )}
+
+      {/* Formulaire nouveau lot */}
+      {showLot && (
+        <div style={{ background:'#fff', borderRadius:12, padding:20, border:'2px solid #93c5fd', marginBottom:16 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', marginBottom:14 }}>
+            <h4 style={{ margin:0, color:'#0369a1', fontWeight:700, fontSize:15 }}>🏷 Créer un nouveau lot</h4>
+            <button onClick={() => setShowLot(false)} style={{ background:'none', border:'none', fontSize:18, cursor:'pointer', color:'#9ca3af' }}>✕</button>
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:12, marginBottom:14 }}>
+            {[
+              ['Article *','article_id','select-art'],
+              ['Emplacement','emplacement_id','select-empl'],
+              ['N° Lot *','numero_lot','text'],
+              ['Quantité initiale *','qte_initiale','number'],
+              ['Prix unitaire','prix_unitaire','number'],
+              ['Date fabrication','date_fabrication','date'],
+              ['Date DLC','date_dlc','date'],
+              ['Date DLUO','date_dluo','date'],
+            ].map(([label, key, type]) => (
+              <div key={key}>
+                <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>{label}</label>
+                {type === 'select-art' ? (
+                  <select value={formLot[key]} onChange={e => setFormLot({...formLot,[key]:e.target.value})}
+                    style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'9px', fontSize:13 }}>
+                    <option value="">-- Sélectionner --</option>
+                    {articles.map(a => <option key={a.id} value={a.id}>{a.code} — {a.designation}</option>)}
+                  </select>
+                ) : type === 'select-empl' ? (
+                  <select value={formLot[key]} onChange={e => setFormLot({...formLot,[key]:e.target.value})}
+                    style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'9px', fontSize:13 }}>
+                    <option value="">-- Sélectionner --</option>
+                    {emplacements.map(e => <option key={e.id} value={e.id}>{e.code} — {e.libelle}</option>)}
+                  </select>
+                ) : (
+                  <input type={type} value={formLot[key]} onChange={e => setFormLot({...formLot,[key]:e.target.value})}
+                    style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'9px', fontSize:13,
+                      boxSizing:'border-box', textAlign:type==='number'?'center':'left',
+                      fontFamily:key==='numero_lot'?'monospace':'inherit' }}/>
+                )}
+              </div>
+            ))}
+          </div>
+          <div style={{ display:'flex', gap:10 }}>
+            <button onClick={creerLot} style={{ background:'#0369a1', color:'#fff', border:'none', padding:'10px 28px', borderRadius:10, cursor:'pointer', fontWeight:700 }}>
+              ✓ Créer le lot
+            </button>
+            <button onClick={() => setShowLot(false)} style={{ background:'#f3f4f6', border:'none', padding:'10px 20px', borderRadius:10, cursor:'pointer' }}>Annuler</button>
+          </div>
+        </div>
+      )}
+
+      {/* Navigation onglets */}
+      <div style={{ display:'flex', gap:0, marginBottom:16, borderBottom:'2px solid #e5e7eb' }}>
+        {[
+          ['inventaire','📊 Inventaire'],
+          ['lots','🏷 Lots'],
+          ['mouvements','📋 Mouvements'],
+          ['emplacements','🏭 Emplacements'],
+        ].map(([id, label]) => (
+          <button key={id} onClick={() => setOnglet(id)} style={{
+            padding:'10px 20px', border:'none', background:'none', cursor:'pointer', fontSize:13,
+            fontWeight: onglet===id ? 700 : 400,
+            color: onglet===id ? '#1d4ed8' : '#6b7280',
+            borderBottom: onglet===id ? '3px solid #1d4ed8' : '3px solid transparent',
+          }}>{label}</button>
+        ))}
+      </div>
+
+      {/* ── INVENTAIRE ── */}
+      {onglet === 'inventaire' && (
+        <div style={{ background:'#fff', borderRadius:14, border:'1px solid #e5e7eb', overflow:'auto' }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13, minWidth:700 }}>
+            <thead>
+              <tr style={{ background:'#eff6ff' }}>
+                {['Code','Article','Famille','Unité','Stock dispo','Réservé','Stock mini','Valeur','⚠'].map(h => (
+                  <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:700, color:'#1d4ed8', borderBottom:'2px solid #bfdbfe', whiteSpace:'nowrap' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {inventaire.map((a, i) => (
+                <tr key={a.id} style={{ borderBottom:'1px solid #eff6ff', background: a.alerte_stock_bas ? '#fff7ed' : i%2===0?'#fff':'#f8faff' }}>
+                  <td style={{ padding:'9px 14px', fontFamily:'monospace', fontWeight:700, color:'#1d4ed8', fontSize:12 }}>{a.code}</td>
+                  <td style={{ padding:'9px 14px', fontWeight:500 }}>{a.designation}</td>
+                  <td style={{ padding:'9px 14px', color:'#6b7280', fontSize:12 }}>{a.famille||'—'}</td>
+                  <td style={{ padding:'9px 14px' }}><span style={{ fontFamily:'monospace', background:'#dbeafe', color:'#1d4ed8', padding:'2px 6px', borderRadius:4, fontSize:12 }}>{a.unite||'—'}</span></td>
+                  <td style={{ padding:'9px 14px', fontWeight:800, fontSize:15, color: parseFloat(a.stock_total_dispo||0) === 0 ? '#dc2626' : '#15803d' }}>
+                    {parseFloat(a.stock_total_dispo||0).toFixed(3)}
+                  </td>
+                  <td style={{ padding:'9px 14px', color:'#6b7280' }}>{parseFloat(a.stock_total_reserve||0).toFixed(3)}</td>
+                  <td style={{ padding:'9px 14px', color:'#9ca3af' }}>{parseFloat(a.stock_mini||0).toFixed(3)}</td>
+                  <td style={{ padding:'9px 14px', fontWeight:600 }}>{parseFloat(a.valeur_totale||0).toFixed(2)} DZD</td>
+                  <td style={{ padding:'9px 14px', textAlign:'center' }}>
+                    {a.alerte_stock_bas && <span style={{ color:'#d97706', fontWeight:700 }}>⚠</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {inventaire.length === 0 && (
+            <div style={{ textAlign:'center', padding:48, color:'#9ca3af' }}>
+              <div style={{ fontSize:40, marginBottom:12 }}>📦</div>
+              <p>Aucun article en stock — faites une entrée pour commencer</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── LOTS ── */}
+      {onglet === 'lots' && (
+        <div>
+          <div style={{ display:'flex', gap:8, marginBottom:12, flexWrap:'wrap' }}>
+            {['disponible','quarantaine','bloque','perime','epuise'].map(s => (
+              <button key={s} onClick={() => setFiltreStatut(s)} style={{
+                padding:'6px 14px', borderRadius:20, border:'2px solid',
+                borderColor: filtreStatut===s ? STATUT_LOT[s]?.tx||'#374151' : '#e5e7eb',
+                background: filtreStatut===s ? STATUT_LOT[s]?.bg||'#f3f4f6' : '#fff',
+                color: filtreStatut===s ? STATUT_LOT[s]?.tx||'#374151' : '#6b7280',
+                cursor:'pointer', fontSize:12, fontWeight: filtreStatut===s ? 700 : 400,
+              }}>{s}</button>
+            ))}
+          </div>
+          <div style={{ background:'#fff', borderRadius:14, border:'1px solid #e5e7eb', overflow:'auto' }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13, minWidth:800 }}>
+              <thead>
+                <tr style={{ background:'#eff6ff' }}>
+                  {['N° Lot','Article','Emplacement','Qté dispo','Qté init.','DLC','DLUO','Statut','Actions'].map(h => (
+                    <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:700, color:'#1d4ed8', borderBottom:'2px solid #bfdbfe', whiteSpace:'nowrap' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {lots.map((l, i) => {
+                  const sc = STATUT_LOT[l.statut] || STATUT_LOT.disponible;
+                  const dlcDate = l.date_dlc ? new Date(l.date_dlc) : null;
+                  const joursRestants = dlcDate ? Math.ceil((dlcDate - new Date()) / 86400000) : null;
+                  const dlcColor = joursRestants !== null ? (joursRestants < 0 ? '#dc2626' : joursRestants < 30 ? '#d97706' : '#15803d') : '#9ca3af';
+                  return (
+                    <tr key={l.id} style={{ borderBottom:'1px solid #eff6ff', background:i%2===0?'#fff':'#f8faff' }}>
+                      <td style={{ padding:'9px 14px', fontFamily:'monospace', fontWeight:700, color:'#0369a1', fontSize:12 }}>{l.numero_lot}</td>
+                      <td style={{ padding:'9px 14px', fontSize:12 }}>{l.article_code} — {l.article_designation?.substring(0,25)}</td>
+                      <td style={{ padding:'9px 14px', fontSize:12, color:'#6b7280' }}>{l.emplacement_code||'—'}</td>
+                      <td style={{ padding:'9px 14px', fontWeight:700, color: parseFloat(l.qte_disponible||0)===0?'#dc2626':'#15803d' }}>
+                        {parseFloat(l.qte_disponible||0).toFixed(3)}
+                      </td>
+                      <td style={{ padding:'9px 14px', color:'#6b7280' }}>{parseFloat(l.qte_initiale||0).toFixed(3)}</td>
+                      <td style={{ padding:'9px 14px', color:dlcColor, fontWeight: joursRestants!==null&&joursRestants<30?700:400 }}>
+                        {dlcDate ? dlcDate.toLocaleDateString('fr-FR') : '—'}
+                        {joursRestants !== null && <span style={{ fontSize:10, marginLeft:4 }}>({joursRestants}j)</span>}
+                      </td>
+                      <td style={{ padding:'9px 14px', color:'#6b7280', fontSize:12 }}>
+                        {l.date_dluo ? new Date(l.date_dluo).toLocaleDateString('fr-FR') : '—'}
+                      </td>
+                      <td style={{ padding:'9px 14px' }}>
+                        <span style={{ background:sc.bg, color:sc.tx, padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:600 }}>{l.statut}</span>
+                      </td>
+                      <td style={{ padding:'9px 14px' }}>
+                        <div style={{ display:'flex', gap:5 }}>
+                          {l.statut === 'disponible' && (
+                            <button onClick={async () => {
+                              try { await axios.put(`${API}/stock/lots/${l.id}`, { statut:'quarantaine' }); toast.success('Mis en quarantaine'); charger(); }
+                              catch { toast.error('Erreur'); }
+                            }} style={{ background:'#fef3c7', color:'#92400e', border:'none', padding:'3px 8px', borderRadius:6, cursor:'pointer', fontSize:10 }}>
+                              Quarantaine
+                            </button>
+                          )}
+                          {l.statut === 'quarantaine' && (
+                            <button onClick={async () => {
+                              try { await axios.put(`${API}/stock/lots/${l.id}`, { statut:'disponible' }); toast.success('Libéré'); charger(); }
+                              catch { toast.error('Erreur'); }
+                            }} style={{ background:'#dcfce7', color:'#15803d', border:'none', padding:'3px 8px', borderRadius:6, cursor:'pointer', fontSize:10 }}>
+                              Libérer
+                            </button>
+                          )}
+                          <button onClick={async () => {
+                            if (!window.confirm('Bloquer ce lot ?')) return;
+                            try { await axios.put(`${API}/stock/lots/${l.id}`, { statut:'bloque' }); toast.success('Lot bloqué'); charger(); }
+                            catch { toast.error('Erreur'); }
+                          }} style={{ background:'#fee2e2', color:'#dc2626', border:'none', padding:'3px 8px', borderRadius:6, cursor:'pointer', fontSize:10 }}>
+                            Bloquer
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {lots.length === 0 && (
+              <div style={{ textAlign:'center', padding:40, color:'#9ca3af' }}>
+                <p>Aucun lot avec le statut "{filtreStatut}"</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── MOUVEMENTS ── */}
+      {onglet === 'mouvements' && (
+        <div style={{ background:'#fff', borderRadius:14, border:'1px solid #e5e7eb', overflow:'auto' }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13, minWidth:700 }}>
+            <thead>
+              <tr style={{ background:'#eff6ff' }}>
+                {['Date','Article','Type','Emplacement','Quantité','N° Lot','Notes','Par'].map(h => (
+                  <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:700, color:'#1d4ed8', borderBottom:'2px solid #bfdbfe', whiteSpace:'nowrap' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {mouvements.map((m, i) => (
+                <tr key={m.id} style={{ borderBottom:'1px solid #eff6ff', background:i%2===0?'#fff':'#f8faff' }}>
+                  <td style={{ padding:'9px 14px', fontSize:12, whiteSpace:'nowrap' }}>{new Date(m.created_at).toLocaleString('fr-FR')}</td>
+                  <td style={{ padding:'9px 14px', fontSize:12 }}>{m.article_code} — {m.article_designation?.substring(0,20)}</td>
+                  <td style={{ padding:'9px 14px' }}>
+                    <span style={{ background: m.type==='entree'?'#dcfce7':'#fee2e2', color: m.type==='entree'?'#15803d':'#dc2626', padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:700 }}>
+                      {m.type==='entree'?'+ Entrée':'− Sortie'}
+                    </span>
+                  </td>
+                  <td style={{ padding:'9px 14px', fontSize:12, color:'#6b7280' }}>{m.emplacement_code||'—'}</td>
+                  <td style={{ padding:'9px 14px', fontWeight:700, color: m.type==='entree'?'#15803d':'#dc2626' }}>
+                    {m.type==='entree'?'+':'-'}{parseFloat(m.qte||0).toFixed(3)}
+                  </td>
+                  <td style={{ padding:'9px 14px', fontFamily:'monospace', fontSize:11, color:'#0369a1' }}>{m.numero_lot||'—'}</td>
+                  <td style={{ padding:'9px 14px', fontSize:12, color:'#6b7280' }}>{m.notes||'—'}</td>
+                  <td style={{ padding:'9px 14px', fontSize:11, color:'#9ca3af' }}>{m.cree_par_nom||'—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {mouvements.length === 0 && (
+            <div style={{ textAlign:'center', padding:40, color:'#9ca3af' }}>
+              <p>Aucun mouvement enregistré</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── EMPLACEMENTS ── */}
+      {onglet === 'emplacements' && (
+        <div>
+          <div style={{ background:'#fff', borderRadius:14, border:'1px solid #e5e7eb', overflow:'hidden' }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
+              <thead>
+                <tr style={{ background:'#eff6ff' }}>
+                  {['Code','Libellé','Atelier','Type','Capacité max','Articles stockés'].map(h => (
+                    <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:700, color:'#1d4ed8', borderBottom:'2px solid #bfdbfe' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {emplacements.map((e, i) => (
+                  <tr key={e.id} style={{ borderBottom:'1px solid #eff6ff', background:i%2===0?'#fff':'#f8faff' }}>
+                    <td style={{ padding:'9px 14px', fontFamily:'monospace', fontWeight:700, color:'#1d4ed8' }}>{e.code}</td>
+                    <td style={{ padding:'9px 14px', fontWeight:500 }}>{e.libelle}</td>
+                    <td style={{ padding:'9px 14px', fontSize:12, color:'#6b7280' }}>{e.atelier_libelle||e.atelier_code||'—'}</td>
+                    <td style={{ padding:'9px 14px' }}>
+                      <span style={{ background:'#dbeafe', color:'#1d4ed8', padding:'2px 8px', borderRadius:20, fontSize:11 }}>{e.type}</span>
+                    </td>
+                    <td style={{ padding:'9px 14px', color:'#6b7280' }}>{e.capacite_max_kg ? `${e.capacite_max_kg} kg` : '—'}</td>
+                    <td style={{ padding:'9px 14px', color:'#374151' }}>
+                      {inventaire.filter(a => a.emplacement_id === e.id).length} articles
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {emplacements.length === 0 && (
+              <div style={{ textAlign:'center', padding:40, color:'#9ca3af' }}>
+                <p>Aucun emplacement — créez-en dans Référentiels</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
 
 function Alertes() {
   const [alertes, setAlertes] = useState([]);
