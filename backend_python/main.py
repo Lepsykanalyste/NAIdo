@@ -31,7 +31,8 @@ from gmao_routes import (
     gmao_dashboard, get_equipements, create_equipement,
     get_ots, create_ot, update_ot,
     get_plans, create_plan, generer_ot_depuis_plan,
-    get_pieces, get_indicateurs_equipement
+    get_pieces, get_indicateurs_equipement,
+    get_releves_energie, dashboard_energie
 )
 # Import RH routes module
 from rh_routes import (
@@ -1280,6 +1281,70 @@ async def api_get_pannes(equipement_id: Optional[str]=None, user=Depends(get_cur
         q += " ORDER BY hp.date_panne DESC LIMIT 100"
         rows = await conn.fetch(q, *params)
         return [dict(r) for r in rows]
+
+
+# ── ÉNERGIE ───────────────────────────────────────────────────
+@app.get("/api/gmao/energie/dashboard")
+async def api_energie_dashboard(mois: Optional[str]=None, user=Depends(get_current_user)):
+    return await dashboard_energie(pool, mois)
+
+@app.get("/api/gmao/energie/releves")
+async def api_get_releves(equipement_id: Optional[str]=None, mois: Optional[str]=None,
+                           atelier_id: Optional[str]=None, user=Depends(get_current_user)):
+    return await get_releves_energie(pool, equipement_id, mois, atelier_id)
+
+@app.post("/api/gmao/energie/releves")
+async def api_create_releve(payload: dict, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        d = payload
+        if not d.get("equipement_id") or not d.get("date_releve"):
+            raise HTTPException(400, "Équipement et date requis")
+        heures = float(d.get("heures_marche",0) or 0)
+        idx_debut = float(d.get("index_debut",0) or 0)
+        idx_fin = float(d.get("index_fin",0) or 0)
+        conso = idx_fin - idx_debut
+        puissance_moy = round(conso/heures, 3) if heures > 0 else None
+        row = await conn.fetchrow("""
+            INSERT INTO releves_energie (
+                equipement_id, atelier_id, date_releve, shift,
+                index_debut, index_fin, heures_marche,
+                puissance_moyenne_kw, quantite_produite, unite_production,
+                operateur_id, notes
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+            RETURNING *
+        """,
+            d["equipement_id"],
+            int(d["atelier_id"]) if d.get("atelier_id") else None,
+            d["date_releve"], d.get("shift","journee"),
+            idx_debut, idx_fin, heures, puissance_moy,
+            float(d.get("quantite_produite",0) or 0) or None,
+            d.get("unite_production"),
+            d.get("operateur_id") or user.get("id"),
+            d.get("notes")
+        )
+        return dict(row)
+
+@app.get("/api/gmao/energie/mensuel")
+async def api_conso_mensuelle(user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("SELECT * FROM vue_conso_mensuelle LIMIT 100")
+        return [dict(r) for r in rows]
+
+@app.get("/api/gmao/energie/parametres")
+async def api_get_parametres_energie(user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT * FROM parametres_energie LIMIT 1")
+        return dict(row) if row else {"tarif_kwh": 105.0}
+
+@app.put("/api/gmao/energie/parametres")
+async def api_update_parametres_energie(payload: dict, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        tarif = float(payload.get("tarif_kwh", 105))
+        await conn.execute(
+            "UPDATE parametres_energie SET tarif_kwh=$1, updated_at=NOW()",
+            tarif
+        )
+        return {"tarif_kwh": tarif, "message": "Tarif mis à jour"}
 
 # ══════════════════════════════════════════════════════════════
 # ROUTES RH

@@ -248,3 +248,63 @@ WHERE e.actif=true
 ORDER BY e.criticite DESC, e.designation;
 
 SELECT 'Migration GMAO OK ✓' AS statut;
+
+-- ── MODULE ÉNERGIE ────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS parametres_energie (
+    id SERIAL PRIMARY KEY,
+    tarif_kwh NUMERIC(10,4) DEFAULT 105.0,  -- FCFA/kWh CIE Côte d'Ivoire
+    devise VARCHAR(10) DEFAULT 'FCFA',
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+INSERT INTO parametres_energie (tarif_kwh) VALUES (105.0) ON CONFLICT DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS releves_energie (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    equipement_id UUID REFERENCES equipements(id),
+    atelier_id INTEGER REFERENCES ateliers(id),
+    -- Période
+    date_releve DATE NOT NULL,
+    shift VARCHAR(20) DEFAULT 'journee'
+        CHECK (shift IN ('matin','apres_midi','nuit','journee')),
+    -- Données
+    index_debut NUMERIC(12,3) DEFAULT 0,   -- kWh compteur début
+    index_fin NUMERIC(12,3) DEFAULT 0,     -- kWh compteur fin
+    consommation_kwh NUMERIC(12,3) GENERATED ALWAYS AS (index_fin - index_debut) STORED,
+    heures_marche NUMERIC(5,2) DEFAULT 0,  -- Heures de fonctionnement réel
+    -- Calculé
+    puissance_moyenne_kw NUMERIC(8,3),     -- consommation / heures_marche
+    -- Contexte production
+    quantite_produite NUMERIC(12,3),
+    unite_production VARCHAR(20),
+    -- Notes
+    operateur_id UUID REFERENCES utilisateurs(id),
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_releves_date ON releves_energie(date_releve DESC);
+CREATE INDEX IF NOT EXISTS idx_releves_equip ON releves_energie(equipement_id, date_releve DESC);
+
+-- Vue consommation mensuelle par équipement
+CREATE OR REPLACE VIEW vue_conso_mensuelle AS
+SELECT
+    DATE_TRUNC('month', r.date_releve) AS mois,
+    e.id AS equipement_id,
+    e.code AS equipement_code,
+    e.designation AS equipement_designation,
+    COALESCE(e.puissance,'—') AS puissance_nominale,
+    at.libelle AS atelier,
+    SUM(r.consommation_kwh) AS total_kwh,
+    SUM(r.heures_marche) AS total_heures,
+    CASE WHEN SUM(r.heures_marche) > 0
+         THEN SUM(r.consommation_kwh) / SUM(r.heures_marche)
+         ELSE 0 END AS puissance_moyenne_kw,
+    SUM(r.consommation_kwh) * (SELECT tarif_kwh FROM parametres_energie LIMIT 1) AS cout_fcfa,
+    COUNT(*) AS nb_releves
+FROM releves_energie r
+JOIN equipements e ON e.id = r.equipement_id
+LEFT JOIN ateliers at ON at.id = e.atelier_id
+GROUP BY DATE_TRUNC('month', r.date_releve), e.id, e.code, e.designation, e.puissance, at.libelle
+ORDER BY mois DESC, total_kwh DESC;
+
+SELECT 'Migration Énergie OK ✓' AS statut;

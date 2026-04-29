@@ -114,8 +114,7 @@ const MENU = [
   { id:'separator3',  label:'QHSE & MAINTENANCE',  separator:true },
   { id:'qhse',        label:'QHSE / NC',           icon:'qhse',        color:'#b45309' },
   { id:'gmao',        label:'GMAO / Maintenance',  icon:'gmao',        color:'#92400e' },
-  { id:'separator3b', label:'GMAO & MAINTENANCE', separator:true },
-  { id:'gmao',        label:'GMAO / Maintenance',    icon:'tool',        color:'#059669' },
+
   { id:'separator4b', label:'RESSOURCES HUMAINES', separator:true },
   { id:'rh',          label:'RH — Employés & Paie',  icon:'users',       color:'#0891b2' },
   { id:'separator4',  label:'ADMIN & IA',          separator:true },
@@ -3428,17 +3427,6 @@ function KPIRapports() {
   );
 }
 
-function GMAO() {
-  return (
-    <div style={{ background:'#fff', borderRadius:14, padding:48, textAlign:'center', border:'1px solid #fde68a' }}>
-      <div style={{ fontSize:48, marginBottom:12 }}>🔧</div>
-      <h3 style={{ color:'#92400e', margin:'0 0 8px' }}>Module GMAO — En développement</h3>
-      <p style={{ color:'#6b7280' }}>Gestion des équipements, plans de maintenance, ordres de travail</p>
-      <p style={{ color:'#9ca3af', fontSize:13 }}>Les tables sont créées en base de données — interface en cours</p>
-    </div>
-  );
-}
-
 function Stock() {
   const [onglet, setOnglet] = useState('inventaire');
   const [inventaire, setInventaire] = useState([]);
@@ -5140,6 +5128,122 @@ function RH() {
         </div>
       )}
 
+      {/* ══ ÉNERGIE / kWh ══ */}
+      {onglet==='energie' && (
+        <div>
+          {/* KPIs énergie mois en cours */}
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:12,marginBottom:20}}>
+            {[
+              {icon:'⚡',label:'Consommation mois',value:`${parseFloat(energieDash.total_kwh||0).toLocaleString('fr-FR')} kWh`,color:'#1d4ed8',bg:'#dbeafe'},
+              {icon:'💰',label:'Coût électricité',value:`${parseFloat(energieDash.cout_fcfa||0).toLocaleString('fr-FR')} FCFA`,color:'#15803d',bg:'#dcfce7'},
+              {icon:'🏭',label:'Machines suivies',value:energieDash.nb_equipements||0,color:'#059669',bg:'#f0fdf4'},
+              {icon:'📋',label:'Relevés saisis',value:energieDash.nb_releves||0,color:'#6d28d9',bg:'#f5f3ff'},
+              {icon:'⏱',label:'Heures de marche',value:`${parseFloat(energieDash.total_heures||0).toLocaleString('fr-FR')} h`,color:'#92400e',bg:'#fef3c7'},
+              {icon:'📊',label:'Tarif kWh',value:`${parseFloat(energieDash.tarif_kwh||105).toFixed(0)} FCFA`,color:'#374151',bg:'#f3f4f6'},
+            ].map(k=>(
+              <div key={k.label} style={{background:k.bg,borderRadius:12,padding:'14px 16px'}}>
+                <div style={{fontSize:11,color:'#6b7280',marginBottom:4}}>{k.icon} {k.label}</div>
+                <div style={{fontSize:k.label.includes('Consommation')||k.label.includes('Coût')||k.label.includes('Heures')?13:24,fontWeight:800,color:k.color}}>{k.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Top consommateurs */}
+          {energieDash.top5_consommateurs?.length > 0 && (
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:20}}>
+              <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',padding:16}}>
+                <div style={{fontWeight:700,color:'#1d4ed8',marginBottom:12,fontSize:13}}>🏆 Top consommateurs (mois)</div>
+                {energieDash.top5_consommateurs.map((m,i)=>(
+                  <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                    <span style={{fontSize:12,fontWeight:600}}>{m.code} — {m.designation}</span>
+                    <span style={{fontWeight:800,color:'#1d4ed8',fontSize:13}}>{parseFloat(m.kwh||0).toLocaleString('fr-FR')} kWh</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',padding:16}}>
+                <div style={{fontWeight:700,color:'#059669',marginBottom:12,fontSize:13}}>🏭 Par atelier (mois)</div>
+                {(energieDash.par_atelier||[]).map((a,i)=>(
+                  <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                    <span style={{fontSize:12,fontWeight:600}}>{a.atelier_code} — {a.atelier}</span>
+                    <div style={{textAlign:'right'}}>
+                      <div style={{fontWeight:800,color:'#059669',fontSize:13}}>{parseFloat(a.kwh||0).toLocaleString('fr-FR')} kWh</div>
+                      <div style={{fontSize:10,color:'#9ca3af'}}>{parseFloat(a.heures||0).toFixed(1)} h</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Actions */}
+          <div style={{display:'flex',gap:10,marginBottom:16,alignItems:'center'}}>
+            <button onClick={()=>ouvrir('releve',{shift:'journee',date_releve:new Date().toISOString().split('T')[0],index_debut:'0',index_fin:'0',heures_marche:'8'})}
+              style={{background:'#059669',color:'#fff',border:'none',padding:'9px 18px',borderRadius:8,cursor:'pointer',fontWeight:700}}>
+              + Saisir relevé
+            </button>
+            <span style={{fontSize:12,color:'#9ca3af',marginLeft:'auto'}}>Tarif CIE : {parseFloat(energieDash.tarif_kwh||105).toFixed(0)} FCFA/kWh</span>
+          </div>
+
+          {/* Tableau des relevés */}
+          <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',overflow:'auto',marginBottom:20}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:13,minWidth:700}}>
+              <thead>
+                <tr style={{background:'#eff6ff'}}>
+                  {['Date','Shift','Machine','Index début','Index fin','Consommation','Heures','Puissance moy.','Opérateur'].map(h=>(
+                    <th key={h} style={{padding:'10px 12px',textAlign:'left',fontWeight:700,color:'#1d4ed8',borderBottom:'2px solid #bfdbfe',whiteSpace:'nowrap'}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {releves.map((r,i)=>(
+                  <tr key={r.id} style={{borderBottom:'1px solid #eff6ff',background:i%2===0?'#fff':'#f8fbff'}}>
+                    <td style={{padding:'9px 12px',fontSize:12}}>{new Date(r.date_releve).toLocaleDateString('fr-FR')}</td>
+                    <td style={{padding:'9px 12px'}}><span style={{background:'#dbeafe',color:'#1d4ed8',padding:'2px 6px',borderRadius:20,fontSize:10,fontWeight:700}}>{r.shift}</span></td>
+                    <td style={{padding:'9px 12px',fontWeight:600,color:'#059669'}}>{r.eq_code} <span style={{color:'#9ca3af',fontWeight:400,fontSize:11}}>{r.eq_designation}</span></td>
+                    <td style={{padding:'9px 12px',fontFamily:'monospace'}}>{parseFloat(r.index_debut||0).toLocaleString('fr-FR')}</td>
+                    <td style={{padding:'9px 12px',fontFamily:'monospace'}}>{parseFloat(r.index_fin||0).toLocaleString('fr-FR')}</td>
+                    <td style={{padding:'9px 12px',fontWeight:800,color:'#1d4ed8',fontSize:14}}>{parseFloat(r.consommation_kwh||0).toLocaleString('fr-FR')} kWh</td>
+                    <td style={{padding:'9px 12px'}}>{parseFloat(r.heures_marche||0).toFixed(1)} h</td>
+                    <td style={{padding:'9px 12px',color:'#6b7280'}}>{r.puissance_moyenne_kw?`${parseFloat(r.puissance_moyenne_kw).toFixed(2)} kW`:'—'}</td>
+                    <td style={{padding:'9px 12px',fontSize:11,color:'#6b7280'}}>{r.operateur_nom||'—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {releves.length===0&&<div style={{textAlign:'center',padding:40,color:'#9ca3af'}}><div style={{fontSize:36,marginBottom:8}}>💡</div><p>Aucun relevé — commencez la saisie quotidienne</p></div>}
+          </div>
+
+          {/* Historique mensuel */}
+          {consoMensuelle.length > 0 && (
+            <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',overflow:'auto'}}>
+              <div style={{padding:'14px 16px',fontWeight:700,color:'#1d4ed8',borderBottom:'1px solid #e5e7eb'}}>📅 Historique mensuel par machine</div>
+              <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,minWidth:600}}>
+                <thead>
+                  <tr style={{background:'#eff6ff'}}>
+                    {['Mois','Machine','Atelier','kWh total','Heures','P. moy. kW','Coût FCFA'].map(h=>(
+                      <th key={h} style={{padding:'8px 12px',textAlign:'left',fontWeight:700,color:'#1d4ed8',borderBottom:'1px solid #bfdbfe'}}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {consoMensuelle.slice(0,20).map((c,i)=>(
+                    <tr key={i} style={{borderBottom:'1px solid #eff6ff',background:i%2===0?'#fff':'#f8fbff'}}>
+                      <td style={{padding:'8px 12px',fontWeight:600}}>{new Date(c.mois).toLocaleDateString('fr-FR',{month:'long',year:'numeric'})}</td>
+                      <td style={{padding:'8px 12px',color:'#059669',fontWeight:600}}>{c.equipement_code}</td>
+                      <td style={{padding:'8px 12px',color:'#6b7280'}}>{c.atelier||'—'}</td>
+                      <td style={{padding:'8px 12px',fontWeight:800,color:'#1d4ed8'}}>{parseFloat(c.total_kwh||0).toLocaleString('fr-FR')}</td>
+                      <td style={{padding:'8px 12px'}}>{parseFloat(c.total_heures||0).toFixed(1)}</td>
+                      <td style={{padding:'8px 12px'}}>{parseFloat(c.puissance_moyenne_kw||0).toFixed(2)}</td>
+                      <td style={{padding:'8px 12px',fontWeight:700,color:'#15803d'}}>{parseFloat(c.cout_fcfa||0).toLocaleString('fr-FR')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ══ FORMULAIRES ══ */}
       {showForm && (
         <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:60,overflowY:'auto'}}>
@@ -5243,6 +5347,9 @@ function GMAO() {
   const [plans, setPlans] = useState([]);
   const [pieces, setPieces] = useState([]);
   const [pannes, setPannes] = useState([]);
+  const [energieDash, setEnergieDash] = useState({});
+  const [releves, setReleves] = useState([]);
+  const [consoMensuelle, setConsoMensuelle] = useState([]);
   const [utilisateurs, setUtilisateurs] = useState([]);
   const [ateliers, setAteliers] = useState([]);
   const [fournisseurs, setFournisseurs] = useState([]);
@@ -5268,6 +5375,14 @@ function GMAO() {
       else if (tab==='plans') { const {data}=await axios.get(`${API}/gmao/plans`); setPlans(data); }
       else if (tab==='pieces') { const {data}=await axios.get(`${API}/gmao/pieces`); setPieces(data); }
       else if (tab==='pannes') { const {data}=await axios.get(`${API}/gmao/pannes`); setPannes(data); }
+      else if (tab==='energie') {
+        const [d1,d2,d3] = await Promise.all([
+          axios.get(`${API}/gmao/energie/dashboard`),
+          axios.get(`${API}/gmao/energie/releves`),
+          axios.get(`${API}/gmao/energie/mensuel`),
+        ]);
+        setEnergieDash(d1.data); setReleves(d2.data); setConsoMensuelle(d3.data);
+      }
     } catch(e) { toast.error('Erreur: '+e.message); }
   };
 
@@ -5277,14 +5392,14 @@ function GMAO() {
 
   const sauvegarder = async () => {
     try {
-      const urls = { equipement:'/gmao/equipements', ot:'/gmao/ots', plan:'/gmao/plans', piece:'/gmao/pieces' };
+      const urls = { equipement:'/gmao/equipements', ot:'/gmao/ots', plan:'/gmao/plans', piece:'/gmao/pieces', releve:'/gmao/energie/releves' };
       const url = urls[formType];
       if (!url) return;
       if (form.id) await axios.put(`${API}${url}/${form.id}`, form);
       else await axios.post(`${API}${url}`, form);
       toast.success('Enregistré ✓');
       setShowForm(false);
-      const tabs = { equipement:'equipements', ot:'ots', plan:'plans', piece:'pieces' };
+      const tabs = { equipement:'equipements', ot:'ots', plan:'plans', piece:'pieces', releve:'energie' };
       chargerOnglet(tabs[formType]);
       charger();
     } catch(e) { toast.error(e.response?.data?.detail||e.response?.data?.error||'Erreur'); }
@@ -5360,6 +5475,7 @@ function GMAO() {
     {id:'plans',label:'📅 Maintenance préventive'},
     {id:'pieces',label:'🔩 Pièces détachées'},
     {id:'pannes',label:'⚡ Historique pannes'},
+    {id:'energie',label:'💡 Énergie / kWh'},
   ];
 
   return (
@@ -5543,7 +5659,7 @@ function GMAO() {
                       <td style={{padding:'9px 12px',fontSize:12,fontWeight:600}}>{ot.cout_total>0?`${parseFloat(ot.cout_total).toLocaleString('fr-FR')} FCFA`:'—'}</td>
                       <td style={{padding:'9px 12px'}}><span style={{background:sc.bg,color:sc.tx,padding:'2px 8px',borderRadius:20,fontSize:10,fontWeight:700}}>{ot.statut}</span></td>
                       <td style={{padding:'9px 12px'}}>
-                        <div style={{display:'flex',gap:4'}}>
+                        <div style={{display:'flex',gap:4}}>
                           <button onClick={()=>ouvrir('ot',{...ot})}
                             style={{background:'#fef3c7',color:'#92400e',border:'none',padding:'3px 7px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>✏</button>
                           {ot.statut==='ouvert'&&<button onClick={()=>changerStatutOT(ot,'en_cours')}
@@ -5688,6 +5804,122 @@ function GMAO() {
         </div>
       )}
 
+      {/* ══ ÉNERGIE / kWh ══ */}
+      {onglet==='energie' && (
+        <div>
+          {/* KPIs énergie mois en cours */}
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:12,marginBottom:20}}>
+            {[
+              {icon:'⚡',label:'Consommation mois',value:`${parseFloat(energieDash.total_kwh||0).toLocaleString('fr-FR')} kWh`,color:'#1d4ed8',bg:'#dbeafe'},
+              {icon:'💰',label:'Coût électricité',value:`${parseFloat(energieDash.cout_fcfa||0).toLocaleString('fr-FR')} FCFA`,color:'#15803d',bg:'#dcfce7'},
+              {icon:'🏭',label:'Machines suivies',value:energieDash.nb_equipements||0,color:'#059669',bg:'#f0fdf4'},
+              {icon:'📋',label:'Relevés saisis',value:energieDash.nb_releves||0,color:'#6d28d9',bg:'#f5f3ff'},
+              {icon:'⏱',label:'Heures de marche',value:`${parseFloat(energieDash.total_heures||0).toLocaleString('fr-FR')} h`,color:'#92400e',bg:'#fef3c7'},
+              {icon:'📊',label:'Tarif kWh',value:`${parseFloat(energieDash.tarif_kwh||105).toFixed(0)} FCFA`,color:'#374151',bg:'#f3f4f6'},
+            ].map(k=>(
+              <div key={k.label} style={{background:k.bg,borderRadius:12,padding:'14px 16px'}}>
+                <div style={{fontSize:11,color:'#6b7280',marginBottom:4}}>{k.icon} {k.label}</div>
+                <div style={{fontSize:k.label.includes('Consommation')||k.label.includes('Coût')||k.label.includes('Heures')?13:24,fontWeight:800,color:k.color}}>{k.value}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Top consommateurs */}
+          {energieDash.top5_consommateurs?.length > 0 && (
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:20}}>
+              <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',padding:16}}>
+                <div style={{fontWeight:700,color:'#1d4ed8',marginBottom:12,fontSize:13}}>🏆 Top consommateurs (mois)</div>
+                {energieDash.top5_consommateurs.map((m,i)=>(
+                  <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                    <span style={{fontSize:12,fontWeight:600}}>{m.code} — {m.designation}</span>
+                    <span style={{fontWeight:800,color:'#1d4ed8',fontSize:13}}>{parseFloat(m.kwh||0).toLocaleString('fr-FR')} kWh</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',padding:16}}>
+                <div style={{fontWeight:700,color:'#059669',marginBottom:12,fontSize:13}}>🏭 Par atelier (mois)</div>
+                {(energieDash.par_atelier||[]).map((a,i)=>(
+                  <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                    <span style={{fontSize:12,fontWeight:600}}>{a.atelier_code} — {a.atelier}</span>
+                    <div style={{textAlign:'right'}}>
+                      <div style={{fontWeight:800,color:'#059669',fontSize:13}}>{parseFloat(a.kwh||0).toLocaleString('fr-FR')} kWh</div>
+                      <div style={{fontSize:10,color:'#9ca3af'}}>{parseFloat(a.heures||0).toFixed(1)} h</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Actions */}
+          <div style={{display:'flex',gap:10,marginBottom:16,alignItems:'center'}}>
+            <button onClick={()=>ouvrir('releve',{shift:'journee',date_releve:new Date().toISOString().split('T')[0],index_debut:'0',index_fin:'0',heures_marche:'8'})}
+              style={{background:'#059669',color:'#fff',border:'none',padding:'9px 18px',borderRadius:8,cursor:'pointer',fontWeight:700}}>
+              + Saisir relevé
+            </button>
+            <span style={{fontSize:12,color:'#9ca3af',marginLeft:'auto'}}>Tarif CIE : {parseFloat(energieDash.tarif_kwh||105).toFixed(0)} FCFA/kWh</span>
+          </div>
+
+          {/* Tableau des relevés */}
+          <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',overflow:'auto',marginBottom:20}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:13,minWidth:700}}>
+              <thead>
+                <tr style={{background:'#eff6ff'}}>
+                  {['Date','Shift','Machine','Index début','Index fin','Consommation','Heures','Puissance moy.','Opérateur'].map(h=>(
+                    <th key={h} style={{padding:'10px 12px',textAlign:'left',fontWeight:700,color:'#1d4ed8',borderBottom:'2px solid #bfdbfe',whiteSpace:'nowrap'}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {releves.map((r,i)=>(
+                  <tr key={r.id} style={{borderBottom:'1px solid #eff6ff',background:i%2===0?'#fff':'#f8fbff'}}>
+                    <td style={{padding:'9px 12px',fontSize:12}}>{new Date(r.date_releve).toLocaleDateString('fr-FR')}</td>
+                    <td style={{padding:'9px 12px'}}><span style={{background:'#dbeafe',color:'#1d4ed8',padding:'2px 6px',borderRadius:20,fontSize:10,fontWeight:700}}>{r.shift}</span></td>
+                    <td style={{padding:'9px 12px',fontWeight:600,color:'#059669'}}>{r.eq_code} <span style={{color:'#9ca3af',fontWeight:400,fontSize:11}}>{r.eq_designation}</span></td>
+                    <td style={{padding:'9px 12px',fontFamily:'monospace'}}>{parseFloat(r.index_debut||0).toLocaleString('fr-FR')}</td>
+                    <td style={{padding:'9px 12px',fontFamily:'monospace'}}>{parseFloat(r.index_fin||0).toLocaleString('fr-FR')}</td>
+                    <td style={{padding:'9px 12px',fontWeight:800,color:'#1d4ed8',fontSize:14}}>{parseFloat(r.consommation_kwh||0).toLocaleString('fr-FR')} kWh</td>
+                    <td style={{padding:'9px 12px'}}>{parseFloat(r.heures_marche||0).toFixed(1)} h</td>
+                    <td style={{padding:'9px 12px',color:'#6b7280'}}>{r.puissance_moyenne_kw?`${parseFloat(r.puissance_moyenne_kw).toFixed(2)} kW`:'—'}</td>
+                    <td style={{padding:'9px 12px',fontSize:11,color:'#6b7280'}}>{r.operateur_nom||'—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {releves.length===0&&<div style={{textAlign:'center',padding:40,color:'#9ca3af'}}><div style={{fontSize:36,marginBottom:8}}>💡</div><p>Aucun relevé — commencez la saisie quotidienne</p></div>}
+          </div>
+
+          {/* Historique mensuel */}
+          {consoMensuelle.length > 0 && (
+            <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',overflow:'auto'}}>
+              <div style={{padding:'14px 16px',fontWeight:700,color:'#1d4ed8',borderBottom:'1px solid #e5e7eb'}}>📅 Historique mensuel par machine</div>
+              <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,minWidth:600}}>
+                <thead>
+                  <tr style={{background:'#eff6ff'}}>
+                    {['Mois','Machine','Atelier','kWh total','Heures','P. moy. kW','Coût FCFA'].map(h=>(
+                      <th key={h} style={{padding:'8px 12px',textAlign:'left',fontWeight:700,color:'#1d4ed8',borderBottom:'1px solid #bfdbfe'}}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {consoMensuelle.slice(0,20).map((c,i)=>(
+                    <tr key={i} style={{borderBottom:'1px solid #eff6ff',background:i%2===0?'#fff':'#f8fbff'}}>
+                      <td style={{padding:'8px 12px',fontWeight:600}}>{new Date(c.mois).toLocaleDateString('fr-FR',{month:'long',year:'numeric'})}</td>
+                      <td style={{padding:'8px 12px',color:'#059669',fontWeight:600}}>{c.equipement_code}</td>
+                      <td style={{padding:'8px 12px',color:'#6b7280'}}>{c.atelier||'—'}</td>
+                      <td style={{padding:'8px 12px',fontWeight:800,color:'#1d4ed8'}}>{parseFloat(c.total_kwh||0).toLocaleString('fr-FR')}</td>
+                      <td style={{padding:'8px 12px'}}>{parseFloat(c.total_heures||0).toFixed(1)}</td>
+                      <td style={{padding:'8px 12px'}}>{parseFloat(c.puissance_moyenne_kw||0).toFixed(2)}</td>
+                      <td style={{padding:'8px 12px',fontWeight:700,color:'#15803d'}}>{parseFloat(c.cout_fcfa||0).toLocaleString('fr-FR')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ══ FORMULAIRES ══ */}
       {showForm && (
         <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:60,overflowY:'auto'}}>
@@ -5767,6 +5999,22 @@ function GMAO() {
                 <S label="Technicien" k="technicien_id" opts={utilisateurs.map(u=>({v:u.id,l:`${u.prenom} ${u.nom}`}))}/>
                 <F label="Dernière réalisation" k="derniere_realisation" type="date"/>
                 <div style={{gridColumn:'1/-1'}}><F label="Description / Procédure" k="description" ph="Étapes à suivre..."/></div>
+              </>}
+
+              {formType==='releve' && <>
+                <S label="Équipement *" k="equipement_id" required opts={equipements.map(e=>({v:e.id,l:`${e.code} — ${e.designation}`}))}/>
+                <S label="Atelier" k="atelier_id" opts={ateliers.map(a=>({v:String(a.id),l:`${a.code} — ${a.libelle}`}))}/>
+                <F label="Date *" k="date_releve" type="date" required/>
+                <S label="Shift" k="shift" opts={[{v:'matin',l:'🌅 Matin'},{v:'apres_midi',l:'🌞 Après-midi'},{v:'nuit',l:'🌙 Nuit'},{v:'journee',l:'☀ Journée complète'}]}/>
+                <F label="Index début (kWh)" k="index_debut" type="number" ph="0"/>
+                <F label="Index fin (kWh)" k="index_fin" type="number" ph="0"/>
+                <div style={{gridColumn:'1/-1',background:'#eff6ff',borderRadius:8,padding:12,fontSize:13,color:'#1d4ed8',fontWeight:700,textAlign:'center'}}>
+                  ⚡ Consommation = {Math.max(0,parseFloat(form.index_fin||0)-parseFloat(form.index_debut||0)).toLocaleString('fr-FR')} kWh
+                </div>
+                <F label="Heures de marche" k="heures_marche" type="number" ph="8"/>
+                <F label="Quantité produite" k="quantite_produite" type="number" ph="0"/>
+                <F label="Unité production" k="unite_production" ph="kg, sacs, m..."/>
+                <div style={{gridColumn:'1/-1'}}><F label="Notes" k="notes" ph="Observations..."/></div>
               </>}
 
               {formType==='piece' && <>

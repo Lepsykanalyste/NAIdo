@@ -396,3 +396,84 @@ async def get_indicateurs_equipement(pool, equipement_id: str):
             "nb_interventions": len(ots),
             "historique_pannes": [dict(p) for p in pannes[-10:]],
         }
+
+
+# ── MODULE ÉNERGIE ────────────────────────────────────────────
+async def get_releves_energie(pool, equipement_id=None, mois=None, atelier_id=None):
+    async with pool.acquire() as conn:
+        q = """
+            SELECT r.*,
+                e.code AS eq_code, e.designation AS eq_designation,
+                e.puissance AS puissance_nominale,
+                at.libelle AS atelier_libelle,
+                u.nom||' '||u.prenom AS operateur_nom
+            FROM releves_energie r
+            JOIN equipements e ON e.id=r.equipement_id
+            LEFT JOIN ateliers at ON at.id=e.atelier_id
+            LEFT JOIN utilisateurs u ON u.id=r.operateur_id
+            WHERE 1=1
+        """
+        params = []
+        if equipement_id:
+            params.append(equipement_id)
+            q += f" AND r.equipement_id=${len(params)}"
+        if atelier_id:
+            params.append(int(atelier_id))
+            q += f" AND r.atelier_id=${len(params)}"
+        if mois:
+            params.append(mois)
+            q += f" AND DATE_TRUNC('month',r.date_releve)=DATE_TRUNC('month',${ len(params)}::DATE)"
+        q += " ORDER BY r.date_releve DESC, r.shift LIMIT 500"
+        rows = await conn.fetch(q, *params)
+        return [dict(r) for r in rows]
+
+async def dashboard_energie(pool, mois=None):
+    async with pool.acquire() as conn:
+        if mois:
+            condition = f"DATE_TRUNC('month',date_releve)=DATE_TRUNC('month','{mois}'::DATE)"
+        else:
+            condition = "DATE_TRUNC('month',date_releve)=DATE_TRUNC('month',CURRENT_DATE)"
+        
+        total = await conn.fetchrow(f"""
+            SELECT
+                COALESCE(SUM(consommation_kwh),0) AS total_kwh,
+                COALESCE(SUM(heures_marche),0) AS total_heures,
+                COUNT(DISTINCT equipement_id) AS nb_equipements,
+                COUNT(*) AS nb_releves
+            FROM releves_energie WHERE {condition}
+        """)
+        tarif = await conn.fetchval("SELECT tarif_kwh FROM parametres_energie LIMIT 1") or 105
+        
+        # Par atelier
+        par_atelier = await conn.fetch(f"""
+            SELECT at.libelle AS atelier, at.code AS atelier_code,
+                COALESCE(SUM(r.consommation_kwh),0) AS kwh,
+                COALESCE(SUM(r.heures_marche),0) AS heures
+            FROM releves_energie r
+            JOIN equipements e ON e.id=r.equipement_id
+            JOIN ateliers at ON at.id=e.atelier_id
+            WHERE {condition}
+            GROUP BY at.libelle, at.code ORDER BY kwh DESC
+        """)
+        
+        # Top 5 consommateurs
+        top5 = await conn.fetch(f"""
+            SELECT e.code, e.designation,
+                COALESCE(SUM(r.consommation_kwh),0) AS kwh
+            FROM releves_energie r
+            JOIN equipements e ON e.id=r.equipement_id
+            WHERE {condition}
+            GROUP BY e.code, e.designation ORDER BY kwh DESC LIMIT 5
+        """)
+        
+        total_kwh = float(total["total_kwh"] or 0)
+        return {
+            "total_kwh": round(total_kwh, 2),
+            "cout_fcfa": round(total_kwh * float(tarif), 2),
+            "tarif_kwh": float(tarif),
+            "total_heures": round(float(total["total_heures"] or 0), 2),
+            "nb_equipements": total["nb_equipements"] or 0,
+            "nb_releves": total["nb_releves"] or 0,
+            "par_atelier": [dict(r) for r in par_atelier],
+            "top5_consommateurs": [dict(r) for r in top5],
+        }
