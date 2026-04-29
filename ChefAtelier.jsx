@@ -647,21 +647,31 @@ function Articles() {
     if (!form.code.trim()) return toast.error('Code obligatoire');
     if (!form.designation.trim()) return toast.error('Désignation obligatoire');
     try {
-      const payload = new FormData();
-      // Exclure les champs tableau/objet du form - ils seront gérés séparément
-      const champsExclus = ['matieres_principales', 'composition'];
-      Object.entries(form).forEach(([k, v]) => {
-        if (champsExclus.includes(k)) return;
-        if (v !== '' && v !== null && v !== undefined && !Array.isArray(v))
-          payload.append(k, String(v));
+      // Envoyer en JSON (pas FormData) - évite les problèmes de type
+      const payload = {
+        ...Object.fromEntries(
+          Object.entries(form).filter(([k,v]) => !Array.isArray(v) && v !== undefined)
+        ),
+        composition: composition.length > 0 ? composition : [],
+        points_ccp: !!form.points_ccp,
+      };
+      // Convertir les champs numériques
+      ['longueur_mm','largeur_mm','hauteur_mm','poids_theorique_kg','poids_reel_kg',
+       'poids_mandrin_kg','cadence_theorique_kg_h','temps_reglage_min',
+       'prix_achat','prix_vente','prix_cession_interne','stock_mini','dlc_jours'].forEach(k => {
+        if (payload[k] === '') payload[k] = null;
+        else if (payload[k] !== null && payload[k] !== undefined) payload[k] = parseFloat(payload[k]) || 0;
       });
-      // Composition : toujours envoyer comme JSON valide
-      payload.append('composition', JSON.stringify(composition.length > 0 ? composition : []));
+      // IDs en null si vide
+      ['famille_id','unite_mesure_id','atelier_production_id'].forEach(k => {
+        if (payload[k] === '') payload[k] = null;
+      });
+
       if (modeEditArt && editArtId) {
-        await axios.put(`${API}/articles/${editArtId}`, payload, { headers: { 'Content-Type': 'multipart/form-data' } });
+        await axios.put(`${API}/articles/${editArtId}`, payload);
         toast.success(`✓ ${form.designation} mis à jour`);
       } else {
-        await axios.post(`${API}/articles`, payload, { headers: { 'Content-Type': 'multipart/form-data' } });
+        await axios.post(`${API}/articles`, payload);
         toast.success(`✓ Article ${form.code} créé`);
       }
       setShowForm(false);
@@ -1132,22 +1142,43 @@ function MatieresPremières() {
     if (!form.code.trim()) return toast.error('Code obligatoire');
     if (!form.designation.trim()) return toast.error('Désignation obligatoire');
     try {
-      const fd = new FormData();
-      Object.entries(form).forEach(([k, v]) => {
-        if (Array.isArray(v)) return; // Skip les tableaux
-        if (v !== '' && v !== null && v !== undefined)
-          fd.append(k, String(v));
+      // JSON direct sans FormData
+      const fd = {
+        ...Object.fromEntries(
+          Object.entries(form).filter(([k,v]) => !Array.isArray(v) && v !== undefined)
+        ),
+        points_ccp: !!form.points_ccp,
+        composition: [],
+      };
+      ['poids_theorique_kg','densite','temperature_fusion','temperature_traitement',
+       'prix_achat','stock_mini','stock_maxi','delai_appro_jours','dlc_jours','dluo_jours',
+       'temperature_stockage_min','temperature_stockage_max'].forEach(k => {
+        if (fd[k] === '') fd[k] = null;
+        else if (fd[k] !== null && fd[k] !== undefined) fd[k] = parseFloat(fd[k]) || null;
       });
-      if (files.fiche_technique) fd.append('fiche_technique', files.fiche_technique);
-      if (files.fiche_securite) fd.append('fiche_securite', files.fiche_securite);
-      if (files.photo) fd.append('photo', files.photo);
-      if (modeEdition && editId) {
-        await axios.put(`${API}/articles/${editId}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-        toast.success(`✓ ${form.designation} mis à jour`);
+      ['famille_id','unite_mesure_id'].forEach(k => { if (fd[k]==='') fd[k]=null; });
+      const useFormData = files.fiche_technique || files.fiche_securite || files.photo;
+      let response;
+      if (useFormData) {
+        const formData = new FormData();
+        Object.entries(fd).forEach(([k,v]) => { if(v!==null&&v!==undefined) formData.append(k,String(v)); });
+        if (files.fiche_technique) formData.append('fiche_technique', files.fiche_technique);
+        if (files.fiche_securite) formData.append('fiche_securite', files.fiche_securite);
+        if (files.photo) formData.append('photo', files.photo);
+        if (modeEdition && editId) {
+          await axios.put(`${API}/articles/${editId}`, formData, { headers:{'Content-Type':'multipart/form-data'} });
+        } else {
+          await axios.post(`${API}/articles`, formData, { headers:{'Content-Type':'multipart/form-data'} });
+        }
       } else {
-        await axios.post(`${API}/articles`, fd, { headers: { 'Content-Type': 'multipart/form-data' } });
-        toast.success(`✓ Matière première ${form.code} créée`);
+        // Pas de fichier : JSON pur
+        if (modeEdition && editId) {
+          await axios.put(`${API}/articles/${editId}`, fd);
+        } else {
+          await axios.post(`${API}/articles`, fd);
+        }
       }
+      toast.success(modeEdition ? `✓ ${form.designation} mis à jour` : `✓ Matière première ${form.code} créée`);
       setShowForm(false);
       setModeEdition(false);
       setEditId(null);
@@ -2377,18 +2408,15 @@ function Stock() {
 
   const charger = async () => {
     setLoading(true);
-    try {
-      const [inv, ls, empls, arts] = await Promise.all([
-        axios.get(`${API}/stock/inventaire${filtreArt?`?search=${filtreArt}`:''}`),
-        axios.get(`${API}/stock/lots?statut=${filtreStatut}${filtreArt?`&search=${filtreArt}`:''}`),
-        axios.get(`${API}/emplacements`),
-        axios.get(`${API}/articles?exclure_mp=false`),
-      ]);
-      setInventaire(inv.data);
-      setLots(ls.data);
-      setEmplacements(empls.data);
-      setArticles(arts.data);
-    } catch { toast.error('Erreur chargement stock'); }
+    // Chaque requête indépendante pour isoler les erreurs
+    try { const {data} = await axios.get(`${API}/stock/inventaire${filtreArt?`?search=${filtreArt}`:''}`); setInventaire(data); } 
+    catch(e) { console.error('inventaire:',e.message); setInventaire([]); }
+    try { const {data} = await axios.get(`${API}/stock/lots?statut=${filtreStatut}${filtreArt?`&search=${filtreArt}`:''}`); setLots(data); }
+    catch(e) { console.error('lots:',e.message); setLots([]); }
+    try { const {data} = await axios.get(`${API}/emplacements`); setEmplacements(data); }
+    catch(e) { console.error('emplacements:',e.message); setEmplacements([]); }
+    try { const {data} = await axios.get(`${API}/articles`); setArticles(data); }
+    catch(e) { console.error('articles:',e.message); setArticles([]); }
     finally { setLoading(false); }
   };
 

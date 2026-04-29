@@ -93,8 +93,16 @@ router.get('/:id', auth, async (req, res) => {
   } catch(err) { res.status(500).json({ error:err.message }); }
 });
 
-// POST /api/articles
-router.post('/', auth, uploadFields, async (req, res) => {
+// POST /api/articles - accepte JSON et multipart
+const handleUploadOrJSON = (req, res, next) => {
+  const ct = req.headers['content-type'] || '';
+  if (ct.includes('multipart/form-data')) {
+    return uploadFields(req, res, next);
+  }
+  next(); // JSON : express.json() déjà parsé en amont
+};
+
+router.post('/', auth, handleUploadOrJSON, async (req, res) => {
   try {
     const d = req.body;
     if (!d.code||!d.designation) return res.status(400).json({ error:'Code et désignation requis' });
@@ -156,7 +164,7 @@ router.post('/', auth, uploadFields, async (req, res) => {
 });
 
 // PUT /api/articles/:id
-router.put('/:id', auth, uploadFields, async (req, res) => {
+router.put('/:id', auth, handleUploadOrJSON, async (req, res) => {
   try {
     const d = req.body;
     const sets=[], vals=[];
