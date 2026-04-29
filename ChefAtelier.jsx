@@ -476,8 +476,8 @@ function Articles() {
   const [newComp, setNewComp] = useState({ mp_id:'', quantite:'', unite_id:'', pct:'' });
   const [form, setForm] = useState({
     code:'', designation:'', famille_id:'', unite_mesure_id:'',
-    type_article:'produit_fini', tracabilite_type:'lot',
-    couleur:'', matiere:'', longueur_mm:'', largeur_mm:'', hauteur_mm:'',
+    type_article:'produit_fini', tracabilite_type:'lot', format_lot:'LOT-YYYYMMDD-001', matieres_principales:[],
+    couleur:'', longueur_mm:'', largeur_mm:'', hauteur_mm:'',
     poids_theorique_kg:'', poids_reel_kg:'', poids_mandrin_kg:'',
     cadence_theorique_kg_h:'', temps_reglage_min:'30',
     prix_achat:'0', prix_vente:'0', prix_cession_interne:'0',
@@ -490,7 +490,7 @@ function Articles() {
       const [f, u, a] = await Promise.all([
         axios.get(`${API}/referentiels/familles`),
         axios.get(`${API}/referentiels/unites`),
-        axios.get(`${API}/ateliers?type=production`),
+        axios.get(`${API}/ateliers`),
       ]);
       setFamilles(f.data);
       setUnites(u.data);
@@ -515,7 +515,7 @@ function Articles() {
     await chargerArticles();
     setComposition([]);
     setNewComp({ mp_id:'', quantite:'', unite_id:'', pct:'' });
-    setForm({ code:'', designation:'', famille_id:'', unite_mesure_id:'', type_article:'produit_fini', tracabilite_type:'lot', couleur:'', matiere:'', longueur_mm:'', largeur_mm:'', hauteur_mm:'', poids_theorique_kg:'', poids_reel_kg:'', poids_mandrin_kg:'', cadence_theorique_kg_h:'', temps_reglage_min:'30', prix_achat:'0', prix_vente:'0', prix_cession_interne:'0', stock_mini:'0', dlc_jours:'', allergenes:'', normes_iso:'', points_ccp:false, atelier_production_id:'' });
+    setForm({ code:'', designation:'', famille_id:'', unite_mesure_id:'', type_article:'produit_fini', tracabilite_type:'lot', format_lot:'LOT-YYYYMMDD-001', matieres_principales:[], couleur:'', longueur_mm:'', largeur_mm:'', hauteur_mm:'', poids_theorique_kg:'', poids_reel_kg:'', poids_mandrin_kg:'', cadence_theorique_kg_h:'', temps_reglage_min:'30', prix_achat:'0', prix_vente:'0', prix_cession_interne:'0', stock_mini:'0', dlc_jours:'', allergenes:'', normes_iso:'', points_ccp:false, atelier_production_id:'' });
     setShowForm(true);
     setTimeout(() => document.getElementById('art-code')?.focus(), 100);
   };
@@ -609,7 +609,7 @@ function Articles() {
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:12 }}>
                 <F label="Code *" k="code" ph="EX: SAC-50KG"/>
                 <F label="Désignation *" k="designation" ph="Sac industriel PP 50kg"/>
-                <S label="Famille" k="famille_id" req={true} opts={
+                <S label="Famille *" k="famille_id" req={true} opts={
                   familles.length ? familles.map(f => ({ v:String(f.id), l:f.libelle }))
                   : [{ v:'', l:'⚠ Créez des familles dans Référentiels' }]
                 }/>
@@ -621,19 +621,31 @@ function Articles() {
                   { v:'consommable', l:'Consommable' },
                   { v:'piece_detachee', l:'Pièce détachée' },
                 ]}/>
-                <S label="Unité de mesure" k="unite_mesure_id" req={true} opts={
+                <S label="Unité de mesure *" k="unite_mesure_id" req={true} opts={
                   unites.length ? unites.map(u => ({ v:String(u.id), l:`${u.code} — ${u.libelle}` }))
                   : [{ v:'', l:'⚠ Activez des unités dans Référentiels' }]
                 }/>
                 <S label="Atelier de production" k="atelier_production_id" opts={
                   ateliers.length ? ateliers.map(a => ({ v:String(a.id), l:`${a.code} — ${a.libelle}` }))
-                  : [{ v:'', l:'⚠ Créez des ateliers de production' }]
+                  : [{ v:'', l:'⚠ Créez des ateliers' }]
                 }/>
-                <S label="Traçabilité" k="tracabilite_type" opts={[
-                  { v:'lot', l:'Par lot (alimentaire, pharma)' },
-                  { v:'serie', l:'Par numéro de série' },
-                  { v:'aucune', l:'Aucune traçabilité' },
+              </div>
+              {/* Traçabilité + format numéro */}
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:12 }}>
+                <S label="Type de traçabilité" k="tracabilite_type" opts={[
+                  { v:'lot', l:'🏷 Par numéro de lot (alimentaire, ISO)' },
+                  { v:'serie', l:'🔢 Par numéro de série (équipement)' },
+                  { v:'aucune', l:'— Aucune traçabilité' },
                 ]}/>
+                <div>
+                  <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>
+                    Format numéro de lot / série
+                    <span style={{ fontSize:10, color:'#9ca3af', marginLeft:6 }}>ex: LOT-YYYYMMDD-001</span>
+                  </label>
+                  <input value={form.format_lot||''} onChange={e => setForm({...form, format_lot:e.target.value})}
+                    placeholder="LOT-YYYYMMDD-001 ou SN-XXXX"
+                    style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'9px', fontSize:13, boxSizing:'border-box', fontFamily:'monospace' }}/>
+                </div>
               </div>
             </div>
 
@@ -649,10 +661,52 @@ function Articles() {
                 <F label="Poids théorique (kg)" k="poids_theorique_kg" type="number" ph="0.000"/>
                 <F label="Poids réel (kg)" k="poids_reel_kg" type="number" ph="0.000"/>
                 <F label="Poids mandrin (kg)" k="poids_mandrin_kg" type="number" ph="0.000"/>
-                <F label="Couleur" k="couleur" ph="Naturel, Blanc..."/>
-                <F label="Matière principale" k="matiere" ph="PP, PEHD, PEBD..."/>
+                <F label="Couleur" k="couleur" ph="Naturel, Blanc, Noir..."/>
                 <F label="Cadence théorique (kg/h)" k="cadence_theorique_kg_h" type="number" ph="0"/>
                 <F label="Temps réglage (min)" k="temps_reglage_min" type="number" ph="30"/>
+              </div>
+            </div>
+
+            {/* BLOC 2b — Matières principales */}
+            <div>
+              <div style={{ fontSize:11, fontWeight:700, color:'#0369a1', letterSpacing:1, textTransform:'uppercase', borderBottom:'2px solid #bae6fd', paddingBottom:6, marginBottom:14 }}>
+                2b · Matières principales (composants de base)
+              </div>
+              <div style={{ background:'#f0f9ff', borderRadius:10, padding:14, border:'1px solid #bae6fd' }}>
+                <div style={{ fontSize:12, color:'#0369a1', marginBottom:10 }}>
+                  Ex : PP (polypropylène) + Colorant + Additif. Cliquez + pour ajouter chaque matière.
+                </div>
+                {form.matieres_principales?.length > 0 && (
+                  <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:10 }}>
+                    {form.matieres_principales.map((m, i) => (
+                      <div key={i} style={{ background:'#dbeafe', color:'#1d4ed8', padding:'4px 12px', borderRadius:20, fontSize:13, display:'flex', alignItems:'center', gap:6, fontWeight:600 }}>
+                        {m}
+                        <button onClick={() => setForm({...form, matieres_principales: form.matieres_principales.filter((_,j) => j!==i)})}
+                          style={{ background:'none', border:'none', color:'#1d4ed8', cursor:'pointer', fontWeight:700, fontSize:14 }}>×</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div style={{ display:'flex', gap:10 }}>
+                  <input id="inp-matiere" placeholder="Saisir une matière : PP, PEHD, Colorant..."
+                    style={{ flex:1, border:'1px solid #93c5fd', borderRadius:8, padding:'9px', fontSize:13 }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && e.target.value.trim()) {
+                        setForm({...form, matieres_principales: [...(form.matieres_principales||[]), e.target.value.trim()]});
+                        e.target.value = '';
+                      }
+                    }}/>
+                  <button onClick={() => {
+                    const inp = document.getElementById('inp-matiere');
+                    if (inp?.value?.trim()) {
+                      setForm({...form, matieres_principales: [...(form.matieres_principales||[]), inp.value.trim()]});
+                      inp.value = '';
+                    }
+                  }} style={{ background:'#0369a1', color:'#fff', border:'none', padding:'9px 18px', borderRadius:8, cursor:'pointer', fontWeight:700 }}>
+                    + Ajouter
+                  </button>
+                </div>
+                <div style={{ fontSize:11, color:'#9ca3af', marginTop:6 }}>Appuyez sur Entrée ou cliquez + pour ajouter chaque matière</div>
               </div>
             </div>
 
@@ -666,8 +720,16 @@ function Articles() {
                 <F label="Prix vente (DZD)" k="prix_vente" type="number" ph="0"/>
                 <F label="Prix cession interne" k="prix_cession_interne" type="number" ph="0"/>
                 <F label="Stock minimum" k="stock_mini" type="number" ph="0"/>
-                <F label="DLC (jours)" k="dlc_jours" type="number" ph=""/>
-                <F label="Normes / Certifications" k="normes_iso" ph="ISO 9001..."/>
+                <F label="DLC — Durée de vie (jours)" k="dlc_jours" type="number" ph="Ex: 365 = 1 an"/>
+                <div>
+                  <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>
+                    Normes / Certifications
+                    <span style={{ fontSize:10, color:'#9ca3af', marginLeft:6 }}>La gestion des normes est dans QHSE</span>
+                  </label>
+                  <input value={form.normes_iso||''} onChange={e => setForm({...form,normes_iso:e.target.value})}
+                    placeholder="ISO 9001, ISO 22000, EN 13432..."
+                    style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'9px', fontSize:13, boxSizing:'border-box' }}/>
+                </div>
                 <F label="Allergènes (alimentaire)" k="allergenes" ph="Gluten, Lait..."/>
               </div>
               <div style={{ marginTop:12, display:'flex', alignItems:'center', gap:8 }}>
