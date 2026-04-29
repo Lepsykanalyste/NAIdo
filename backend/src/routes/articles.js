@@ -149,7 +149,7 @@ router.post('/', auth, handleUploadOrJSON, async (req, res) => {
       d.allergenes||null, d.points_ccp==='true'||d.points_ccp===true,
       d.normes_iso||null, d.certifications||null,
       d.risques_securite||null, d.epi_requis||null,
-      safeJSON(d.composition,[]),
+      (() => { const v = safeJSON(d.composition,[]); return Array.isArray(v)?v:[]; })(),
       d.notes||null,
       d.atelier_production_id||null,
       fp(req,'fiche_technique'), fp(req,'fiche_securite'), fp(req,'plan'), fp(req,'photo'),
@@ -192,7 +192,12 @@ router.put('/:id', auth, handleUploadOrJSON, async (req, res) => {
     addIf('epi_requis',d.epi_requis,v=>v||null);
     addIf('conditions_stockage',d.conditions_stockage,v=>v||null);
     addIf('notes',d.notes,v=>v||null);
-    addIf('composition',d.composition,v=>safeJSON(v,[]));
+    // composition + matieres_principales : forcer en objet JS (JSONB)
+    const compoVal = safeJSON(d.composition, []);
+    add('composition', compoVal);
+    if (d.matieres_principales !== undefined) {
+      add('matieres_principales', safeJSON(d.matieres_principales, []));
+    }
     addIf('actif',d.actif,v=>v==='true'||v===true);
     if(fp(req,'fiche_technique')) add('fiche_technique_path',fp(req,'fiche_technique'));
     if(fp(req,'fiche_securite')) add('fiche_securite_path',fp(req,'fiche_securite'));
