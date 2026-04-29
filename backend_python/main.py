@@ -374,13 +374,32 @@ async def entree_stock(payload: dict, user=Depends(get_current_user)):
             if emplacement_id:
                 await conn.execute("""
                     INSERT INTO stock_articles (article_id,emplacement_id,qte_disponible,valeur_stock,derniere_entree)
-                    VALUES ($1,$2,$3,$4,NOW())
+                    VALUES ($1,$2,$3,$3*$4,NOW())
                     ON CONFLICT (article_id,emplacement_id)
                     DO UPDATE SET qte_disponible=stock_articles.qte_disponible+$3,
                         valeur_stock=stock_articles.valeur_stock+($3*$4), derniere_entree=NOW()
                 """, article_id, emplacement_id, qte, prix)
 
-            return {"success": True, "message": f"Entrée de {qte} enregistrée"}
+            # Journal
+            try:
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS journal_stock (
+                        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                        article_id UUID, emplacement_id INTEGER,
+                        type VARCHAR(10), qte NUMERIC(12,3),
+                        prix_unitaire NUMERIC(12,4) DEFAULT 0,
+                        numero_lot VARCHAR(100), notes TEXT,
+                        cree_par UUID, created_at TIMESTAMPTZ DEFAULT NOW()
+                    )
+                """)
+                await conn.execute(
+                    "INSERT INTO journal_stock (article_id,emplacement_id,type,qte,prix_unitaire,numero_lot,notes,cree_par) VALUES ($1,$2,'entree',$3,$4,$5,$6,$7)",
+                    article_id, emplacement_id, qte, prix, numero_lot,
+                    payload.get("notes"), user.get("id")
+                )
+            except Exception as je:
+                print(f"Journal: {je}")
+            return {"success": True, "message": f"Entree de {qte} enregistree"}
 
 @app.post("/api/stock/sortie")
 async def sortie_stock(payload: dict, user=Depends(get_current_user)):
@@ -410,7 +429,15 @@ async def sortie_stock(payload: dict, user=Depends(get_current_user)):
                     "UPDATE stock_articles SET qte_disponible=GREATEST(0,qte_disponible-$1),derniere_sortie=NOW() WHERE article_id=$2",
                     qte, article_id
                 )
-            return {"success": True}
+            # Journal
+            try:
+                await conn.execute(
+                    "INSERT INTO journal_stock (article_id,emplacement_id,type,qte,notes,cree_par) VALUES ($1,$2,'sortie',$3,$4,$5) ON CONFLICT DO NOTHING",
+                    article_id, emplacement_id, qte, payload.get("notes"), user.get("id")
+                )
+            except Exception as je:
+                print(f"Journal sortie: {je}")
+            return {"success": True, "message": f"Sortie de {qte} enregistree"}
 
 @app.get("/api/emplacements")
 async def get_emplacements(user=Depends(get_current_user)):
@@ -624,34 +651,37 @@ async def update_commande_statut(cmd_id: str, payload: dict, user=Depends(get_cu
 async def get_mouvements(limit: int = 50, user=Depends(get_current_user)):
     async with pool.acquire() as conn:
         try:
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS journal_stock (
+                    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                    article_id UUID REFERENCES articles(id),
+                    emplacement_id INTEGER,
+                    type VARCHAR(10) NOT NULL,
+                    qte NUMERIC(12,3) NOT NULL,
+                    prix_unitaire NUMERIC(12,4) DEFAULT 0,
+                    numero_lot VARCHAR(100),
+                    notes TEXT,
+                    cree_par UUID,
+                    created_at TIMESTAMPTZ DEFAULT NOW()
+                )
+            """)
             rows = await conn.fetch("""
-                SELECT
-                    ms.id, ms.created_at, ms.type_mouvement,
-                    ms.notes, ms.statut,
+                SELECT j.id, j.created_at, j.type, j.qte, j.numero_lot, j.notes,
+                    j.prix_unitaire,
                     a.code AS article_code, a.designation AS article_designation,
-                    e1.code AS emplacement_code,
-                    lm.qte_prevue AS qte,
-                    ls.numero_lot,
-                    u.nom||' '||u.prenom AS cree_par_nom,
-                    CASE
-                        WHEN ms.type_mouvement IN ('reception_achat','livraison_mp','production') THEN 'entree'
-                        ELSE 'sortie'
-                    END AS type
-                FROM mouvements_stock ms
-                JOIN lignes_mouvement lm ON lm.mouvement_id=ms.id
-                JOIN articles a ON a.id=lm.article_id
-                LEFT JOIN emplacements_stock e1 ON e1.id=ms.emplacement_dest_id
-                LEFT JOIN lots_stock ls ON ls.id=lm.lot_id
-                LEFT JOIN utilisateurs u ON u.id=ms.cree_par
-                WHERE ms.statut IN ('valide','receptionne')
-                ORDER BY ms.created_at DESC
+                    e.code AS emplacement_code
+                FROM journal_stock j
+                JOIN articles a ON a.id=j.article_id
+                LEFT JOIN emplacements_stock e ON e.id=j.emplacement_id
+                ORDER BY j.created_at DESC
                 LIMIT $1
             """, limit)
             return [dict(r) for r in rows]
-        except:
+        except Exception as e:
+            print(f"Erreur mouvements: {e}")
             return []
 
-# ── LOTS POST ─────────────────────────────────────────────────
+
 @app.post("/api/stock/lots")
 async def creer_lot(payload: dict, user=Depends(get_current_user)):
     async with pool.acquire() as conn:
@@ -690,7 +720,7 @@ async def creer_lot(payload: dict, user=Depends(get_current_user)):
             if emplacement_id:
                 await conn.execute("""
                     INSERT INTO stock_articles (article_id,emplacement_id,qte_disponible,valeur_stock,derniere_entree)
-                    VALUES ($1,$2,$3,$4,NOW())
+                    VALUES ($1,$2,$3,$3*$4,NOW())
                     ON CONFLICT (article_id,emplacement_id)
                     DO UPDATE SET
                         qte_disponible=stock_articles.qte_disponible+$3,
