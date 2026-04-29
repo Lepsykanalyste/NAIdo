@@ -471,6 +471,17 @@ function Articles() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ code:'', designation:'', famille_id:'', unite_mesure_id:'', poids_theorique_kg:'', poids_reel_kg:'', cadence_theorique_kg_h:'', temps_reglage_min:'30', couleur:'', matiere:'', longueur_mm:'', largeur_mm:'', prix_cession_interne:'', stock_mini:'', type_article:'produit_fini', tracabilite_type:'lot' });
 
+  // Charger familles et unités au montage (toujours frais)
+  useEffect(() => {
+    Promise.all([
+      axios.get(`${API}/referentiels/familles`),
+      axios.get(`${API}/referentiels/unites`),
+    ]).then(([f, u]) => {
+      setFamilles(f.data);
+      setUnites(u.data);
+    }).catch(() => {});
+  }, []); // Une seule fois au montage
+
   useEffect(() => {
     Promise.all([
       axios.get(`${API}/articles${search?`?search=${search}`:''}`),
@@ -479,11 +490,26 @@ function Articles() {
     ]).then(([a,f,u]) => { setArticles(a.data); setFamilles(f.data); setUnites(u.data); }).catch(() => {});
   }, [search]);
 
+  const ouvrirFormulaire = async () => {
+    // Recharger familles et unités à chaque ouverture du formulaire
+    try {
+      const [f, u] = await Promise.all([
+        axios.get(`${API}/referentiels/familles`),
+        axios.get(`${API}/referentiels/unites`),
+      ]);
+      setFamilles(f.data);
+      setUnites(u.data);
+    } catch {}
+    setShowForm(true);
+  };
+
   const creer = async () => {
+    if (!form.code || !form.designation) return toast.error('Code et désignation requis');
     try {
       await axios.post(`${API}/articles`, form);
-      toast.success('Article créé');
+      toast.success('Article ' + form.code + ' créé');
       setShowForm(false);
+      setForm({ code:'', designation:'', famille_id:'', unite_mesure_id:'', poids_theorique_kg:'', poids_reel_kg:'', cadence_theorique_kg_h:'', temps_reglage_min:'30', couleur:'', matiere:'', longueur_mm:'', largeur_mm:'', prix_cession_interne:'', stock_mini:'', type_article:'produit_fini', tracabilite_type:'lot' });
       const { data } = await axios.get(`${API}/articles`);
       setArticles(data);
     } catch (err) { toast.error(err.response?.data?.error || 'Erreur'); }
@@ -494,7 +520,7 @@ function Articles() {
       <div style={{ display:'flex', gap:10, marginBottom:20, alignItems:'center', flexWrap:'wrap' }}>
         <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher un article..."
           style={{ flex:1, border:'1px solid #d1d5db', borderRadius:8, padding:'8px 14px', fontSize:13, minWidth:200 }}/>
-        <button onClick={() => setShowForm(true)} style={{ background:'#7e22ce', color:'#fff', border:'none', padding:'8px 16px', borderRadius:8, cursor:'pointer', fontWeight:600 }}>+ Nouvel article</button>
+        <button onClick={ouvrirFormulaire} style={{ background:'#7e22ce', color:'#fff', border:'none', padding:'8px 16px', borderRadius:8, cursor:'pointer', fontWeight:600 }}>+ Nouvel article</button>
       </div>
 
       {showForm && (
@@ -509,16 +535,18 @@ function Articles() {
               </div>
             ))}
             <div>
-              <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Famille</label>
+              <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Famille *</label>
               <select value={form.famille_id} onChange={e => setForm({...form,famille_id:e.target.value})} style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13 }}>
-                <option value="">Sélectionner...</option>
+                <option value="">-- Sélectionner --</option>
+                {familles.length === 0 && <option disabled>Créez d'abord des familles dans Référentiels</option>}
                 {familles.map(f => <option key={f.id} value={f.id}>{f.libelle}</option>)}
               </select>
             </div>
             <div>
-              <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Unité de mesure</label>
+              <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Unité de mesure *</label>
               <select value={form.unite_mesure_id} onChange={e => setForm({...form,unite_mesure_id:e.target.value})} style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13 }}>
-                <option value="">Sélectionner...</option>
+                <option value="">-- Sélectionner --</option>
+                {unites.length === 0 && <option disabled>Activez d'abord des unités dans Référentiels</option>}
                 {unites.map(u => <option key={u.id} value={u.id}>{u.code} — {u.libelle}</option>)}
               </select>
             </div>
@@ -1202,11 +1230,20 @@ function Referentiels() {
                     const active = actives.includes(u.code);
                     const toggle = async () => {
                       try {
+                        // Chercher dans TOUTES les unités (actives et inactives)
+                        const { data: toutesUnites } = await axios.get(`${API}/referentiels/unites/toutes`);
+                        const existante = toutesUnites.find(x => x.code === u.code);
                         if (active) {
-                          const existante = unites.find(x => x.code === u.code);
+                          // Désactiver
                           if (existante) await axios.put(`${API}/referentiels/unites/${existante.id}`, { libelle:existante.libelle, type:existante.type, actif:false });
                         } else {
-                          await axios.post(`${API}/referentiels/unites`, { code:u.code, libelle:u.libelle, type:groupe.type });
+                          if (existante) {
+                            // Réactiver (existe déjà en base)
+                            await axios.put(`${API}/referentiels/unites/${existante.id}`, { libelle:u.libelle, type:groupe.type, actif:true });
+                          } else {
+                            // Créer (n'existe pas encore)
+                            await axios.post(`${API}/referentiels/unites`, { code:u.code, libelle:u.libelle, type:groupe.type });
+                          }
                         }
                         const { data } = await axios.get(`${API}/referentiels/unites`);
                         setUnites(data);

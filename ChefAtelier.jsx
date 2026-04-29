@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useAuth } from '../hooks/useAuth.jsx';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LineChart, Line, Legend } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 const API = '/api';
 
@@ -59,7 +59,7 @@ const MENU = [
 // ══════════════════════════════════════════════════════════════
 
 function Dashboard() {
-  const [data, setData] = useState(null);
+  const [data, setData] = useState({ sessions_actives:0, trs_moyen:0, poids_net_total:0, poids_dechets_total:0, nb_tickets:0, arrets_actifs:0, alertes_rebus:[] });
   const [trs, setTrs] = useState([]);
   const [rebus, setRebus] = useState([]);
 
@@ -83,7 +83,6 @@ function Dashboard() {
 
   const couleurTRS = (v) => v >= 80 ? '#16a34a' : v >= 60 ? '#d97706' : '#dc2626';
 
-  if (!data) return <div style={{ padding:40, textAlign:'center', color:'#9ca3af' }}>Chargement...</div>;
 
   return (
     <div>
@@ -472,6 +471,17 @@ function Articles() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ code:'', designation:'', famille_id:'', unite_mesure_id:'', poids_theorique_kg:'', poids_reel_kg:'', cadence_theorique_kg_h:'', temps_reglage_min:'30', couleur:'', matiere:'', longueur_mm:'', largeur_mm:'', prix_cession_interne:'', stock_mini:'', type_article:'produit_fini', tracabilite_type:'lot' });
 
+  // Charger familles et unités au montage (toujours frais)
+  useEffect(() => {
+    Promise.all([
+      axios.get(`${API}/referentiels/familles`),
+      axios.get(`${API}/referentiels/unites`),
+    ]).then(([f, u]) => {
+      setFamilles(f.data);
+      setUnites(u.data);
+    }).catch(() => {});
+  }, []); // Une seule fois au montage
+
   useEffect(() => {
     Promise.all([
       axios.get(`${API}/articles${search?`?search=${search}`:''}`),
@@ -480,11 +490,26 @@ function Articles() {
     ]).then(([a,f,u]) => { setArticles(a.data); setFamilles(f.data); setUnites(u.data); }).catch(() => {});
   }, [search]);
 
+  const ouvrirFormulaire = async () => {
+    // Recharger familles et unités à chaque ouverture du formulaire
+    try {
+      const [f, u] = await Promise.all([
+        axios.get(`${API}/referentiels/familles`),
+        axios.get(`${API}/referentiels/unites`),
+      ]);
+      setFamilles(f.data);
+      setUnites(u.data);
+    } catch {}
+    setShowForm(true);
+  };
+
   const creer = async () => {
+    if (!form.code || !form.designation) return toast.error('Code et désignation requis');
     try {
       await axios.post(`${API}/articles`, form);
-      toast.success('Article créé');
+      toast.success('Article ' + form.code + ' créé');
       setShowForm(false);
+      setForm({ code:'', designation:'', famille_id:'', unite_mesure_id:'', poids_theorique_kg:'', poids_reel_kg:'', cadence_theorique_kg_h:'', temps_reglage_min:'30', couleur:'', matiere:'', longueur_mm:'', largeur_mm:'', prix_cession_interne:'', stock_mini:'', type_article:'produit_fini', tracabilite_type:'lot' });
       const { data } = await axios.get(`${API}/articles`);
       setArticles(data);
     } catch (err) { toast.error(err.response?.data?.error || 'Erreur'); }
@@ -495,7 +520,7 @@ function Articles() {
       <div style={{ display:'flex', gap:10, marginBottom:20, alignItems:'center', flexWrap:'wrap' }}>
         <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher un article..."
           style={{ flex:1, border:'1px solid #d1d5db', borderRadius:8, padding:'8px 14px', fontSize:13, minWidth:200 }}/>
-        <button onClick={() => setShowForm(true)} style={{ background:'#7e22ce', color:'#fff', border:'none', padding:'8px 16px', borderRadius:8, cursor:'pointer', fontWeight:600 }}>+ Nouvel article</button>
+        <button onClick={ouvrirFormulaire} style={{ background:'#7e22ce', color:'#fff', border:'none', padding:'8px 16px', borderRadius:8, cursor:'pointer', fontWeight:600 }}>+ Nouvel article</button>
       </div>
 
       {showForm && (
@@ -510,16 +535,18 @@ function Articles() {
               </div>
             ))}
             <div>
-              <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Famille</label>
+              <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Famille *</label>
               <select value={form.famille_id} onChange={e => setForm({...form,famille_id:e.target.value})} style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13 }}>
-                <option value="">Sélectionner...</option>
+                <option value="">-- Sélectionner --</option>
+                {familles.length === 0 && <option disabled>Créez d'abord des familles dans Référentiels</option>}
                 {familles.map(f => <option key={f.id} value={f.id}>{f.libelle}</option>)}
               </select>
             </div>
             <div>
-              <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Unité de mesure</label>
+              <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Unité de mesure *</label>
               <select value={form.unite_mesure_id} onChange={e => setForm({...form,unite_mesure_id:e.target.value})} style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13 }}>
-                <option value="">Sélectionner...</option>
+                <option value="">-- Sélectionner --</option>
+                {unites.length === 0 && <option disabled>Activez d'abord des unités dans Référentiels</option>}
                 {unites.map(u => <option key={u.id} value={u.id}>{u.code} — {u.libelle}</option>)}
               </select>
             </div>
@@ -1092,6 +1119,7 @@ function Referentiels() {
   const [ateliers, setAteliers] = useState([]);
   const [formF, setFormF] = useState({ code:'', libelle:'' });
   const [formU, setFormU] = useState({ code:'', libelle:'', type:'masse' });
+  const [formA, setFormA] = useState({ code:'', libelle:'', type:'production', localisation:'' });
 
   useEffect(() => {
     Promise.all([
@@ -1103,6 +1131,9 @@ function Referentiels() {
 
   const creerFamille = async () => {
     try { await axios.post(`${API}/referentiels/familles`, formF); toast.success('Famille créée'); setFormF({code:'',libelle:''}); const {data}=await axios.get(`${API}/referentiels/familles`); setFamilles(data); } catch(e){ toast.error(e.response?.data?.error||'Erreur'); }
+  };
+  const creerAtelier = async () => {
+    try { await axios.post(`${API}/ateliers`, formA); toast.success('Atelier créé'); setFormA({code:'',libelle:'',type:'production',localisation:''}); const {data}=await axios.get(`${API}/ateliers`); setAteliers(data); } catch(e){ toast.error(e.response?.data?.error||'Erreur'); }
   };
   const creerUnite = async () => {
     try { await axios.post(`${API}/referentiels/unites`, formU); toast.success('Unité créée'); setFormU({code:'',libelle:'',type:'masse'}); const {data}=await axios.get(`${API}/referentiels/unites`); setUnites(data); } catch(e){ toast.error(e.response?.data?.error||'Erreur'); }
@@ -1140,36 +1171,172 @@ function Referentiels() {
 
       {onglet === 'unites' && (
         <div>
-          <div style={{ background:'#fff', borderRadius:12, padding:16, border:'1px solid #e5e7eb', marginBottom:14, display:'flex', gap:10, alignItems:'flex-end' }}>
-            {[['Code','code'],['Libellé','libelle']].map(([label,key]) => (
-              <div key={key} style={{ flex:1 }}>
-                <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>{label}</label>
-                <input value={formU[key]} onChange={e => setFormU({...formU,[key]:e.target.value})} style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13, boxSizing:'border-box' }}/>
-              </div>
-            ))}
-            <div>
-              <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Type</label>
-              <select value={formU.type} onChange={e => setFormU({...formU,type:e.target.value})} style={{ border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13 }}>
-                {['masse','volume','longueur','surface','piece','temps'].map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </div>
-            <button onClick={creerUnite} style={{ background:'#14532d', color:'#fff', border:'none', padding:'9px 18px', borderRadius:8, cursor:'pointer', fontWeight:600, flexShrink:0 }}>+ Ajouter</button>
+          <div style={{ background:'#fffbeb', border:'1px solid #fde68a', borderRadius:12, padding:'12px 18px', marginBottom:18, fontSize:13, color:'#92400e' }}>
+            <strong>⚠ Important :</strong> Les unités sont prédéfinies et standardisées. Activez uniquement celles que vous utilisez. Cela garantit que tous les calculs (poids, stocks, bilan matière) sont cohérents.
           </div>
-          <div style={{ background:'#fff', borderRadius:12, border:'1px solid #e5e7eb', overflow:'hidden' }}>
-            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
-              <thead><tr style={{ background:'#f0fdf4' }}>{['Code','Libellé','Type'].map(h => <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:600, color:'#14532d', borderBottom:'2px solid #dcfce7' }}>{h}</th>)}</tr></thead>
-              <tbody>{unites.map((u,i) => <tr key={u.id} style={{ borderBottom:'1px solid #f0fdf4', background:i%2===0?'#fff':'#f9fefb' }}><td style={{ padding:'10px 14px', fontFamily:'monospace', fontWeight:700 }}>{u.code}</td><td style={{ padding:'10px 14px' }}>{u.libelle}</td><td style={{ padding:'10px 14px', color:'#6b7280' }}>{u.type}</td></tr>)}</tbody>
-            </table>
+
+          {[
+            { type:'masse', label:'⚖️ Masse', couleur:'#dbeafe', texte:'#1d4ed8', unites:[
+              { code:'KG', libelle:'Kilogramme' },
+              { code:'G',  libelle:'Gramme' },
+              { code:'T',  libelle:'Tonne' },
+              { code:'MG', libelle:'Milligramme' },
+              { code:'LB', libelle:'Livre (lb)' },
+            ]},
+            { type:'longueur', label:'📏 Longueur', couleur:'#dcfce7', texte:'#15803d', unites:[
+              { code:'M',  libelle:'Mètre' },
+              { code:'ML', libelle:'Mètre linéaire' },
+              { code:'CM', libelle:'Centimètre' },
+              { code:'MM', libelle:'Millimètre' },
+              { code:'KM', libelle:'Kilomètre' },
+            ]},
+            { type:'surface', label:'📐 Surface', couleur:'#fef3c7', texte:'#92400e', unites:[
+              { code:'M2',  libelle:'Mètre carré' },
+              { code:'CM2', libelle:'Centimètre carré' },
+              { code:'MM2', libelle:'Millimètre carré' },
+              { code:'HA',  libelle:'Hectare' },
+            ]},
+            { type:'volume', label:'🧴 Volume', couleur:'#e0e7ff', texte:'#4338ca', unites:[
+              { code:'L',   libelle:'Litre' },
+              { code:'ML2', libelle:'Millilitre' },
+              { code:'M3',  libelle:'Mètre cube' },
+              { code:'CL',  libelle:'Centilitre' },
+            ]},
+            { type:'piece', label:'📦 Pièce / Colis', couleur:'#fce7f3', texte:'#9d174d', unites:[
+              { code:'PC',     libelle:'Pièce' },
+              { code:'SAC',    libelle:'Sac' },
+              { code:'BOB',    libelle:'Bobine' },
+              { code:'ROUL',   libelle:'Rouleau' },
+              { code:'CARTON', libelle:'Carton' },
+              { code:'PALETTE',libelle:'Palette' },
+              { code:'BOTTE',  libelle:'Botte' },
+              { code:'PACK',   libelle:'Pack' },
+            ]},
+            { type:'temps', label:'⏱ Temps', couleur:'#f0fdf4', texte:'#14532d', unites:[
+              { code:'H',   libelle:'Heure' },
+              { code:'MIN', libelle:'Minute' },
+              { code:'J',   libelle:'Jour' },
+            ]},
+          ].map(groupe => {
+            const actives = unites.filter(u => u.type === groupe.type).map(u => u.code);
+            return (
+              <div key={groupe.type} style={{ background:'#fff', borderRadius:12, border:'1px solid #e5e7eb', marginBottom:14, overflow:'hidden' }}>
+                <div style={{ background:groupe.couleur, padding:'10px 18px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                  <span style={{ fontWeight:700, fontSize:13, color:groupe.texte }}>{groupe.label}</span>
+                  <span style={{ fontSize:12, color:groupe.texte, opacity:0.7 }}>{actives.length} activée{actives.length > 1 ? 's' : ''}</span>
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))', padding:'12px 16px', gap:8 }}>
+                  {groupe.unites.map(u => {
+                    const active = actives.includes(u.code);
+                    const toggle = async () => {
+                      try {
+                        // Chercher dans TOUTES les unités (actives et inactives)
+                        const { data: toutesUnites } = await axios.get(`${API}/referentiels/unites/toutes`);
+                        const existante = toutesUnites.find(x => x.code === u.code);
+                        if (active) {
+                          // Désactiver
+                          if (existante) await axios.put(`${API}/referentiels/unites/${existante.id}`, { libelle:existante.libelle, type:existante.type, actif:false });
+                        } else {
+                          if (existante) {
+                            // Réactiver (existe déjà en base)
+                            await axios.put(`${API}/referentiels/unites/${existante.id}`, { libelle:u.libelle, type:groupe.type, actif:true });
+                          } else {
+                            // Créer (n'existe pas encore)
+                            await axios.post(`${API}/referentiels/unites`, { code:u.code, libelle:u.libelle, type:groupe.type });
+                          }
+                        }
+                        const { data } = await axios.get(`${API}/referentiels/unites`);
+                        setUnites(data);
+                      } catch(e) { toast.error(e.response?.data?.error || 'Erreur'); }
+                    };
+                    return (
+                      <div key={u.code} onClick={toggle} style={{
+                        display:'flex', alignItems:'center', gap:10, padding:'10px 14px',
+                        borderRadius:8, cursor:'pointer', border:'2px solid',
+                        borderColor: active ? groupe.texte : '#e5e7eb',
+                        background: active ? groupe.couleur : '#fafafa',
+                        transition:'all .15s'
+                      }}>
+                        <div style={{
+                          width:20, height:20, borderRadius:4, border:`2px solid ${active ? groupe.texte : '#d1d5db'}`,
+                          background: active ? groupe.texte : '#fff',
+                          display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0
+                        }}>
+                          {active && <span style={{ color:'#fff', fontSize:13, fontWeight:700 }}>✓</span>}
+                        </div>
+                        <div>
+                          <div style={{ fontFamily:'monospace', fontWeight:700, fontSize:13, color: active ? groupe.texte : '#374151' }}>{u.code}</div>
+                          <div style={{ fontSize:11, color:'#6b7280' }}>{u.libelle}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+
+          <div style={{ background:'#f0fdf4', borderRadius:10, padding:'12px 16px', fontSize:12, color:'#15803d', border:'1px solid #86efac' }}>
+            ✓ <strong>Unités activées ({unites.length}) :</strong> {unites.map(u => u.code).join(' · ') || 'Aucune — cliquez sur les unités pour les activer'}
           </div>
         </div>
       )}
 
-      {onglet === 'ateliers' && (
-        <div style={{ background:'#fff', borderRadius:12, border:'1px solid #e5e7eb', overflow:'hidden' }}>
-          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
-            <thead><tr style={{ background:'#f0fdf4' }}>{['Code','Libellé','Type','Statut'].map(h => <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:600, color:'#14532d', borderBottom:'2px solid #dcfce7' }}>{h}</th>)}</tr></thead>
-            <tbody>{ateliers.map((a,i) => <tr key={a.id} style={{ borderBottom:'1px solid #f0fdf4', background:i%2===0?'#fff':'#f9fefb' }}><td style={{ padding:'10px 14px', fontFamily:'monospace', fontWeight:700 }}>{a.code}</td><td style={{ padding:'10px 14px' }}>{a.libelle}</td><td style={{ padding:'10px 14px', color:'#6b7280' }}>{a.type}</td><td style={{ padding:'10px 14px' }}><span style={{ color:a.actif?'#16a34a':'#dc2626', fontWeight:600 }}>{a.actif?'Actif':'Inactif'}</span></td></tr>)}</tbody>
-          </table>
+            {onglet === 'ateliers' && (
+        <div>
+          <div style={{ background:'#fff', borderRadius:12, padding:16, border:'1px solid #e5e7eb', marginBottom:14 }}>
+            <div style={{ fontSize:13, fontWeight:700, color:'#374151', marginBottom:10 }}>Ajouter un atelier / service</div>
+            <div style={{ display:'flex', gap:10, flexWrap:'wrap', alignItems:'flex-end' }}>
+              <div style={{ flex:'0 0 100px' }}>
+                <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Code *</label>
+                <input value={formA?.code||''} onChange={e => setFormA({...formA, code:e.target.value})} placeholder="AT3" style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13, boxSizing:'border-box', textTransform:'uppercase' }}/>
+              </div>
+              <div style={{ flex:'1 1 200px' }}>
+                <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Libellé *</label>
+                <input value={formA?.libelle||''} onChange={e => setFormA({...formA, libelle:e.target.value})} placeholder="Atelier 3 — Production" style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13, boxSizing:'border-box' }}/>
+              </div>
+              <div style={{ flex:'0 0 160px' }}>
+                <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Type</label>
+                <select value={formA?.type||'production'} onChange={e => setFormA({...formA, type:e.target.value})} style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13 }}>
+                  <option value="production">Production</option>
+                  <option value="mecanique">Mécanique</option>
+                  <option value="technique">Technique</option>
+                  <option value="achat">Achat</option>
+                  <option value="vente">Vente</option>
+                  <option value="transit">Transit</option>
+                  <option value="qhse">QHSE</option>
+                  <option value="magasin">Magasin</option>
+                  <option value="rh">RH</option>
+                  <option value="direction">Direction</option>
+                </select>
+              </div>
+              <div style={{ flex:'1 1 160px' }}>
+                <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Localisation</label>
+                <input value={formA?.localisation||''} onChange={e => setFormA({...formA, localisation:e.target.value})} placeholder="Bâtiment A, Hall 2..." style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13, boxSizing:'border-box' }}/>
+              </div>
+              <button onClick={creerAtelier} style={{ background:'#14532d', color:'#fff', border:'none', padding:'9px 18px', borderRadius:8, cursor:'pointer', fontWeight:600, flexShrink:0 }}>+ Ajouter</button>
+            </div>
+          </div>
+          <div style={{ background:'#fff', borderRadius:12, border:'1px solid #e5e7eb', overflow:'hidden' }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
+              <thead><tr style={{ background:'#f0fdf4' }}>{['Code','Libellé','Type','Localisation','Statut','Actions'].map(h => <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:600, color:'#14532d', borderBottom:'2px solid #dcfce7' }}>{h}</th>)}</tr></thead>
+              <tbody>
+                {ateliers.map((a,i) => (
+                  <tr key={a.id} style={{ borderBottom:'1px solid #f0fdf4', background:i%2===0?'#fff':'#f9fefb' }}>
+                    <td style={{ padding:'10px 14px', fontFamily:'monospace', fontWeight:700, color:'#14532d' }}>{a.code}</td>
+                    <td style={{ padding:'10px 14px', fontWeight:500 }}>{a.libelle}</td>
+                    <td style={{ padding:'10px 14px' }}><span style={{ background:'#f0fdf4', color:'#15803d', padding:'2px 8px', borderRadius:20, fontSize:11 }}>{a.type}</span></td>
+                    <td style={{ padding:'10px 14px', color:'#6b7280', fontSize:12 }}>{a.localisation||'—'}</td>
+                    <td style={{ padding:'10px 14px' }}><span style={{ color:a.actif?'#16a34a':'#dc2626', fontWeight:600 }}>{a.actif?'Actif':'Inactif'}</span></td>
+                    <td style={{ padding:'10px 14px' }}>
+                      <button onClick={() => axios.delete(`${API}/ateliers/${a.id}`).then(() => { toast.success('Désactivé'); axios.get(`${API}/ateliers`).then(({data}) => setAteliers(data)); }).catch(e => toast.error(e.response?.data?.error||'Erreur'))} style={{ background:'#fee2e2', color:'#dc2626', border:'none', padding:'3px 10px', borderRadius:6, cursor:'pointer', fontSize:11 }}>Désactiver</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {ateliers.length===0 && <div style={{ textAlign:'center', padding:32, color:'#9ca3af' }}>Aucun atelier — créez le premier</div>}
+          </div>
         </div>
       )}
     </div>
