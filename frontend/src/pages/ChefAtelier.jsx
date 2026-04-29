@@ -762,49 +762,6 @@ function Articles() {
               </div>
             </div>
 
-            {/* BLOC 2b — Matières principales */}
-            <div>
-              <div style={{ fontSize:11, fontWeight:700, color:'#0369a1', letterSpacing:1, textTransform:'uppercase', borderBottom:'2px solid #bae6fd', paddingBottom:6, marginBottom:14 }}>
-                2b · Matières principales (composants de base)
-              </div>
-              <div style={{ background:'#f0f9ff', borderRadius:10, padding:14, border:'1px solid #bae6fd' }}>
-                <div style={{ fontSize:12, color:'#0369a1', marginBottom:10 }}>
-                  Ex : PP (polypropylène) + Colorant + Additif. Cliquez + pour ajouter chaque matière.
-                </div>
-                {form.matieres_principales?.length > 0 && (
-                  <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:10 }}>
-                    {form.matieres_principales.map((m, i) => (
-                      <div key={i} style={{ background:'#dbeafe', color:'#1d4ed8', padding:'4px 12px', borderRadius:20, fontSize:13, display:'flex', alignItems:'center', gap:6, fontWeight:600 }}>
-                        {m}
-                        <button onClick={() => setForm({...form, matieres_principales: form.matieres_principales.filter((_,j) => j!==i)})}
-                          style={{ background:'none', border:'none', color:'#1d4ed8', cursor:'pointer', fontWeight:700, fontSize:14 }}>×</button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div style={{ display:'flex', gap:10 }}>
-                  <input id="inp-matiere" placeholder="Saisir une matière : PP, PEHD, Colorant..."
-                    style={{ flex:1, border:'1px solid #93c5fd', borderRadius:8, padding:'9px', fontSize:13 }}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' && e.target.value.trim()) {
-                        setForm({...form, matieres_principales: [...(form.matieres_principales||[]), e.target.value.trim()]});
-                        e.target.value = '';
-                      }
-                    }}/>
-                  <button onClick={() => {
-                    const inp = document.getElementById('inp-matiere');
-                    if (inp?.value?.trim()) {
-                      setForm({...form, matieres_principales: [...(form.matieres_principales||[]), inp.value.trim()]});
-                      inp.value = '';
-                    }
-                  }} style={{ background:'#0369a1', color:'#fff', border:'none', padding:'9px 18px', borderRadius:8, cursor:'pointer', fontWeight:700 }}>
-                    + Ajouter
-                  </button>
-                </div>
-                <div style={{ fontSize:11, color:'#9ca3af', marginTop:6 }}>Appuyez sur Entrée ou cliquez + pour ajouter chaque matière</div>
-              </div>
-            </div>
-
             {/* BLOC 3 — Commercial */}
             <div>
               <div style={{ fontSize:11, fontWeight:700, color:'#15803d', letterSpacing:1, textTransform:'uppercase', borderBottom:'2px solid #bbf7d0', paddingBottom:6, marginBottom:14 }}>
