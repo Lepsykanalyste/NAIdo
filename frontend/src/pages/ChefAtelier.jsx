@@ -654,24 +654,30 @@ function Articles() {
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:12 }}>
                 <InputField label="Code *" value={form.code} onChange={e => setForm({...form,code:e.target.value})} placeholder="EX: SAC-50KG"/>
                 <InputField label="Désignation *" value={form.designation} onChange={e => setForm({...form,designation:e.target.value})} placeholder="Sac industriel PP 50kg"/>
-                <SelectField label="Famille *" value={form.famille_id} onChange={e => setForm({...form,famille_id:e.target.value})}
-                      options={
-                  familles.length ? familles.map(f => ({ v:String(f.id), l:f.libelle }/>
+                <SelectField label="Famille *" value={form.famille_id} onChange={e => setForm({...form,famille_id:e.target.value})} required={true}
+                  options={familles.length ? familles.map(f => ({ v:String(f.id), l:f.libelle })) : [{v:'',l:'⚠ Créez des familles dans Référentiels'}]}/>
                 <SelectField label="Type article" value={form.type_article} onChange={e => setForm({...form,type_article:e.target.value})}
-                      options={[
-                  { v:'produit_fini', l:'Produit fini' }/>
-                <SelectField label="Unité de mesure *" value={form.unite_mesure_id} onChange={e => setForm({...form,unite_mesure_id:e.target.value})}
-                      options={
-                  unites.length ? unites.map(u => ({ v:String(u.id), l:`${u.code}/>
+                  options={[
+                    { v:'produit_fini', l:'Produit fini' },
+                    { v:'matiere_premiere', l:'Matière première' },
+                    { v:'semi_fini', l:'Semi-fini' },
+                    { v:'emballage', l:'Emballage' },
+                    { v:'consommable', l:'Consommable' },
+                    { v:'piece_detachee', l:'Pièce détachée' },
+                  ]}/>
+                <SelectField label="Unité de mesure *" value={form.unite_mesure_id} onChange={e => setForm({...form,unite_mesure_id:e.target.value})} required={true}
+                  options={unites.length ? unites.map(u => ({ v:String(u.id), l:`${u.code} — ${u.libelle}` })) : [{v:'',l:'⚠ Activez des unités dans Référentiels'}]}/>
                 <SelectField label="Atelier de production" value={form.atelier_production_id} onChange={e => setForm({...form,atelier_production_id:e.target.value})}
-                      options={
-                  ateliers.length ? ateliers.map(a => ({ v:String(a.id), l:`${a.code}/>
+                  options={ateliers.length ? ateliers.map(a => ({ v:String(a.id), l:`${a.code} — ${a.libelle}` })) : [{v:'',l:'⚠ Créez des ateliers'}]}/>
               </div>
               {/* Traçabilité + format numéro */}
               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginTop:12 }}>
                 <SelectField label="Type de traçabilité" value={form.tracabilite_type} onChange={e => setForm({...form,tracabilite_type:e.target.value})}
-                      options={[
-                  { v:'lot', l:'🏷 Par numéro de lot (alimentaire, ISO)' }/>
+                  options={[
+                    { v:'lot', l:'🏷 Par numéro de lot (alimentaire, ISO)' },
+                    { v:'serie', l:'🔢 Par numéro de série' },
+                    { v:'aucune', l:'— Aucune traçabilité' },
+                  ]}/>
                 <div>
                   <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>
                     Format numéro de lot / série
@@ -1093,14 +1099,17 @@ function MatieresPremières() {
                 <InputField label="Code *" value={form.code} onChange={e => setForm({...form,code:e.target.value})} placeholder="MP-PP-001"/>
                 <InputField label="Désignation *" value={form.designation} onChange={e => setForm({...form,designation:e.target.value})} placeholder="Granulés PP Homopolymère"/>
                 <SelectField label="Famille" value={form.famille_id} onChange={e => setForm({...form,famille_id:e.target.value})}
-                      options={familles.map(f => ({ v:String(f.id), l:f.libelle }/>
+                  options={familles.length ? familles.map(f => ({ v:String(f.id), l:f.libelle })) : [{v:'',l:'⚠ Créez des familles'}]}/>
                 <SelectField label="Unité de mesure" value={form.unite_mesure_id} onChange={e => setForm({...form,unite_mesure_id:e.target.value})}
-                      options={unites.map(u => ({ v:String(u.id), l:`${u.code}/>
+                  options={unites.length ? unites.map(u => ({ v:String(u.id), l:`${u.code} — ${u.libelle}` })) : [{v:'',l:'⚠ Activez des unités'}]}/>
                 <InputField label="Fournisseur" value={form.fournisseur} onChange={e => setForm({...form,fournisseur:e.target.value})} placeholder="Nom du fournisseur"/>
                 <InputField label="Réf. fournisseur" value={form.reference_fournisseur} onChange={e => setForm({...form,reference_fournisseur:e.target.value})} placeholder="REF-FOUR-001"/>
                 <SelectField label="Traçabilité" value={form.tracabilite_type} onChange={e => setForm({...form,tracabilite_type:e.target.value})}
-                      options={[
-                  { v:'lot', l:'Par numéro de lot' }/>
+                  options={[
+                    { v:'lot', l:'Par numéro de lot' },
+                    { v:'serie', l:'Par numéro de série' },
+                    { v:'aucune', l:'Aucune' },
+                  ]}/>
                 <InputField label="Format n° lot" value={form.format_lot} onChange={e => setForm({...form,format_lot:e.target.value})} placeholder="LOT-YYYYMMDD-001"/>
               </div>
             </div>
