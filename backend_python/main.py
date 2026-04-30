@@ -2213,6 +2213,272 @@ En tant qu'expert QHSE, donne :
     result = await appel_ia(pool, prompt)
     return result
 
+
+# ══════════════════════════════════════════════════════════════
+# GED QHSE — Upload, Lecture, Recherche Full-Text
+# ══════════════════════════════════════════════════════════════
+from doc_reader import extraire_contenu, info_fichier
+import shutil, uuid as uuid_lib
+
+UPLOAD_QHSE = Path("/app/uploads/qhse")
+UPLOAD_QHSE.mkdir(parents=True, exist_ok=True)
+
+@app.post("/api/qhse/documents/upload")
+async def upload_document_qhse(
+    file: UploadFile = File(...),
+    code: str = Form(None),
+    titre: str = Form(None),
+    type_document: str = Form("procedure"),
+    processus_id: str = Form(None),
+    version: str = Form("v1"),
+    normes_applicables: str = Form("[]"),
+    mots_cles: str = Form(""),
+    analyser_ia: str = Form("false"),
+    user=Depends(get_current_user)
+):
+    """Upload d'un document QHSE avec extraction automatique du contenu"""
+    ext = Path(file.filename).suffix.lower()
+    if ext not in ['.docx','.doc','.pdf','.xlsx','.xls','.pptx']:
+        raise HTTPException(400, f"Format non supporté: {ext}")
+
+    # Générer le code si non fourni
+    if not code:
+        from qhse_import import parser_nom_fichier
+        info_parse = parser_nom_fichier(file.filename)
+        code = info_parse.get("code") or f"DOC-{str(uuid_lib.uuid4())[:8].upper()}"
+        if not titre: titre = info_parse.get("titre", file.filename)
+        if not version or version == "v1": version = info_parse.get("version","v1")
+
+    # Sauvegarder le fichier
+    safe_name = f"{code}_{version}{ext}"
+    dest_path = UPLOAD_QHSE / safe_name
+    
+    content_bytes = await file.read()
+    with open(dest_path, "wb") as f_out:
+        f_out.write(content_bytes)
+    
+    file_size = len(content_bytes)
+    
+    # Extraire le contenu textuel
+    extraction = extraire_contenu(str(dest_path))
+    texte = extraction.get("texte", "")
+    mots_cles_auto = extraction.get("mots_cles", [])
+    nb_mots = extraction.get("nb_mots", 0)
+    
+    # Résumé IA si demandé
+    resume_ia = None
+    if analyser_ia.lower() == "true" and texte:
+        try:
+            prompt = f"""Résume ce document qualité en 5 points maximum, de façon concise :
+
+Titre: {titre}
+Type: {type_document}
+
+Contenu:
+{texte[:3000]}
+
+Format: bullet points, langage professionnel, français."""
+            result = await appel_ia(pool, prompt)
+            resume_ia = result.get("reponse")
+        except:
+            resume_ia = None
+
+    # Insérer en base
+    async with pool.acquire() as conn:
+        existing = await conn.fetchrow("SELECT id FROM documents_qhse WHERE code=$1", code)
+        
+        if existing:
+            row = await conn.fetchrow("""
+                UPDATE documents_qhse SET
+                    titre=$1, type_document=$2, processus_id=$3,
+                    version=$4, normes_applicables=$5, mots_cles=$6,
+                    file_path=$7, file_name=$8, file_size=$9, mime_type=$10,
+                    contenu_texte=$11, resume_ia=$12, mots_cles_auto=$13, nb_mots=$14,
+                    updated_at=NOW()
+                WHERE id=$15 RETURNING *
+            """,
+                titre, type_document,
+                processus_id if processus_id and processus_id != "null" else None,
+                version,
+                json.dumps(json.loads(normes_applicables) if normes_applicables else []),
+                mots_cles, str(dest_path), safe_name, file_size,
+                f"application/{ext[1:]}",
+                texte, resume_ia, mots_cles_auto, nb_mots,
+                str(existing["id"])
+            )
+            action = "mise_a_jour"
+        else:
+            row = await conn.fetchrow("""
+                INSERT INTO documents_qhse (
+                    code, titre, type_document, processus_id, version,
+                    normes_applicables, mots_cles,
+                    file_path, file_name, file_size, mime_type,
+                    contenu_texte, resume_ia, mots_cles_auto, nb_mots,
+                    statut, actif
+                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'brouillon',true)
+                RETURNING *
+            """,
+                code, titre, type_document,
+                processus_id if processus_id and processus_id != "null" else None,
+                version,
+                json.dumps(json.loads(normes_applicables) if normes_applicables else []),
+                mots_cles, str(dest_path), safe_name, file_size,
+                f"application/{ext[1:]}",
+                texte, resume_ia, mots_cles_auto, nb_mots
+            )
+            action = "creation"
+
+    await log_action(pool, user.get("id"), f"upload_document_{action}", "qhse",
+                    ressource_id=code, details={"fichier": safe_name, "nb_mots": nb_mots})
+    
+    return {
+        "success": True,
+        "action": action,
+        "code": code,
+        "titre": titre,
+        "version": version,
+        "file_name": safe_name,
+        "file_size_kb": round(file_size/1024, 1),
+        "nb_mots": nb_mots,
+        "mots_cles_auto": mots_cles_auto[:10],
+        "resume_ia": resume_ia,
+        "message": f"Document {action} avec succès"
+    }
+
+@app.get("/api/qhse/documents/recherche")
+async def recherche_documents(
+    q: str,
+    type_document: Optional[str] = None,
+    processus_id: Optional[str] = None,
+    norme: Optional[str] = None,
+    user=Depends(get_current_user)
+):
+    """Recherche full-text dans les documents QHSE"""
+    if len(q) < 2:
+        raise HTTPException(400, "Requête trop courte")
+    
+    async with pool.acquire() as conn:
+        query = """
+            SELECT 
+                d.id, d.code, d.titre, d.type_document, d.version,
+                d.statut, d.file_name, d.nb_mots,
+                d.normes_applicables, d.mots_cles_auto,
+                p.titre AS processus_libelle,
+                ts_rank(
+                    to_tsvector('french', 
+                        coalesce(d.contenu_texte,'') || ' ' || 
+                        coalesce(d.titre,'') || ' ' || 
+                        coalesce(d.mots_cles,'')),
+                    plainto_tsquery('french', $1)
+                ) AS pertinence,
+                ts_headline('french', 
+                    coalesce(d.contenu_texte,d.titre,''),
+                    plainto_tsquery('french', $1),
+                    'MaxWords=30, MinWords=15, StartSel=**,StopSel=**'
+                ) AS extrait
+            FROM documents_qhse d
+            LEFT JOIN processus p ON p.id=d.processus_id
+            WHERE d.actif=true
+              AND (
+                to_tsvector('french', 
+                    coalesce(d.contenu_texte,'') || ' ' || 
+                    coalesce(d.titre,'') || ' ' ||
+                    coalesce(d.mots_cles,''))
+                @@ plainto_tsquery('french', $1)
+                OR d.titre ILIKE $2
+                OR d.code ILIKE $2
+                OR d.mots_cles ILIKE $2
+              )
+        """
+        params = [q, f"%{q}%"]
+        
+        if type_document:
+            params.append(type_document)
+            query += f" AND d.type_document=${len(params)}"
+        if processus_id:
+            params.append(processus_id)
+            query += f" AND d.processus_id=${len(params)}"
+        if norme:
+            params.append(f'%"{norme}"%')
+            query += f" AND d.normes_applicables::text ILIKE ${len(params)}"
+        
+        query += " ORDER BY pertinence DESC, d.titre LIMIT 20"
+        
+        rows = await conn.fetch(query, *params)
+        return {
+            "requete": q,
+            "nb_resultats": len(rows),
+            "resultats": [dict(r) for r in rows]
+        }
+
+@app.get("/api/qhse/documents/{doc_id}/contenu")
+async def get_document_contenu(doc_id: str, user=Depends(get_current_user)):
+    """Récupère le contenu textuel extrait d'un document"""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT id, code, titre, contenu_texte, resume_ia, mots_cles_auto, nb_mots FROM documents_qhse WHERE id=$1",
+            doc_id
+        )
+        if not row: raise HTTPException(404, "Document introuvable")
+        return dict(row)
+
+@app.post("/api/qhse/documents/{doc_id}/analyser-ia")
+async def analyser_document_ia(doc_id: str, user=Depends(get_current_user)):
+    """Lance/relance l'analyse IA d'un document"""
+    async with pool.acquire() as conn:
+        doc = await conn.fetchrow("SELECT * FROM documents_qhse WHERE id=$1", doc_id)
+        if not doc: raise HTTPException(404)
+        
+        texte = doc["contenu_texte"] or ""
+        if not texte and doc["file_path"]:
+            extraction = extraire_contenu(doc["file_path"])
+            texte = extraction.get("texte","")
+            await conn.execute(
+                "UPDATE documents_qhse SET contenu_texte=$1, nb_mots=$2 WHERE id=$3",
+                texte, extraction.get("nb_mots",0), doc_id
+            )
+        
+        if not texte:
+            return {"erreur": "Aucun contenu textuel disponible dans ce document"}
+        
+        prompt = f"""Analyse ce document qualité NAI de manière experte :
+
+Code: {doc['code']} | Type: {doc['type_document']} | Version: {doc['version']}
+Titre: {doc['titre']}
+Normes: {doc['normes_applicables']}
+
+CONTENU:
+{texte[:4000]}
+
+Fournis:
+1. **Résumé** (3-5 phrases) : Objectif et portée du document
+2. **Points clés** : Les 5 éléments essentiels
+3. **Exigences normatives** : Liens avec ISO 9001/14001/45001/FSSC 22000
+4. **Points d'attention** : Ce qui nécessite une vigilance lors d'un audit
+5. **Mots-clés** : 10 mots-clés pertinents séparés par des virgules"""
+
+        result = await appel_ia(pool, prompt)
+        resume = result.get("reponse","")
+        
+        await conn.execute(
+            "UPDATE documents_qhse SET resume_ia=$1 WHERE id=$2",
+            resume, doc_id
+        )
+        
+        return {"resume_ia": resume, "modele": result.get("modele",""), "code": doc["code"]}
+
+@app.get("/api/qhse/documents/{doc_id}/telecharger")
+async def telecharger_document(doc_id: str, user=Depends(get_current_user)):
+    from fastapi.responses import FileResponse
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT * FROM documents_qhse WHERE id=$1", doc_id)
+        if not row: raise HTTPException(404)
+        fp = row["file_path"]
+        if not fp or not Path(fp).exists():
+            raise HTTPException(404, "Fichier non trouvé sur le serveur")
+        return FileResponse(fp, filename=row["file_name"], 
+                           media_type="application/octet-stream")
+
 # ── HEALTH CHECK ───────────────────────────────────────────────
 @app.get("/api/health")
 async def health():

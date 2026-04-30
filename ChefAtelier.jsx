@@ -2449,36 +2449,135 @@ function QHSE() {
         </div>
       )}
 
-      {/* ══ DOCUMENTS ══ */}
+      {/* ══ DOCUMENTS GED ══ */}
       {onglet==='documents' && (
         <div>
-          <div style={{display:'flex',justifyContent:'flex-end',marginBottom:16}}>
-            <label style={{background:'#059669',color:'#fff',border:'none',padding:'9px 20px',borderRadius:8,cursor:'pointer',fontWeight:700,display:'inline-block'}}>
-              📦 Importer ZIP
-              <input type="file" accept=".zip" style={{display:'none'}} onChange={async e=>{
-                const file = e.target.files[0];
-                if (!file) return;
-                const fd = new FormData();
-                fd.append('file', file);
+          {/* Barre d'outils */}
+          <div style={{display:'flex',gap:10,marginBottom:16,flexWrap:'wrap',alignItems:'center'}}>
+            <input id="ged-search" placeholder="🔍 Recherche full-text dans les documents..."
+              style={{flex:1,minWidth:200,border:'2px solid #d1d5db',borderRadius:8,padding:'9px 14px',fontSize:13}}
+              onKeyDown={async e=>{
+                if (e.key!=='Enter') return;
+                const q = e.target.value.trim();
+                if (!q || q.length<2) return;
                 try {
-                  toast.info('Import en cours...');
-                  const {data} = await axios.post(`${API}/qhse/import-zip`, fd, {headers:{'Content-Type':'multipart/form-data'}});
-                  toast.success(`✓ ${data.importes} documents importés, ${data.ignores} ignorés`);
+                  const {data}=await axios.get(`${API}/qhse/documents/recherche?q=${encodeURIComponent(q)}`);
+                  setDocuments(data.resultats||[]);
+                  toast.info(`${data.nb_resultats} résultat(s) pour "${q}"`);
+                } catch { toast.error('Erreur recherche'); }
+              }}/>
+            <button onClick={()=>chargerOnglet('documents')}
+              style={{background:'#f3f4f6',border:'1px solid #d1d5db',padding:'9px 12px',borderRadius:8,cursor:'pointer'}}>🔄</button>
+            
+            {/* Upload fichier unique */}
+            <label style={{background:'#059669',color:'#fff',padding:'9px 18px',borderRadius:8,cursor:'pointer',fontWeight:700,fontSize:13}}>
+              📄 Ajouter document
+              <input type="file" accept=".docx,.doc,.pdf,.xlsx,.xls,.pptx" style={{display:'none'}}
+                onChange={e=>{
+                  const file = e.target.files[0];
+                  if (!file) return;
+                  ouvrir('document_upload', {_file: file, file_name: file.name});
+                }}/>
+            </label>
+            
+            {/* Import ZIP en masse */}
+            <label style={{background:'#1d4ed8',color:'#fff',padding:'9px 18px',borderRadius:8,cursor:'pointer',fontWeight:700,fontSize:13}}>
+              📦 Import ZIP
+              <input type="file" accept=".zip" style={{display:'none'}} onChange={async e=>{
+                const file = e.target.files[0]; if (!file) return;
+                const fd = new FormData(); fd.append('file', file);
+                try {
+                  toast.info('⏳ Import en cours...');
+                  const {data}=await axios.post(`${API}/qhse/import-zip`, fd, {headers:{'Content-Type':'multipart/form-data'}});
+                  toast.success(`✓ ${data.importes} docs importés, ${data.ignores} ignorés, ${data.erreurs} erreurs`);
                   chargerOnglet('documents');
-                } catch(err) { toast.error('Erreur import: ' + (err.response?.data?.detail || err.message)); }
+                } catch(err) { toast.error('Erreur: '+(err.response?.data?.detail||err.message)); }
               }}/>
             </label>
+            
             <button onClick={()=>ouvrir('document',{type_document:'procedure',version:'v1'})}
-              style={{background:'#b45309',color:'#fff',border:'none',padding:'9px 20px',borderRadius:8,cursor:'pointer',fontWeight:700}}>
-              + Nouveau document
+              style={{background:'#b45309',color:'#fff',border:'none',padding:'9px 18px',borderRadius:8,cursor:'pointer',fontWeight:700,fontSize:13}}>
+              + Saisie manuelle
             </button>
           </div>
+
+          {/* Modal upload document */}
+          {showForm && formType==='document_upload' && (
+            <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
+              <div style={{background:'#fff',borderRadius:14,width:'95%',maxWidth:600,padding:24}}>
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:16}}>
+                  <h3 style={{margin:0,color:'#b45309',fontSize:15,fontWeight:800}}>📄 Upload Document QHSE</h3>
+                  <button onClick={()=>setShowForm(false)} style={{background:'none',border:'none',fontSize:20,cursor:'pointer'}}>✕</button>
+                </div>
+                <div style={{background:'#f0fdf4',borderRadius:10,padding:12,marginBottom:16,border:'2px solid #bbf7d0'}}>
+                  <div style={{fontWeight:600,color:'#15803d',marginBottom:4}}>📎 {form._file?.name}</div>
+                  <div style={{fontSize:12,color:'#6b7280'}}>
+                    Les champs sont pré-remplis depuis le nom du fichier. Vérifiez et complétez.
+                  </div>
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
+                  {[['Code','code','PRO-QUA-001'],['Titre','titre','Contrôle réception'],['Version','version','v1'],['Type','type','']].map(([l,k,ph])=>
+                    k==='type' ? (
+                      <div key={k}>
+                        <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>{l}</label>
+                        <select value={form.type_document||'procedure'} onChange={e=>setForm({...form,type_document:e.target.value})}
+                          style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13}}>
+                          {[['procedure','Procédure'],['instruction','Instruction'],['formulaire','Formulaire'],['enregistrement','Enregistrement'],['manuel','Manuel'],['specification','Spécification'],['autre','Autre']].map(([v,l])=>
+                            <option key={v} value={v}>{l}</option>
+                          )}
+                        </select>
+                      </div>
+                    ) : (
+                      <div key={k}>
+                        <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>{l}</label>
+                        <input value={form[k]||''} onChange={e=>setForm({...form,[k]:e.target.value})} placeholder={ph}
+                          style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13,boxSizing:'border-box'}}/>
+                      </div>
+                    )
+                  )}
+                  <div style={{gridColumn:'1/-1',display:'flex',alignItems:'center',gap:10,background:'#fffbeb',borderRadius:8,padding:10}}>
+                    <input type="checkbox" id="analyserIA" checked={!!form.analyser_ia}
+                      onChange={e=>setForm({...form,analyser_ia:e.target.checked})}/>
+                    <label htmlFor="analyserIA" style={{fontSize:13,fontWeight:600,cursor:'pointer'}}>
+                      🤖 Analyser avec l'IA (génère un résumé automatique)
+                    </label>
+                  </div>
+                </div>
+                <div style={{display:'flex',gap:10}}>
+                  <button onClick={async()=>{
+                    const fd = new FormData();
+                    fd.append('file', form._file);
+                    fd.append('code', form.code||'');
+                    fd.append('titre', form.titre||'');
+                    fd.append('type_document', form.type_document||'procedure');
+                    fd.append('version', form.version||'v1');
+                    fd.append('analyser_ia', form.analyser_ia?'true':'false');
+                    try {
+                      toast.info('⏳ Upload en cours...');
+                      const {data}=await axios.post(`${API}/qhse/documents/upload`, fd, {headers:{'Content-Type':'multipart/form-data'}});
+                      toast.success(`✓ ${data.action==='creation'?'Créé':'Mis à jour'}: ${data.code} — ${data.nb_mots} mots extraits`);
+                      if (data.resume_ia) toast.info('🤖 Résumé IA généré !');
+                      setShowForm(false); chargerOnglet('documents');
+                    } catch(err) { toast.error(err.response?.data?.detail||'Erreur upload'); }
+                  }} style={{background:'#059669',color:'#fff',border:'none',padding:'12px 28px',borderRadius:10,cursor:'pointer',fontWeight:800,flex:1}}>
+                    ✓ Importer
+                  </button>
+                  <button onClick={()=>setShowForm(false)}
+                    style={{background:'#f3f4f6',border:'none',padding:'12px 20px',borderRadius:10,cursor:'pointer'}}>
+                    Annuler
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Tableau documents */}
           <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',overflow:'auto'}}>
-            <table style={{width:'100%',borderCollapse:'collapse',fontSize:13,minWidth:700}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:13,minWidth:800}}>
               <thead>
                 <tr style={{background:'#fffbeb'}}>
-                  {['Code','Titre','Type','Processus','Version','Normes','Statut','Actions'].map(h=>(
-                    <th key={h} style={{padding:'10px 14px',textAlign:'left',fontWeight:700,color:'#92400e',borderBottom:'2px solid #fde68a',whiteSpace:'nowrap'}}>{h}</th>
+                  {['Code','Titre','Type','Processus','Version','Mots','Normes','IA','Statut','Actions'].map(h=>(
+                    <th key={h} style={{padding:'10px 12px',textAlign:'left',fontWeight:700,color:'#92400e',borderBottom:'2px solid #fde68a',whiteSpace:'nowrap'}}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -2487,19 +2586,32 @@ function QHSE() {
                   const ss=STATUT_COLORS[d.statut]||{bg:'#f3f4f6',tx:'#374151'};
                   return (
                     <tr key={d.id} style={{borderBottom:'1px solid #fffbeb',background:i%2===0?'#fff':'#fffdf5'}}>
-                      <td style={{padding:'9px 14px',fontFamily:'monospace',fontWeight:700,color:'#b45309',fontSize:11}}>{d.code}</td>
-                      <td style={{padding:'9px 14px',fontWeight:500}}>{d.titre}</td>
-                      <td style={{padding:'9px 14px',fontSize:11,color:'#6b7280'}}>{d.type_document}</td>
-                      <td style={{padding:'9px 14px',fontSize:11,color:'#6b7280'}}>{d.processus_libelle||'—'}</td>
-                      <td style={{padding:'9px 14px',textAlign:'center'}}><span style={{fontFamily:'monospace',background:'#f3f4f6',padding:'2px 6px',borderRadius:4,fontSize:11}}>{d.version}</span></td>
-                      <td style={{padding:'9px 14px'}}><NormesBadges normes_applicables={d.normes_applicables}/></td>
-                      <td style={{padding:'9px 14px'}}><span style={{background:ss.bg,color:ss.tx,padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:700}}>{d.statut}</span></td>
-                      <td style={{padding:'9px 14px'}}>
+                      <td style={{padding:'9px 12px',fontFamily:'monospace',fontWeight:700,color:'#b45309',fontSize:11}}>{d.code}</td>
+                      <td style={{padding:'9px 12px',fontWeight:500,maxWidth:200}}>
+                        <div>{d.titre}</div>
+                        {d.extrait&&<div style={{fontSize:10,color:'#9ca3af',marginTop:2}} dangerouslySetInnerHTML={{__html:d.extrait}}/>}
+                      </td>
+                      <td style={{padding:'9px 12px',fontSize:11,color:'#6b7280'}}>{d.type_document}</td>
+                      <td style={{padding:'9px 12px',fontSize:11,color:'#6b7280'}}>{d.processus_libelle||'—'}</td>
+                      <td style={{padding:'9px 12px',textAlign:'center'}}><span style={{fontFamily:'monospace',background:'#f3f4f6',padding:'2px 6px',borderRadius:4,fontSize:11}}>{d.version}</span></td>
+                      <td style={{padding:'9px 12px',textAlign:'center',fontSize:11,color:'#9ca3af'}}>{d.nb_mots||'—'}</td>
+                      <td style={{padding:'9px 12px'}}><NormesBadges normes_applicables={d.normes_applicables}/></td>
+                      <td style={{padding:'9px 12px',textAlign:'center'}}>
+                        {d.resume_ia ? <span title={d.resume_ia} style={{cursor:'help',fontSize:16}}>🤖</span> : 
+                         d.file_path ? <button onClick={async()=>{
+                           try{toast.info('IA analyse...');await axios.post(`${API}/qhse/documents/${d.id}/analyser-ia`);chargerOnglet('documents');toast.success('Résumé généré !');}
+                           catch{toast.error('Erreur IA');}
+                         }} style={{background:'none',border:'1px solid #c7d2fe',borderRadius:6,padding:'2px 6px',cursor:'pointer',fontSize:10,color:'#4338ca'}}>Analyser</button> : '—'}
+                      </td>
+                      <td style={{padding:'9px 12px'}}><span style={{background:ss.bg,color:ss.tx,padding:'2px 8px',borderRadius:20,fontSize:10,fontWeight:700}}>{d.statut}</span></td>
+                      <td style={{padding:'9px 12px'}}>
                         <div style={{display:'flex',gap:5}}>
-                          {d.file_path&&<a href={d.file_path} target="_blank" rel="noreferrer"
-                            style={{background:'#dbeafe',color:'#1d4ed8',border:'none',padding:'3px 8px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600,textDecoration:'none'}}>📄</a>}
-                          {d.statut==='brouillon'&&<button onClick={async()=>{await axios.put(`${API}/qhse/documents/${d.id}/statut`,{statut:'approuve'});chargerOnglet('documents');toast.success('Document approuvé');}}
-                            style={{background:'#dcfce7',color:'#15803d',border:'none',padding:'3px 8px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>Approuver</button>}
+                          {d.file_path&&<button onClick={async()=>{
+                            try{window.open(`${API}/qhse/documents/${d.id}/telecharger`,'_blank');}
+                            catch{toast.error('Erreur téléchargement');}
+                          }} style={{background:'#dbeafe',color:'#1d4ed8',border:'none',padding:'3px 8px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>⬇</button>}
+                          {d.statut==='brouillon'&&<button onClick={async()=>{await axios.put(`${API}/qhse/documents/${d.id}/statut`,{statut:'approuve'});chargerOnglet('documents');toast.success('Approuvé');}}
+                            style={{background:'#dcfce7',color:'#15803d',border:'none',padding:'3px 8px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>✓</button>}
                         </div>
                       </td>
                     </tr>
@@ -2507,7 +2619,11 @@ function QHSE() {
                 })}
               </tbody>
             </table>
-            {documents.length===0&&<div style={{textAlign:'center',padding:40,color:'#9ca3af'}}><div style={{fontSize:36,marginBottom:8}}>📄</div><p>Aucun document — commencez par créer vos procédures</p></div>}
+            {documents.length===0&&<div style={{textAlign:'center',padding:40,color:'#9ca3af'}}>
+              <div style={{fontSize:36,marginBottom:8}}>📄</div>
+              <p style={{fontWeight:600}}>Aucun document</p>
+              <p style={{fontSize:12}}>Importez votre ZIP existant ou uploadez un fichier</p>
+            </div>}
           </div>
         </div>
       )}

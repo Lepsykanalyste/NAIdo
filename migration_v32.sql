@@ -149,3 +149,22 @@ INSERT INTO parametres_systeme (cle, valeur, type_valeur, description, modifiabl
 ON CONFLICT (cle) DO NOTHING;
 
 SELECT 'Paramètres IA OK' AS statut;
+
+-- Colonnes pour la GED documentaire enrichie
+ALTER TABLE documents_qhse ADD COLUMN IF NOT EXISTS file_path VARCHAR(500);
+ALTER TABLE documents_qhse ADD COLUMN IF NOT EXISTS file_name VARCHAR(255);
+ALTER TABLE documents_qhse ADD COLUMN IF NOT EXISTS file_size INTEGER;
+ALTER TABLE documents_qhse ADD COLUMN IF NOT EXISTS mime_type VARCHAR(100);
+ALTER TABLE documents_qhse ADD COLUMN IF NOT EXISTS contenu_texte TEXT;          -- Texte extrait
+ALTER TABLE documents_qhse ADD COLUMN IF NOT EXISTS resume_ia TEXT;              -- Résumé généré par IA
+ALTER TABLE documents_qhse ADD COLUMN IF NOT EXISTS mots_cles_auto TEXT[];       -- Mots-clés extraits
+ALTER TABLE documents_qhse ADD COLUMN IF NOT EXISTS nb_mots INTEGER;
+
+-- Index full-text pour recherche dans le contenu
+CREATE INDEX IF NOT EXISTS idx_doc_fulltext ON documents_qhse
+    USING gin(to_tsvector('french', coalesce(contenu_texte,'') || ' ' || coalesce(titre,'') || ' ' || coalesce(mots_cles,'')));
+
+CREATE INDEX IF NOT EXISTS idx_doc_titre ON documents_qhse(titre);
+CREATE INDEX IF NOT EXISTS idx_doc_code ON documents_qhse(code);
+
+SELECT 'GED colonnes OK' AS statut;
