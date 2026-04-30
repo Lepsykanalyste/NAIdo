@@ -6,6 +6,8 @@ import toast from 'react-hot-toast';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 const API = '/api';
+const PermissionsContext = React.createContext({});
+const usePerms = () => React.useContext(PermissionsContext);
 
 // ══════════════════════════════════════════════════════════════
 // COMPOSANTS PARTAGÉS — évite le re-render / perte de focus
