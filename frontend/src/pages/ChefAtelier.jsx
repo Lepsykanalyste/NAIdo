@@ -124,7 +124,7 @@ const MENU = [
   { id:'ia',          label:'Assistant IA',        icon:'ia',          color:'#1e40af' },
   { id:'users',       label:'Utilisateurs',        icon:'users',       color:'#374151' },
   { id:'alertes',     label:'Alertes',             icon:'alertes',     color:'#dc2626' },
-  { id:'parametres',  label:'⚙ Paramètres Système', icon:'settings', color:'#1e1b4b' },
+  { id:'parametres',  label:'⚙ Paramètres',         icon:'settings', color:'#1e1b4b' },
   { id:'referentiels',label:'Référentiels',        icon:'articles',    color:'#6b7280' },
 ];
 
@@ -4631,6 +4631,7 @@ function Alertes() {
 // ══════════════════════════════════════════════════════════════
 function ParametresSysteme() {
   const perms = usePerms();
+  const { user } = useAuth();
   const [params, setParams] = useState([]);
   const [permRoles, setPermRoles] = useState([]);
   const [onglet, setOnglet] = useState('systeme');
