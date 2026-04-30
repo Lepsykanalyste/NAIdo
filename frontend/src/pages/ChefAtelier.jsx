@@ -5171,6 +5171,7 @@ export default function ChefAtelier() {
         </footer>
       </div>
     </div>
+  </PermissionsContext.Provider>
   );
 }
 
@@ -7070,6 +7071,5 @@ function GMAO() {
         </div>
       )}
     </div>
-  </PermissionsContext.Provider>
   );
 }
