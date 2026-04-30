@@ -3173,8 +3173,8 @@ function AssistantIA() {
     // Formatage basique Markdown
     return texte
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/
-/g, '<br/>')
+      .replace(/\n/g, '<br/>')
+
       .replace(/^(\d+)\./gm, '<br/><strong>$1.</strong>');
   };
 
