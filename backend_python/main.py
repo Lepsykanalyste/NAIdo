@@ -1781,15 +1781,11 @@ RH:
     contexte_historique = ""
     if historique:
         derniers = historique[-6:]  # 6 derniers messages max
-        contexte_historique = "
-=== HISTORIQUE CONVERSATION ===
-"
+        contexte_historique = "\n=== HISTORIQUE CONVERSATION ===\n"
         for msg in derniers:
             role = "Utilisateur" if msg.get("role") == "user" else "Assistant"
-            contexte_historique += f"{role}: {msg.get('content','')[:200]}
-"
-        contexte_historique += "=== FIN HISTORIQUE ===
-"
+            contexte_historique += f"{role}: {msg.get(chr(39)+chr(99)+chr(111)+chr(110)+chr(116)+chr(101)+chr(110)+chr(116)+chr(39),chr(39)+chr(39))[:200]}\n"
+        contexte_historique += "=== FIN HISTORIQUE ===\n"
     
     result = await appel_ia(pool, prompt, contexte_complet + contexte_historique)
     
