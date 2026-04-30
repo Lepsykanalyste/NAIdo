@@ -6,6 +6,8 @@ from contextlib import asynccontextmanager
 from typing import Optional, List, Any
 from pydantic import BaseModel
 import uvicorn
+from pathlib import Path
+from datetime import datetime, date
 
 # ── CONFIG ─────────────────────────────────────────────────────
 DB_URL = os.getenv("DATABASE_URL", "postgresql://naido_user:naido_pass_2026@naido_postgres:5436/naido_db")
