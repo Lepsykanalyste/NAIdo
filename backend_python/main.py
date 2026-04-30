@@ -1642,7 +1642,7 @@ async def appel_ia(pool, prompt: str, contexte: str = "") -> dict:
     if keys.get('ia_enabled') == 'false':
         return {"erreur": "IA désactivée dans les paramètres"}
     
-    ctx_entreprise = keys.get('ia_contexte_entreprise', 'NAI — Usine de fabrication de sacs plastiques, Côte d'Ivoire')
+    ctx_entreprise = keys.get("ia_contexte_entreprise", "NAI — Usine de fabrication de sacs plastiques, Côte d'Ivoire")
     system_prompt = f"""Tu es l'assistant IA de NAI (anciennement Green Industry), une usine de fabrication de sacs plastiques en Côte d'Ivoire.
 Contexte : {ctx_entreprise}
 {contexte}
