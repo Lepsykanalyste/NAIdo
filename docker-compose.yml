@@ -60,7 +60,7 @@ services:
     build: ./frontend
     container_name: naido_frontend
     ports:
-      - "8090:80"
+      - "8095:80"
     depends_on:
       - backend
       - backend_python
