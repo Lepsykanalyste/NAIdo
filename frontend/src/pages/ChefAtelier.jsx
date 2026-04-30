@@ -163,9 +163,10 @@ function OrdresFabrication() {
       const [o,a,c,m,at] = await Promise.all([
         axios.get(`${API}/of${filtreStatut?'?statut='+filtreStatut:''}${filtreAtelier?'&atelier_id='+filtreAtelier:''}`),
         axios.get(`${API}/articles`),
-        axios.get(`${API}/clients`).catch(()=>({data:[]})),
+        axios.get(`${API}/vente/clients`).catch(()=>({data:[]})),
         axios.get(`${API}/machines`),
         axios.get(`${API}/ateliers`),
+      axios.get(`${API}/machines`),
       ]);
       setOfs(o.data||[]); setArticles(a.data||[]);
       setClients(c.data||[]); setMachines(m.data||[]);
@@ -191,7 +192,7 @@ function OrdresFabrication() {
   }, [form.article_id, form.quantite_cible, articles]);
 
   // Filtrer machines selon atelier
-  const machinesFiltrees = machines.filter(m => !form.atelier_id || m.atelier_id === form.atelier_id || !m.atelier_id);
+  const machinesFiltrees = form.atelier_id ? machines.filter(m => m.atelier_id === form.atelier_id) : machines;
 
   const creerOF = async () => {
     if (!form.article_id || !form.quantite_cible) {
@@ -277,11 +278,11 @@ function OrdresFabrication() {
             <F label="Client">
               <select value={form.client_id} onChange={e=>setForm({...form,client_id:e.target.value})} style={sel}>
                 <option value="">-- Sans client --</option>
-                {clients.map(c=><option key={c.id} value={c.id}>{c.raison_sociale||c.nom}</option>)}
+                {clients.map(c=><option key={c.id} value={c.id}>{c.raison_sociale||c.nom||c.code}</option>)}
               </select>
             </F>
             <F label="Atelier de production">
-              <select value={form.atelier_id} onChange={e=>setForm({...form,atelier_id:e.target.value,machine_id:''})} style={sel}>
+              <select value={form.atelier_id} onChange={e=>{ setForm({...form,atelier_id:e.target.value,machine_id:''}); axios.get(`${API}/machines?atelier_id=${e.target.value}`).then(r=>setMachines(r.data||[])).catch(()=>{}); }} style={sel}>
                 {ateliers.filter(a=>a.type==='production'||a.code==='AT3').map(a=>(
                   <option key={a.code} value={a.code}>{a.libelle}</option>
                 ))}
@@ -986,6 +987,7 @@ function Articles() {
         axios.get(`${API}/referentiels/familles`),
         axios.get(`${API}/referentiels/unites`),
         axios.get(`${API}/ateliers`),
+      axios.get(`${API}/machines`),
       ]);
       setFamilles(f.data);
       setUnites(u.data);
