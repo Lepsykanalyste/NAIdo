@@ -125,6 +125,7 @@ const MENU = [
   { id:'users',       label:'Utilisateurs',        icon:'users',       color:'#374151' },
   { id:'import',      label:'Import Sage',         icon:'import',      color:'#15803d' },
   { id:'alertes',     label:'Alertes',             icon:'alertes',     color:'#dc2626' },
+  { id:'parametres',  label:'⚙ Paramètres',  icon:'settings',    color:'#1e1b4b' },
   { id:'referentiels',label:'Référentiels',        icon:'articles',    color:'#6b7280' },
 ];
 
@@ -3180,8 +3181,8 @@ function AssistantIA() {
     if (!texte) return '';
     return String(texte)
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\n/g, '<br/>')
-
+      .replace(/
+/g, '<br/>')
       .replace(/^(\d+)\.\s/gm, '<br/><strong>$1.</strong> ');
   };
 
@@ -5014,7 +5015,8 @@ export default function ChefAtelier() {
     { id:'parametres',  label:'⚙ Paramètres Système',     separator:false,    icon:'settings',    color:'#1e1b4b' },
     { id:'separator6',  label:'RÉFÉRENTIELS',              separator:true },
     { id:'alertes',     label:'Alertes',                   icon:'bell',        color:'#dc2626' },
-    { id:'referentiels',label:'Référentiels',              icon:'database',    color:'#374151' },
+    { id:'parametres',  label:'⚙ Paramètres',  icon:'settings',    color:'#1e1b4b' },
+  { id:'referentiels',label:'Référentiels',              icon:'database',    color:'#374151' },
     { id:'import',      label:'Import Sage',               icon:'upload',      color:'#6b7280' },
   ].filter(item => {
     if (item.separator) return true;
@@ -5173,7 +5175,6 @@ export default function ChefAtelier() {
         </footer>
       </div>
     </div>
-  </PermissionsContext.Provider>
   );
 }
 
@@ -7073,5 +7074,6 @@ function GMAO() {
         </div>
       )}
     </div>
+  </PermissionsContext.Provider>
   );
 }
