@@ -4693,7 +4693,7 @@ function ParametresSysteme() {
     return p?.[field] || false;
   };
 
-  if (!perms.is_super_admin) {
+  if (!perms.is_super_admin && user?.role !== 'super_admin') {
     return (
       <div style={{textAlign:'center',padding:80}}>
         <div style={{fontSize:60,marginBottom:16}}>🔒</div>
