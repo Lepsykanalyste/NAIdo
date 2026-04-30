@@ -3178,8 +3178,8 @@ function AssistantIA() {
     if (!texte) return '';
     return String(texte)
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/
-/g, '<br/>')
+      .replace(/\n/g, '<br/>')
+
       .replace(/^(\d+)\.\s/gm, '<br/><strong>$1.</strong> ');
   };
 
