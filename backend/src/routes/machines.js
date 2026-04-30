@@ -1,18 +1,22 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
-const { auth, role } = require('../middleware/auth');
+const { auth } = require('../middleware/auth');
 
+// GET /api/machines?atelier_id=AT3
 router.get('/', auth, async (req, res) => {
   try {
-    const { rows } = await db.query(
-      'SELECT * FROM machines WHERE actif = true ORDER BY type, numero'
-    );
+    const { atelier_id } = req.query;
+    let query = 'SELECT * FROM machines WHERE actif = true';
+    const params = [];
+    if (atelier_id) { params.push(atelier_id); query += ` AND atelier_id = $${params.length}`; }
+    query += ' ORDER BY type, numero';
+    const { rows } = await db.query(query, params);
     res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-router.put('/:id/imprimante', auth, role('chef_atelier'), async (req, res) => {
+router.put('/:id/imprimante', auth, async (req, res) => {
   try {
     const { imprimante_type, imprimante_adresse } = req.body;
     const { rows } = await db.query(
