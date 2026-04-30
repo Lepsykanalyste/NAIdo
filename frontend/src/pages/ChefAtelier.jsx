@@ -4969,6 +4969,7 @@ export default function ChefAtelier() {
     { id:'kpi',         label:'KPI & Rapports',            icon:'bar-chart',   color:'#1d4ed8' },
     { id:'ia',          label:'Assistant IA',              icon:'cpu',         color:'#7c3aed' },
     { id:'utilisateurs',label:'Utilisateurs',              icon:'users',       color:'#6d28d9' },
+    { id:'separator_sa',label:'── SUPER ADMIN ──',         separator:true },
     { id:'parametres',  label:'⚙ Paramètres Système',     separator:false,    icon:'settings',    color:'#1e1b4b' },
     { id:'separator6',  label:'RÉFÉRENTIELS',              separator:true },
     { id:'alertes',     label:'Alertes',                   icon:'bell',        color:'#dc2626' },
