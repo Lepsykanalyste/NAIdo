@@ -100,6 +100,7 @@ const ICONS = {
 const MENU = [
   { id:'dashboard',   label:'Tableau de bord',    icon:'dashboard',   color:'#14532d' },
   { id:'separator1',  label:'PRODUCTION',          separator:true },
+  { id:'of',          label:'Ordres de Fabrication', icon:'clipboard', color:'#0369a1' },
   { id:'production',  label:'Suivi Production',    icon:'production',  color:'#1d4ed8' },
   { id:'planning',    label:'Planning Machines',   icon:'planning',    color:'#0369a1' },
   { id:'rapportjour', label:'Rapports Journaliers',icon:'rapport',     color:'#0f766e' },
@@ -133,6 +134,286 @@ const MENU = [
 // ══════════════════════════════════════════════════════════════
 // COMPOSANTS DE SECTION
 // ══════════════════════════════════════════════════════════════
+
+
+// ══════════════════════════════════════════════════════════════
+// MODULE ORDRES DE FABRICATION
+// ══════════════════════════════════════════════════════════════
+function OrdresFabrication() {
+  const [ofs, setOfs] = useState([]);
+  const [articles, setArticles] = useState([]);
+  const [clients, setClients] = useState([]);
+  const [machines, setMachines] = useState([]);
+  const [ateliers, setAteliers] = useState([]);
+  const [showForm, setShowForm] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [filtreStatut, setFiltreStatut] = useState('');
+  const [filtreAtelier, setFiltreAtelier] = useState('');
+  const [detail, setDetail] = useState(null);
+  const [form, setForm] = useState({
+    article_id:'', client_id:'', machine_id:'', atelier_id:'AT3',
+    quantite_cible:'', date_livraison_prevue:'', priorite:'3',
+    instructions:'', reference_sage:''
+  });
+  const [tempsCalc, setTempsCalc] = useState(null);
+
+  const charger = async () => {
+    setLoading(true);
+    try {
+      const [o,a,c,m,at] = await Promise.all([
+        axios.get(`${API}/of${filtreStatut?'?statut='+filtreStatut:''}${filtreAtelier?'&atelier_id='+filtreAtelier:''}`),
+        axios.get(`${API}/articles`),
+        axios.get(`${API}/clients`).catch(()=>({data:[]})),
+        axios.get(`${API}/machines`),
+        axios.get(`${API}/ateliers`),
+      ]);
+      setOfs(o.data||[]); setArticles(a.data||[]);
+      setClients(c.data||[]); setMachines(m.data||[]);
+      setAteliers(at.data||[]);
+    } catch(e) { toast.error('Erreur chargement'); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { charger(); }, [filtreStatut, filtreAtelier]);
+
+  // Recalculer temps prévu quand article ou quantité change
+  useEffect(() => {
+    if (!form.article_id || !form.quantite_cible) { setTempsCalc(null); return; }
+    const art = articles.find(a=>a.id===form.article_id);
+    if (!art) return;
+    const cadence = parseFloat(art.cadence_theorique_kg_h||art.cadence_heure||0);
+    const reglage = parseFloat(art.temps_reglage_min||30);
+    if (cadence > 0) {
+      const qte = parseFloat(form.quantite_cible);
+      const temps = Math.round((qte / cadence) * 60 + reglage);
+      setTempsCalc({ temps_min: temps, temps_h: (temps/60).toFixed(1) });
+    }
+  }, [form.article_id, form.quantite_cible, articles]);
+
+  // Filtrer machines selon atelier
+  const machinesFiltrees = machines.filter(m => !form.atelier_id || m.atelier_id === form.atelier_id || !m.atelier_id);
+
+  const creerOF = async () => {
+    if (!form.article_id || !form.quantite_cible) {
+      toast.error('Article et quantité requis'); return;
+    }
+    try {
+      await axios.post(`${API}/of`, {
+        ...form,
+        machine_id: form.machine_id || null,
+        quantite_cible: parseFloat(form.quantite_cible),
+        priorite: parseInt(form.priorite||3)
+      });
+      toast.success('OF créé !');
+      setShowForm(false);
+      setForm({article_id:'',client_id:'',machine_id:'',atelier_id:'AT3',quantite_cible:'',date_livraison_prevue:'',priorite:'3',instructions:'',reference_sage:''});
+      charger();
+    } catch(e) { toast.error(e.response?.data?.error||'Erreur création'); }
+  };
+
+  const changerStatut = async (id, statut) => {
+    try {
+      await axios.put(`${API}/of/${id}/statut`, { statut });
+      toast.success('Statut mis à jour');
+      charger();
+    } catch { toast.error('Erreur'); }
+  };
+
+  const couleurStatut = s => ({
+    planifie:'#0369a1', lance:'#7c3aed', en_cours:'#d97706',
+    termine:'#15803d', annule:'#dc2626'
+  }[s]||'#6b7280');
+
+  const bgStatut = s => ({
+    planifie:'#e0f2fe', lance:'#f5f3ff', en_cours:'#fef3c7',
+    termine:'#dcfce7', annule:'#fee2e2'
+  }[s]||'#f3f4f6');
+
+  const labelStatut = s => ({
+    planifie:'Planifié', lance:'Lancé', en_cours:'En cours',
+    termine:'Terminé', annule:'Annulé'
+  }[s]||s);
+
+  const F = ({label,children}) => (
+    <div style={{marginBottom:12}}>
+      <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>{label}</div>
+      {children}
+    </div>
+  );
+  const sel = {width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid #e5e7eb',fontSize:13};
+
+  return (
+    <div>
+      {/* En-tête */}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+        <div style={{display:'flex',gap:8,alignItems:'center'}}>
+          <select value={filtreAtelier} onChange={e=>setFiltreAtelier(e.target.value)} style={{...sel,width:160}}>
+            <option value="">Tous les ateliers</option>
+            {ateliers.map(a=><option key={a.code} value={a.code}>{a.libelle}</option>)}
+          </select>
+          <select value={filtreStatut} onChange={e=>setFiltreStatut(e.target.value)} style={{...sel,width:140}}>
+            <option value="">Tous statuts</option>
+            {['planifie','lance','en_cours','termine','annule'].map(s=><option key={s} value={s}>{labelStatut(s)}</option>)}
+          </select>
+        </div>
+        <button onClick={()=>setShowForm(!showForm)} style={{background:'#0369a1',color:'#fff',border:'none',borderRadius:8,padding:'9px 18px',cursor:'pointer',fontWeight:700,fontSize:13}}>
+          {showForm?'✕ Annuler':'+ Nouvel OF'}
+        </button>
+      </div>
+
+      {/* Formulaire création */}
+      {showForm && (
+        <div style={{background:'#f0f9ff',borderRadius:14,padding:20,marginBottom:20,border:'1px solid #bae6fd'}}>
+          <div style={{fontWeight:700,fontSize:15,color:'#0369a1',marginBottom:16}}>📋 Nouvel Ordre de Fabrication</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12}}>
+            <F label="Article * (produit à fabriquer)">
+              <select value={form.article_id} onChange={e=>setForm({...form,article_id:e.target.value})} style={sel}>
+                <option value="">-- Sélectionner article --</option>
+                {articles.filter(a=>a.type_article==='produit_fini'||!a.type_article).map(a=>(
+                  <option key={a.id} value={a.id}>{a.code} — {a.designation}</option>
+                ))}
+              </select>
+            </F>
+            <F label="Client">
+              <select value={form.client_id} onChange={e=>setForm({...form,client_id:e.target.value})} style={sel}>
+                <option value="">-- Sans client --</option>
+                {clients.map(c=><option key={c.id} value={c.id}>{c.raison_sociale||c.nom}</option>)}
+              </select>
+            </F>
+            <F label="Atelier de production">
+              <select value={form.atelier_id} onChange={e=>setForm({...form,atelier_id:e.target.value,machine_id:''})} style={sel}>
+                {ateliers.filter(a=>a.type==='production'||a.code==='AT3').map(a=>(
+                  <option key={a.code} value={a.code}>{a.libelle}</option>
+                ))}
+              </select>
+            </F>
+            <F label="Machine">
+              <select value={form.machine_id} onChange={e=>setForm({...form,machine_id:e.target.value})} style={sel}>
+                <option value="">-- Sélectionner machine --</option>
+                {machinesFiltrees.map(m=><option key={m.id} value={m.id}>{m.code} — {m.nom}</option>)}
+              </select>
+            </F>
+            <F label="Quantité cible (kg)">
+              <input type="number" value={form.quantite_cible} onChange={e=>setForm({...form,quantite_cible:e.target.value})}
+                style={sel} placeholder="ex: 1000"/>
+            </F>
+            <F label="Date livraison prévue">
+              <input type="date" value={form.date_livraison_prevue} onChange={e=>setForm({...form,date_livraison_prevue:e.target.value})} style={sel}/>
+            </F>
+            <F label="Priorité (1=basse, 5=urgente)">
+              <select value={form.priorite} onChange={e=>setForm({...form,priorite:e.target.value})} style={sel}>
+                {[1,2,3,4,5].map(p=><option key={p} value={p}>{p} — {['Très basse','Basse','Normale','Haute','Urgente'][p-1]}</option>)}
+              </select>
+            </F>
+            <F label="Référence Sage (optionnel)">
+              <input value={form.reference_sage} onChange={e=>setForm({...form,reference_sage:e.target.value})} style={sel} placeholder="Réf. commande Sage"/>
+            </F>
+            <F label="Instructions spéciales">
+              <input value={form.instructions} onChange={e=>setForm({...form,instructions:e.target.value})} style={sel} placeholder="Couleur, dimensions, notes..."/>
+            </F>
+          </div>
+
+          {/* Calcul temps prévu */}
+          {tempsCalc && (
+            <div style={{background:'#dbeafe',borderRadius:8,padding:'10px 14px',marginTop:8,fontSize:13}}>
+              ⏱ <strong>Temps de production estimé :</strong> {tempsCalc.temps_min} min ({tempsCalc.temps_h}h)
+              {' '}<span style={{color:'#6b7280',fontSize:11}}>(formule : Qté/Cadence + Réglage)</span>
+            </div>
+          )}
+
+          <div style={{display:'flex',gap:10,marginTop:16}}>
+            <button onClick={creerOF} style={{background:'#0369a1',color:'#fff',border:'none',borderRadius:8,padding:'10px 24px',cursor:'pointer',fontWeight:700}}>
+              ✓ Créer l'OF
+            </button>
+            <button onClick={()=>setShowForm(false)} style={{background:'#f3f4f6',border:'none',borderRadius:8,padding:'10px 24px',cursor:'pointer'}}>
+              Annuler
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Détail OF */}
+      {detail && (
+        <div style={{background:'#fff',borderRadius:14,padding:20,marginBottom:16,border:'2px solid #0369a1'}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+            <div style={{fontWeight:800,fontSize:16,color:'#0369a1'}}>📋 OF {detail.numero_of}</div>
+            <button onClick={()=>setDetail(null)} style={{background:'none',border:'none',fontSize:18,cursor:'pointer'}}>✕</button>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12,fontSize:13}}>
+            {[
+              ['Article',detail.article_nom+' ('+detail.article_code+')'],
+              ['Client',detail.client_nom||'—'],
+              ['Machine',detail.machine_nom||'—'],
+              ['Atelier',detail.atelier_id||'—'],
+              ['Quantité cible',detail.quantite_cible+' kg'],
+              ['Qté produite',(detail.quantite_produite||0)+' kg'],
+              ['Temps prévu',detail.temps_prevu_min?detail.temps_prevu_min+' min':'—'],
+              ['Livraison prévue',detail.date_livraison_prevue?new Date(detail.date_livraison_prevue).toLocaleDateString('fr-FR'):'—'],
+              ['Instructions',detail.instructions||'—'],
+            ].map(([l,v])=>(
+              <div key={l} style={{background:'#f9fafb',borderRadius:8,padding:'8px 12px'}}>
+                <div style={{fontSize:10,color:'#6b7280',fontWeight:600}}>{l}</div>
+                <div style={{fontWeight:600,marginTop:2}}>{v}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{marginTop:12,display:'flex',gap:8,flexWrap:'wrap'}}>
+            {detail.statut==='planifie' && <button onClick={()=>changerStatut(detail.id,'lance')} style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:8,padding:'6px 14px',cursor:'pointer',fontSize:12}}>▶ Lancer</button>}
+            {detail.statut==='lance' && <button onClick={()=>changerStatut(detail.id,'en_cours')} style={{background:'#d97706',color:'#fff',border:'none',borderRadius:8,padding:'6px 14px',cursor:'pointer',fontSize:12}}>⚙ Démarrer production</button>}
+            {detail.statut==='en_cours' && <button onClick={()=>changerStatut(detail.id,'termine')} style={{background:'#15803d',color:'#fff',border:'none',borderRadius:8,padding:'6px 14px',cursor:'pointer',fontSize:12}}>✓ Terminer</button>}
+            {detail.statut!=='annule'&&detail.statut!=='termine' && <button onClick={()=>changerStatut(detail.id,'annule')} style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:8,padding:'6px 14px',cursor:'pointer',fontSize:12}}>✕ Annuler</button>}
+          </div>
+        </div>
+      )}
+
+      {/* Liste OF */}
+      <div style={{background:'#fff',borderRadius:14,border:'1px solid #e5e7eb',overflow:'hidden'}}>
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+          <thead><tr style={{background:'#f0f9ff'}}>
+            {['N° OF','Article','Client','Machine','Atelier','Qté cible','Temps prévu','Livraison','Priorité','Statut','Actions'].map(h=>(
+              <th key={h} style={{padding:'10px 12px',textAlign:'left',fontWeight:600,color:'#0369a1',borderBottom:'2px solid #bae6fd',whiteSpace:'nowrap'}}>{h}</th>
+            ))}
+          </tr></thead>
+          <tbody>
+            {loading && <tr><td colSpan={11} style={{padding:20,textAlign:'center',color:'#6b7280'}}>Chargement...</td></tr>}
+            {!loading && ofs.length===0 && (
+              <tr><td colSpan={11} style={{padding:40,textAlign:'center',color:'#6b7280'}}>
+                <div style={{fontSize:32,marginBottom:8}}>📋</div>
+                Aucun OF — créez le premier
+              </td></tr>
+            )}
+            {ofs.map((of,i) => (
+              <tr key={of.id} style={{borderBottom:'1px solid #f3f4f6',background:i%2===0?'#fff':'#fafafa',cursor:'pointer'}}
+                  onClick={()=>setDetail(detail?.id===of.id?null:of)}>
+                <td style={{padding:'9px 12px',fontWeight:700,color:'#0369a1'}}>{of.numero_of}</td>
+                <td style={{padding:'9px 12px'}}>{of.article_nom||'—'}<br/><span style={{fontSize:10,color:'#6b7280'}}>{of.article_code}</span></td>
+                <td style={{padding:'9px 12px',fontSize:12}}>{of.client_nom||'—'}</td>
+                <td style={{padding:'9px 12px',fontSize:12}}>{of.machine_nom||of.machine_code||'—'}</td>
+                <td style={{padding:'9px 12px',fontSize:12}}>{of.atelier_id||'—'}</td>
+                <td style={{padding:'9px 12px',fontWeight:600}}>{parseFloat(of.quantite_cible||0).toFixed(0)} kg</td>
+                <td style={{padding:'9px 12px',fontSize:12}}>{of.temps_prevu_min?of.temps_prevu_min+'min':'—'}</td>
+                <td style={{padding:'9px 12px',fontSize:12}}>{of.date_livraison_prevue?new Date(of.date_livraison_prevue).toLocaleDateString('fr-FR'):'—'}</td>
+                <td style={{padding:'9px 12px',textAlign:'center'}}>
+                  <span style={{fontSize:16}}>{'⭐'.repeat(parseInt(of.priorite||1))}</span>
+                </td>
+                <td style={{padding:'9px 12px'}}>
+                  <span style={{background:bgStatut(of.statut),color:couleurStatut(of.statut),padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:700}}>
+                    {labelStatut(of.statut)}
+                  </span>
+                </td>
+                <td style={{padding:'9px 12px'}} onClick={e=>e.stopPropagation()}>
+                  {of.statut==='planifie' && <button onClick={()=>changerStatut(of.id,'lance')} style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>▶</button>}
+                  {of.statut==='lance' && <button onClick={()=>changerStatut(of.id,'en_cours')} style={{background:'#d97706',color:'#fff',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>⚙</button>}
+                  {of.statut==='en_cours' && <button onClick={()=>changerStatut(of.id,'termine')} style={{background:'#15803d',color:'#fff',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>✓</button>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 function Dashboard() {
   const [data, setData] = useState({ sessions_actives:0, trs_moyen:0, poids_net_total:0, poids_dechets_total:0, nb_tickets:0, arrets_actifs:0, alertes_rebus:[] });
@@ -5003,7 +5284,8 @@ export default function ChefAtelier() {
   const MENU_ITEMS = [
     { id:'separator1',  label:'PRODUCTION',               separator:true },
     { id:'dashboard',   label:'Tableau de bord',           icon:'home',        color:'#1d4ed8' },
-    { id:'production',  label:'Suivi Production',          icon:'activity',    color:'#059669' },
+    { id:'of',          label:'Ordres de Fabrication', icon:'clipboard', color:'#0369a1' },
+  { id:'production',  label:'Suivi Production',          icon:'activity',    color:'#059669' },
     { id:'planning',    label:'Planning Machines',          icon:'calendar',    color:'#7c3aed' },
     { id:'rapportjour', label:'Rapports Journaliers',       icon:'file-text',   color:'#0891b2' },
     { id:'separator2',  label:'STOCKS & ARTICLES',          separator:true },
@@ -5049,6 +5331,7 @@ export default function ChefAtelier() {
   });
 
   const SECTIONS = {
+    of:          <OrdresFabrication />,
     dashboard:   <Dashboard />,
     production:  <SuiviProduction />,
     planning:    <PlanningMachines />,
