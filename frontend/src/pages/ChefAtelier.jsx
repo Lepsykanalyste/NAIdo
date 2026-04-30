@@ -4906,6 +4906,7 @@ export default function ChefAtelier() {
   const [sidebarOuverte, setSidebarOuverte] = useState(true);
   const [nbAlertes, setNbAlertes] = useState(0);
   const [perms, setPerms] = useState({ permissions:{}, is_super_admin:false, has_finance:false, role:'' });
+  const [permsLoaded, setPermsLoaded] = useState(false);
 
   useEffect(() => {
     const chargerAlertes = () => {
@@ -4915,6 +4916,7 @@ export default function ChefAtelier() {
       try {
         const {data} = await axios.get(`${API}/permissions/moi`);
         setPerms(data);
+        setPermsLoaded(true);
         // Rediriger si pas accès au module actuel
         if (data.permissions && !data.is_super_admin) {
           const allowed = Object.keys(data.permissions).filter(k=>data.permissions[k]?.voir);
@@ -5015,6 +5017,15 @@ export default function ChefAtelier() {
 
   const menuItem = MENU.find(m => m.id === ongletActif);
 
+  if (!permsLoaded) return (
+    <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',background:'#f0f4ff'}}>
+      <div style={{textAlign:'center'}}>
+        <div style={{fontSize:48,marginBottom:16}}>🏭</div>
+        <div style={{fontSize:18,fontWeight:700,color:'#1d4ed8'}}>NAIdo</div>
+        <div style={{fontSize:13,color:'#6b7280',marginTop:8}}>Chargement des permissions...</div>
+      </div>
+    </div>
+  );
   return (
     <PermissionsContext.Provider value={perms}>
     <div style={{ display:'flex', height:'100vh', fontFamily:'system-ui,sans-serif', background:'#f8fafc' }}>
