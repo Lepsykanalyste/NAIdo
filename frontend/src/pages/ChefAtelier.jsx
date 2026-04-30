@@ -4972,6 +4972,12 @@ export default function ChefAtelier() {
     { id:'import',      label:'Import Sage',               icon:'upload',      color:'#6b7280' },
   ].filter(item => {
     if (item.separator) return true;
+    // Super admin et directeur voient tout
+    const roleUser = user?.role || '';
+    if (['super_admin','directeur'].includes(roleUser)) return true;
+    // Paramètres seulement pour super_admin
+    if (item.id === 'parametres') return roleUser === 'super_admin';
+    // Autres: filtrer selon permissions chargées
     if (perms.is_super_admin) return true;
     const moduleMap = {
       dashboard:'dashboard', production:'production', planning:'planning',
