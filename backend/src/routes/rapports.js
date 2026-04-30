@@ -201,7 +201,7 @@ async function genererRapportExcel(debut, fin, userId) {
 // ── ROUTES ────────────────────────────────────────────────────
 
 // POST /api/rapports/generer
-router.post('/generer', auth, role('chef_atelier'), async (req, res) => {
+router.post('/generer', auth, role('chef_atelier', 'super_admin', 'directeur'), async (req, res) => {
   try {
     const { debut, fin } = req.body;
     const [pdfPath, excelPath] = await Promise.all([
@@ -213,7 +213,7 @@ router.post('/generer', auth, role('chef_atelier'), async (req, res) => {
 });
 
 // GET /api/rapports — Liste rapports générés
-router.get('/', auth, role('chef_atelier'), async (req, res) => {
+router.get('/', auth, role('chef_atelier', 'super_admin', 'directeur'), async (req, res) => {
   try {
     const { rows } = await db.query(`
       SELECT r.*, u.nom || ' ' || u.prenom AS genere_par_nom
