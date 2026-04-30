@@ -4961,11 +4961,11 @@ export default function ChefAtelier() {
     { id:'rh',          label:'RH — Employés & Paie',      icon:'users',       color:'#0891b2' },
     { id:'separator5',  label:'ADMIN & IA',                separator:true },
     { id:'kpi',         label:'KPI & Rapports',            icon:'bar-chart',   color:'#1d4ed8' },
+    { id:'parametres',  label:'⚙ Paramètres Système',     separator:false,    icon:'settings',    color:'#1e1b4b' },
+    { id:'separator6',  label:'RÉFÉRENTIELS',              separator:true },
     { id:'ia',          label:'Assistant IA',              icon:'cpu',         color:'#7c3aed' },
     { id:'utilisateurs',label:'Utilisateurs',              icon:'users',       color:'#6d28d9' },
     { id:'separator_sa',label:'── SUPER ADMIN ──',         separator:true },
-    { id:'parametres',  label:'⚙ Paramètres Système',     separator:false,    icon:'settings',    color:'#1e1b4b' },
-    { id:'separator6',  label:'RÉFÉRENTIELS',              separator:true },
     { id:'alertes',     label:'Alertes',                   icon:'bell',        color:'#dc2626' },
     { id:'referentiels',label:'Référentiels',              icon:'database',    color:'#374151' },
   ];
