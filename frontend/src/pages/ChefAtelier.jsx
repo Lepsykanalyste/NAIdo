@@ -4969,28 +4969,7 @@ export default function ChefAtelier() {
     { id:'separator6',  label:'RÉFÉRENTIELS',              separator:true },
     { id:'alertes',     label:'Alertes',                   icon:'bell',        color:'#dc2626' },
     { id:'referentiels',label:'Référentiels',              icon:'database',    color:'#374151' },
-    { id:'import',      label:'Import Sage',               icon:'upload',      color:'#6b7280' },
-  ].filter(item => {
-    if (item.separator) return true;
-    // Super admin et directeur voient tout
-    const roleUser = user?.role || '';
-    if (['super_admin','directeur'].includes(roleUser)) return true;
-    // Paramètres seulement pour super_admin
-    if (item.id === 'parametres') return roleUser === 'super_admin';
-    // Autres: filtrer selon permissions chargées
-    if (perms.is_super_admin) return true;
-    const moduleMap = {
-      dashboard:'dashboard', production:'production', planning:'planning',
-      rapportjour:'production', articles:'articles', matieres:'stock',
-      stock:'stock', cession:'bons_cession', clients:'vente',
-      vente:'vente', fournisseurs:'achat', achats:'achat',
-      qhse:'qhse', gmao:'gmao', rh:'rh', kpi:'kpi', ia:'ia',
-      utilisateurs:'utilisateurs', parametres:'parametres',
-    };
-    const mod = moduleMap[item.id];
-    if (!mod) return true;
-    return !perms.permissions || perms.permissions[mod]?.voir !== false;
-  });
+  ];
 
   const SECTIONS = {
     dashboard:   <Dashboard />,
@@ -5012,7 +4991,6 @@ export default function ChefAtelier() {
     parametres:  <ParametresSysteme />,
     ia:          <AssistantIA />,
     users:       <Utilisateurs />,
-    import:      <ImportSage />,
     alertes:     <Alertes />,
     referentiels:<Referentiels />,
   };
