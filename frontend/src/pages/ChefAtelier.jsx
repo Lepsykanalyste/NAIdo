@@ -7029,3 +7029,17 @@ function GMAO() {
     </div>
   );
 }
+
+// Error Boundary temporaire pour debug
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  componentDidCatch(error) { this.setState({ error: error.toString() }); }
+  render() {
+    if (this.state.error) return (
+      <div style={{padding:40,color:'red',fontSize:14,fontFamily:'monospace',whiteSpace:'pre-wrap'}}>
+        ERREUR REACT: {this.state.error}
+      </div>
+    );
+    return this.props.children;
+  }
+}
