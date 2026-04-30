@@ -3973,6 +3973,9 @@ function Referentiels() {
 }
 
 function KPIRapports() {
+  const perms = usePerms();
+  const { user } = useAuth();
+  const hasFinance = () => perms.has_finance || perms.is_super_admin || (user && user.role === "super_admin");
   const [trs, setTrs] = useState([]);
   const [rapports, setRapports] = useState([]);
   const [generating, setGenerating] = useState(false);
