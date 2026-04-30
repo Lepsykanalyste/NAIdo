@@ -1578,6 +1578,269 @@ async def calcul_temps_production(
         }
 
 
+
+# ══════════════════════════════════════════════════════════════
+# IA — GROQ + MISTRAL avec bascule automatique
+# ══════════════════════════════════════════════════════════════
+
+import httpx
+
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions"
+
+async def get_ia_keys(pool):
+    """Récupère les clés API depuis les paramètres système"""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT cle, valeur FROM parametres_systeme WHERE cle IN ($1,$2,$3,$4)",
+            'groq_api_key', 'mistral_api_key', 'ia_enabled', 'ia_contexte_entreprise'
+        )
+        return {r['cle']: r['valeur'] for r in rows}
+
+async def call_groq(prompt: str, system: str, api_key: str, model="llama-3.3-70b-versatile") -> str:
+    """Appel Groq API"""
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            GROQ_API_URL,
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": 0.3,
+                "max_tokens": 2000,
+            }
+        )
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"]
+
+async def call_mistral(prompt: str, system: str, api_key: str, model="mistral-large-latest") -> str:
+    """Appel Mistral API"""
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(
+            MISTRAL_API_URL,
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": prompt}
+                ],
+                "temperature": 0.3,
+                "max_tokens": 2000,
+            }
+        )
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"]
+
+async def appel_ia(pool, prompt: str, contexte: str = "") -> dict:
+    """Bascule automatique Groq → Mistral → erreur"""
+    keys = await get_ia_keys(pool)
+    
+    if keys.get('ia_enabled') == 'false':
+        return {"erreur": "IA désactivée dans les paramètres"}
+    
+    ctx_entreprise = keys.get('ia_contexte_entreprise', 'NAI — Usine de fabrication de sacs plastiques, Côte d'Ivoire')
+    system_prompt = f"""Tu es l'assistant IA de NAI (anciennement Green Industry), une usine de fabrication de sacs plastiques en Côte d'Ivoire.
+Contexte : {ctx_entreprise}
+{contexte}
+Tu réponds toujours en français, de manière concise et professionnelle.
+Tu as accès aux données de production, stock, QHSE, RH et maintenance de l'usine.
+Tu ne divulgues jamais les données financières sensibles sauf si autorisé.
+Date du jour : {datetime.utcnow().strftime('%d/%m/%Y')}"""
+
+    # 1. Essayer Groq
+    groq_key = keys.get('groq_api_key', '')
+    if groq_key and groq_key != '***':
+        try:
+            reponse = await call_groq(prompt, system_prompt, groq_key)
+            return {"reponse": reponse, "modele": "Groq llama-3.3-70b", "provider": "groq"}
+        except Exception as e:
+            print(f"Groq erreur: {e}")
+    
+    # 2. Basculer sur Mistral
+    mistral_key = keys.get('mistral_api_key', '')
+    if mistral_key and mistral_key != '***':
+        try:
+            reponse = await call_mistral(prompt, system_prompt, mistral_key)
+            return {"reponse": reponse, "modele": "Mistral large", "provider": "mistral"}
+        except Exception as e:
+            print(f"Mistral erreur: {e}")
+    
+    # 3. Essayer Anthropic si dispo
+    try:
+        import anthropic
+        client = anthropic.Anthropic()
+        msg = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=2000,
+            system=system_prompt,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return {"reponse": msg.content[0].text, "modele": "Claude Sonnet", "provider": "anthropic"}
+    except Exception as e:
+        print(f"Anthropic erreur: {e}")
+    
+    return {"erreur": "Aucun provider IA disponible. Configurez Groq ou Mistral dans les paramètres."}
+
+@app.post("/api/ia/chat")
+async def ia_chat(payload: dict, user=Depends(get_current_user)):
+    """Chat IA principal avec contexte NAI"""
+    prompt = payload.get("message", "")
+    if not prompt:
+        raise HTTPException(400, "Message requis")
+    
+    # Enrichir avec données contextuelles si demandé
+    contexte_additionnel = ""
+    if payload.get("avec_contexte_production"):
+        async with pool.acquire() as conn:
+            stats = await conn.fetchrow("""
+                SELECT
+                    (SELECT COUNT(*) FROM ordres_fabrication WHERE statut='en_cours') AS of_actifs,
+                    (SELECT COUNT(*) FROM machines WHERE statut='en_panne') AS pannes,
+                    (SELECT COUNT(*) FROM non_conformites WHERE statut NOT IN ('clos','annule')) AS nc_ouvertes
+            """)
+            if stats:
+                contexte_additionnel = f"""
+Données temps réel :
+- {stats['of_actifs']} ordres de fabrication en cours
+- {stats['pannes']} machines en panne
+- {stats['nc_ouvertes']} non-conformités ouvertes"""
+    
+    result = await appel_ia(pool, prompt, contexte_additionnel)
+    
+    # Logger l'utilisation IA
+    await log_action(pool, user.get("id"), "ia_chat", "ia", details={"provider": result.get("provider")})
+    
+    return result
+
+@app.post("/api/ia/analyser-nc")
+async def ia_analyser_nc(payload: dict, user=Depends(get_current_user)):
+    """Analyse IA d'une non-conformité — causes probables et actions"""
+    nc = payload
+    prompt = f"""Analyse cette non-conformité dans notre usine NAI :
+    
+Titre : {nc.get('titre')}
+Type : {nc.get('type_nc')}
+Gravité : {nc.get('gravite')}
+Description : {nc.get('description')}
+Produit concerné : {nc.get('produit_concerne', 'Non spécifié')}
+Machine : {nc.get('machine', 'Non spécifié')}
+
+Donne-moi :
+1. Les 3 causes racines les plus probables (méthode 5M)
+2. L'action corrective immédiate recommandée
+3. L'action préventive à long terme
+4. Cotation AMDEC suggérée (Gravité/Occurrence/Détectabilité sur 5)
+
+Réponse structurée et concise."""
+    
+    return await appel_ia(pool, prompt)
+
+@app.post("/api/ia/analyser-panne")
+async def ia_analyser_panne(payload: dict, user=Depends(get_current_user)):
+    """Analyse IA d'une panne machine"""
+    panne = payload
+    prompt = f"""Analyse cette panne sur notre équipement :
+    
+Machine : {panne.get('equipement', 'Extrudeuse plastique')}
+Symptômes : {panne.get('symptomes')}
+Durée d'arrêt : {panne.get('duree_arret_h', '?')} heures
+Contexte : {panne.get('contexte', '')}
+
+Donne-moi :
+1. Diagnostic probable (cause technique)
+2. Procédure de dépannage étape par étape
+3. Pièces détachées susceptibles d'être nécessaires
+4. Actions préventives pour éviter la récurrence
+5. Estimation durée réparation"""
+    
+    return await appel_ia(pool, prompt)
+
+@app.post("/api/ia/analyser-stock")
+async def ia_analyser_stock(user=Depends(get_current_user)):
+    """Analyse IA du stock et recommandations"""
+    async with pool.acquire() as conn:
+        alertes = await conn.fetch("""
+            SELECT a.code, a.designation, a.type_article,
+                COALESCE(SUM(sa.qte_disponible),0) AS stock,
+                COALESCE(a.stock_mini,0) AS stock_mini
+            FROM articles a
+            LEFT JOIN stock_articles sa ON sa.article_id=a.id
+            WHERE a.actif=true
+            GROUP BY a.id
+            HAVING COALESCE(SUM(sa.qte_disponible),0) <= COALESCE(a.stock_mini,0)
+            LIMIT 10
+        """)
+        
+    if not alertes:
+        return {"reponse": "✅ Aucune alerte stock critique détectée. Tous les articles sont au-dessus du stock minimum.", "modele": "Analyse locale"}
+    
+    liste = "\n".join([f"- {r['code']} {r['designation']} ({r['type_article']}): {r['stock']:.0f} / mini {r['stock_mini']:.0f}" for r in alertes])
+    prompt = f"""Voici les articles en rupture ou proche de la rupture dans notre usine NAI :
+
+{liste}
+
+Analyse et donne des recommandations priorisées pour les approvisionnements urgents.
+Identifie les risques de production si ces matières ne sont pas réapprovisionnées rapidement."""
+    
+    return await appel_ia(pool, prompt)
+
+@app.post("/api/ia/rapport-journalier")
+async def ia_rapport_journalier(user=Depends(get_current_user)):
+    """Génère un rapport journalier automatique"""
+    async with pool.acquire() as conn:
+        stats = await conn.fetchrow("""
+            SELECT
+                (SELECT COUNT(*) FROM sessions_production WHERE DATE(date_debut)=CURRENT_DATE) AS sessions,
+                (SELECT COALESCE(SUM(quantite_conforme),0) FROM sessions_production WHERE DATE(date_debut)=CURRENT_DATE) AS prod_conforme,
+                (SELECT COALESCE(SUM(poids_dechets_kg),0) FROM sessions_production WHERE DATE(date_debut)=CURRENT_DATE) AS dechets,
+                (SELECT COUNT(*) FROM machines WHERE statut='en_panne') AS pannes,
+                (SELECT COUNT(*) FROM non_conformites WHERE DATE(created_at)=CURRENT_DATE) AS nc_jour,
+                (SELECT COUNT(*) FROM ordres_travail WHERE DATE(created_at)=CURRENT_DATE) AS ot_jour
+        """)
+    
+    prompt = f"""Génère un rapport journalier professionnel pour NAI basé sur ces données du {datetime.utcnow().strftime('%d/%m/%Y')} :
+
+Production :
+- {stats['sessions'] or 0} sessions de production
+- {stats['prod_conforme'] or 0:.0f} unités conformes produites  
+- {stats['dechets'] or 0:.1f} kg de déchets
+
+Incidents :
+- {stats['pannes'] or 0} machine(s) en panne
+- {stats['nc_jour'] or 0} non-conformité(s) détectée(s) aujourd'hui
+- {stats['ot_jour'] or 0} ordre(s) de travail GMAO créé(s)
+
+Rédige un rapport en 3 sections : Résumé exécutif, Points d'attention, Recommandations pour demain.
+Style professionnel, format adapté pour une réunion de direction."""
+    
+    return await appel_ia(pool, prompt)
+
+@app.post("/api/ia/analyser-processus")
+async def ia_analyser_processus(payload: dict, user=Depends(get_current_user)):
+    """Analyse IA d'un processus QHSE"""
+    proc = payload
+    prompt = f"""Analyse ce processus qualité de notre usine NAI (fabrication sacs plastiques) :
+
+Processus : {proc.get('code')} — {proc.get('titre') or proc.get('libelle')}
+Type : {proc.get('type_processus')}
+Description : {proc.get('description','')}
+Finalité : {proc.get('finalite') or proc.get('objectif','')}
+Données entrée : {proc.get('donnees_entree','')}
+Données sortie : {proc.get('donnees_sortie','')}
+Normes : {proc.get('normes_applicables',[])}
+
+En tant qu'expert QHSE certifié ISO 9001/14001/45001/FSSC22000, donne-moi :
+1. Points forts de ce processus
+2. Risques identifiés et non-conformités potentielles
+3. Indicateurs KPI recommandés
+4. Améliorations suggérées selon les normes applicables"""
+    
+    return await appel_ia(pool, prompt)
+
 # ══════════════════════════════════════════════════════════════
 # GESTION UTILISATEURS (liée aux RH)
 # ══════════════════════════════════════════════════════════════
@@ -1879,6 +2142,76 @@ async def log_action(pool, user_id: str, action: str, module: str, ressource_id:
             """, user_id, action, module, ressource_id, json.dumps(details or {}))
     except:
         pass  # Les logs ne doivent jamais faire planter l'app
+
+
+# ── IMPORT DOCUMENTS QHSE ─────────────────────────────────────
+@app.post("/api/qhse/import-zip")
+async def import_qhse_zip(file: UploadFile = File(...), user=Depends(get_current_user)):
+    """Import d'un ZIP de documents QHSE via interface web"""
+    if not file.filename.endswith('.zip'):
+        raise HTTPException(400, "Fichier ZIP requis")
+    
+    import tempfile, zipfile as zf
+    from qhse_import import importer_zip
+    
+    # Sauvegarder le ZIP temporairement
+    with tempfile.NamedTemporaryFile(suffix='.zip', delete=False) as tmp:
+        content_bytes = await file.read()
+        tmp.write(content_bytes)
+        tmp_path = tmp.name
+    
+    try:
+        resultats = await importer_zip(tmp_path)
+        await log_action(pool, user.get("id"), "import_qhse", "qhse",
+                        details={"nb_importes": len(resultats.get('importes',[]))})
+        return {
+            "success": True,
+            "importes": len(resultats.get('importes', [])),
+            "ignores": len(resultats.get('ignores', [])),
+            "erreurs": len(resultats.get('erreurs', [])),
+            "detail": resultats
+        }
+    except Exception as e:
+        raise HTTPException(500, f"Erreur import: {str(e)}")
+    finally:
+        import os
+        try: os.unlink(tmp_path)
+        except: pass
+
+@app.get("/api/qhse/documents/{doc_id}/telecharger")
+async def telecharger_document(doc_id: str, user=Depends(get_current_user)):
+    """Télécharger un document QHSE"""
+    from fastapi.responses import FileResponse
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT * FROM documents_qhse WHERE id=$1", doc_id)
+        if not row: raise HTTPException(404, "Document introuvable")
+        file_path = row["file_path"]
+        if not file_path or not Path(file_path).exists():
+            raise HTTPException(404, "Fichier non trouvé sur le serveur")
+        return FileResponse(file_path, filename=row["file_name"])
+
+@app.get("/api/ia/analyser-document/{doc_id}")  
+async def ia_analyser_document(doc_id: str, user=Depends(get_current_user)):
+    """Analyse IA d'un document QHSE"""
+    async with pool.acquire() as conn:
+        doc = await conn.fetchrow("SELECT * FROM documents_qhse WHERE id=$1", doc_id)
+        if not doc: raise HTTPException(404, "Document introuvable")
+    
+    prompt = f"""Analyse ce document qualité NAI :
+Code : {doc['code']}
+Titre : {doc['titre']}
+Type : {doc['type_document']}
+Version : {doc['version']}
+Normes : {doc['normes_applicables']}
+
+En tant qu'expert QHSE, donne :
+1. Résumé de ce que doit contenir ce document
+2. Points clés à vérifier lors d'un audit
+3. Liens avec les exigences normatives applicables
+4. Indicateurs de performance associés"""
+    
+    result = await appel_ia(pool, prompt)
+    return result
 
 # ── HEALTH CHECK ───────────────────────────────────────────────
 @app.get("/api/health")

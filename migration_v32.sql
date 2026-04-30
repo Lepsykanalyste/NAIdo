@@ -138,3 +138,14 @@ INSERT INTO permissions_roles (role, module, peut_voir, peut_creer, peut_modifie
 ON CONFLICT (role, module) DO NOTHING;
 
 SELECT 'Migration v3.2 Sécurité OK ✓' AS statut;
+
+-- Paramètres IA Groq/Mistral
+INSERT INTO parametres_systeme (cle, valeur, type_valeur, description, modifiable_par) VALUES
+    ('groq_api_key', '', 'string', 'Clé API Groq (gratuit sur console.groq.com)', 'super_admin'),
+    ('mistral_api_key', '', 'string', 'Clé API Mistral (gratuit sur console.mistral.ai)', 'super_admin'),
+    ('ia_provider_priorite', 'groq', 'string', 'Provider IA prioritaire (groq ou mistral)', 'super_admin'),
+    ('ia_groq_model', 'llama-3.3-70b-versatile', 'string', 'Modèle Groq utilisé', 'super_admin'),
+    ('ia_mistral_model', 'mistral-large-latest', 'string', 'Modèle Mistral utilisé', 'super_admin')
+ON CONFLICT (cle) DO NOTHING;
+
+SELECT 'Paramètres IA OK' AS statut;

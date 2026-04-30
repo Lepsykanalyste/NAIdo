@@ -2453,6 +2453,21 @@ function QHSE() {
       {onglet==='documents' && (
         <div>
           <div style={{display:'flex',justifyContent:'flex-end',marginBottom:16}}>
+            <label style={{background:'#059669',color:'#fff',border:'none',padding:'9px 20px',borderRadius:8,cursor:'pointer',fontWeight:700,display:'inline-block'}}>
+              📦 Importer ZIP
+              <input type="file" accept=".zip" style={{display:'none'}} onChange={async e=>{
+                const file = e.target.files[0];
+                if (!file) return;
+                const fd = new FormData();
+                fd.append('file', file);
+                try {
+                  toast.info('Import en cours...');
+                  const {data} = await axios.post(`${API}/qhse/import-zip`, fd, {headers:{'Content-Type':'multipart/form-data'}});
+                  toast.success(`✓ ${data.importes} documents importés, ${data.ignores} ignorés`);
+                  chargerOnglet('documents');
+                } catch(err) { toast.error('Erreur import: ' + (err.response?.data?.detail || err.message)); }
+              }}/>
+            </label>
             <button onClick={()=>ouvrir('document',{type_document:'procedure',version:'v1'})}
               style={{background:'#b45309',color:'#fff',border:'none',padding:'9px 20px',borderRadius:8,cursor:'pointer',fontWeight:700}}>
               + Nouveau document
@@ -2973,77 +2988,158 @@ function QHSE() {
 }
 
 function AssistantIA() {
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState([
+    { role:'assistant', content:'Bonjour ! Je suis l'assistant IA de NAI. Je peux vous aider avec la production, le stock, le QHSE, la maintenance et bien plus. Posez-moi votre question !', modele:'Système' }
+  ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [iaStatus, setIaStatus] = useState(null);
+  const [provider, setProvider] = useState('');
+  const [actions, setActions] = useState([]);
+  const messagesEndRef = React.useRef(null);
 
-  useEffect(() => {
-    axios.get(`${API}/ia/status`).then(({data}) => setIaStatus(data)).catch(() => setIaStatus({disponible:false}));
-  }, []);
+  const ACTIONS_RAPIDES = [
+    { label:'📊 Rapport journalier', endpoint:'/ia/rapport-journalier', payload:{} },
+    { label:'📦 Analyse stock', endpoint:'/ia/analyser-stock', payload:{} },
+    { label:'🏭 Statut production AT3', endpoint:'/ia/chat', payload:{message:'Donne-moi un résumé du statut de production AT3 actuellement', avec_contexte_production:true} },
+    { label:'⚠ Risques QHSE', endpoint:'/ia/chat', payload:{message:'Quels sont les principaux risques QHSE à surveiller selon nos données actuelles ?'} },
+    { label:'🔧 Conseils maintenance', endpoint:'/ia/chat', payload:{message:'Quelles maintenances préventives sont à planifier cette semaine ?'} },
+    { label:'📈 Améliorer TRS', endpoint:'/ia/chat', payload:{message:'Comment améliorer notre TRS sur les extrudeuses AT3 ?'} },
+  ];
 
-  const envoyer = async () => {
-    if (!input.trim()) return;
-    const msg = input.trim();
-    setInput('');
-    setMessages(prev => [...prev, { role:'user', content:msg }]);
+  React.useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior:'smooth' });
+  }, [messages]);
+
+  const envoyer = async (msgText=null, endpoint='/ia/chat', payload=null) => {
+    const texte = msgText || input.trim();
+    if (!texte && !payload) return;
+    
     setLoading(true);
+    const userMsg = { role:'user', content: texte || '(Action rapide)' };
+    setMessages(prev => [...prev, userMsg]);
+    setInput('');
+
     try {
-      const { data } = await axios.post(`${API}/ia/chat`, {
-        message: msg,
-        historique: messages.map(m => ({ role:m.role, content:m.content }))
-      });
-      setMessages(prev => [...prev, { role:'assistant', content:data.reponse, modele:data.modele }]);
-    } catch {
-      setMessages(prev => [...prev, { role:'assistant', content:'❌ IA non disponible. Vérifiez qu\'Ollama est démarré sur le serveur.' }]);
-    } finally { setLoading(false); }
+      const body = payload || { message: texte, avec_contexte_production: true };
+      const { data } = await axios.post(`${API}${endpoint}`, body);
+      
+      if (data.erreur) {
+        setMessages(prev => [...prev, {
+          role:'assistant',
+          content:`❌ ${data.erreur}
+
+💡 **Pour activer l'IA :**
+1. Allez dans Paramètres Système
+2. Configurez votre clé API Groq (gratuit sur console.groq.com)
+3. Ou votre clé API Mistral (gratuit sur console.mistral.ai)`,
+          modele:'Système'
+        }]);
+      } else {
+        setProvider(data.provider || '');
+        setMessages(prev => [...prev, {
+          role:'assistant',
+          content: data.reponse,
+          modele: data.modele || 'IA'
+        }]);
+      }
+    } catch(e) {
+      setMessages(prev => [...prev, {
+        role:'assistant',
+        content:`❌ Erreur: ${e.response?.data?.detail || e.message}`,
+        modele:'Erreur'
+      }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formaterTexte = (texte) => {
+    // Formatage basique Markdown
+    return texte
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/
+/g, '<br/>')
+      .replace(/^(\d+)\./gm, '<br/><strong>$1.</strong>');
   };
 
   return (
-    <div style={{ display:'flex', flexDirection:'column', height:'calc(100vh - 200px)' }}>
-      <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
-        <div style={{ width:10, height:10, borderRadius:'50%', background:iaStatus?.disponible?'#16a34a':'#dc2626' }}/>
-        <span style={{ fontSize:13, fontWeight:600, color:iaStatus?.disponible?'#15803d':'#dc2626' }}>
-          {iaStatus?.disponible ? `IA disponible — ${iaStatus.modele_actif}` : 'IA hors ligne — démarrez Ollama sur le serveur'}
-        </span>
+    <div style={{display:'flex',flexDirection:'column',height:'calc(100vh - 120px)'}}>
+      {/* Header */}
+      <div style={{background:'linear-gradient(135deg,#4338ca,#6366f1)',borderRadius:12,padding:'14px 20px',marginBottom:12,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+        <div>
+          <div style={{fontWeight:800,color:'#fff',fontSize:15}}>🤖 Assistant IA NAI</div>
+          <div style={{color:'#c7d2fe',fontSize:11}}>
+            {provider ? `Propulsé par ${provider === 'groq' ? '⚡ Groq (llama-3.3-70b)' : provider === 'mistral' ? '🌟 Mistral Large' : '🔵 Claude Sonnet'}` : 'Groq + Mistral — bascule automatique'}
+          </div>
+        </div>
+        <button onClick={()=>setMessages([{role:'assistant',content:'Conversation réinitialisée. Comment puis-je vous aider ?',modele:'Système'}])}
+          style={{background:'rgba(255,255,255,0.2)',border:'none',color:'#fff',padding:'6px 14px',borderRadius:8,cursor:'pointer',fontSize:12}}>
+          🗑 Effacer
+        </button>
       </div>
 
-      <div style={{ flex:1, background:'#fff', borderRadius:14, border:'1px solid #e5e7eb', overflow:'auto', padding:20, display:'flex', flexDirection:'column', gap:14 }}>
-        {messages.length === 0 && (
-          <div style={{ textAlign:'center', margin:'auto', color:'#9ca3af' }}>
-            <div style={{ fontSize:48, marginBottom:12 }}>🤖</div>
-            <p style={{ fontSize:15, fontWeight:600, color:'#374151' }}>Assistant IA NAIdo</p>
-            <p style={{ fontSize:13 }}>Propulsé par Ollama · modèle local · données privées</p>
-            <div style={{ display:'flex', gap:8, justifyContent:'center', flexWrap:'wrap', marginTop:16 }}>
-              {['Analyse mon TRS','Causes de rebus élevé','Génère une procédure ISO','Optimiser la cadence'].map(q => (
-                <button key={q} onClick={() => setInput(q)} style={{ background:'#f0fdf4', border:'1px solid #86efac', color:'#15803d', padding:'8px 14px', borderRadius:20, cursor:'pointer', fontSize:12 }}>{q}</button>
-              ))}
-            </div>
-          </div>
-        )}
-        {messages.map((m,i) => (
-          <div key={i} style={{ display:'flex', justifyContent:m.role==='user'?'flex-end':'flex-start' }}>
-            <div style={{ maxWidth:'80%', padding:'12px 16px', borderRadius:12, background:m.role==='user'?'#14532d':'#f9fafb', color:m.role==='user'?'#fff':'#374151', border:m.role==='assistant'?'1px solid #e5e7eb':'none', fontSize:13, lineHeight:1.6, whiteSpace:'pre-wrap' }}>
-              {m.role==='assistant' && <div style={{ fontSize:11, color:'#9ca3af', marginBottom:6 }}>🤖 {m.modele||'IA'}</div>}
-              {m.content}
+      {/* Actions rapides */}
+      <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}}>
+        {ACTIONS_RAPIDES.map((a,i)=>(
+          <button key={i} onClick={()=>envoyer(a.label, a.endpoint, a.payload)}
+            style={{background:'#f0f4ff',color:'#4338ca',border:'1px solid #c7d2fe',padding:'5px 12px',borderRadius:20,cursor:'pointer',fontSize:11,fontWeight:600,whiteSpace:'nowrap'}}>
+            {a.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Messages */}
+      <div style={{flex:1,overflowY:'auto',background:'#f8f9ff',borderRadius:12,border:'1px solid #e5e7eb',padding:16,display:'flex',flexDirection:'column',gap:10}}>
+        {messages.map((m,i)=>(
+          <div key={i} style={{display:'flex',justifyContent:m.role==='user'?'flex-end':'flex-start'}}>
+            <div style={{
+              maxWidth:'80%',
+              background:m.role==='user'?'#4338ca':'#fff',
+              color:m.role==='user'?'#fff':'#1f2937',
+              borderRadius:m.role==='user'?'14px 14px 4px 14px':'14px 14px 14px 4px',
+              padding:'12px 16px',
+              boxShadow:'0 1px 4px rgba(0,0,0,0.08)',
+              border:m.role==='user'?'none':'1px solid #e5e7eb',
+            }}>
+              {m.role==='assistant'&&(
+                <div style={{fontSize:10,color:'#9ca3af',marginBottom:6,fontWeight:600}}>
+                  🤖 {m.modele}
+                </div>
+              )}
+              <div style={{fontSize:13,lineHeight:1.6}}
+                dangerouslySetInnerHTML={{__html:formaterTexte(m.content)}}/>
             </div>
           </div>
         ))}
         {loading && (
-          <div style={{ display:'flex', justifyContent:'flex-start' }}>
-            <div style={{ background:'#f9fafb', border:'1px solid #e5e7eb', borderRadius:12, padding:'12px 16px', fontSize:13, color:'#9ca3af' }}>🤖 Réflexion en cours... ⏳</div>
+          <div style={{display:'flex',justifyContent:'flex-start'}}>
+            <div style={{background:'#fff',borderRadius:'14px 14px 14px 4px',padding:'12px 16px',border:'1px solid #e5e7eb',fontSize:13,color:'#9ca3af'}}>
+              <div style={{display:'flex',gap:4,alignItems:'center'}}>
+                {[0,1,2].map(i=>(
+                  <div key={i} style={{width:8,height:8,borderRadius:'50%',background:'#6366f1',animation:'pulse 1.4s infinite',animationDelay:`${i*0.2}s`}}/>
+                ))}
+                <span style={{marginLeft:6}}>L'IA réfléchit...</span>
+              </div>
+            </div>
           </div>
         )}
+        <div ref={messagesEndRef}/>
       </div>
 
-      <div style={{ display:'flex', gap:10, marginTop:12, alignItems:'flex-end' }}>
-        <textarea value={input} onChange={e => setInput(e.target.value)}
-          onKeyDown={e => { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();envoyer();} }}
-          placeholder="Posez votre question... (Entrée pour envoyer)"
-          rows={2} style={{ flex:1, border:'1px solid #d1d5db', borderRadius:10, padding:'10px 14px', fontSize:13, resize:'none', outline:'none' }}/>
-        <button onClick={envoyer} disabled={loading||!input.trim()}
-          style={{ background:(!input.trim()||loading)?'#d1d5db':'#14532d', color:'#fff', border:'none', padding:'12px 20px', borderRadius:10, cursor:'pointer', fontWeight:700 }}>
-          {loading?'...':'↑'}
+      {/* Saisie */}
+      <div style={{display:'flex',gap:8,marginTop:10}}>
+        <input
+          value={input}
+          onChange={e=>setInput(e.target.value)}
+          onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&envoyer()}
+          placeholder="Posez votre question sur la production, le stock, le QHSE... (Entrée pour envoyer)"
+          style={{flex:1,border:'2px solid #c7d2fe',borderRadius:10,padding:'12px 16px',fontSize:13,outline:'none'}}
+          disabled={loading}
+        />
+        <button onClick={()=>envoyer()}
+          disabled={loading||!input.trim()}
+          style={{background:loading||!input.trim()?'#d1d5db':'#4338ca',color:'#fff',border:'none',padding:'12px 20px',borderRadius:10,cursor:loading||!input.trim()?'default':'pointer',fontWeight:700,fontSize:13}}>
+          {loading?'⏳':'Envoyer ▶'}
         </button>
       </div>
     </div>
