@@ -115,7 +115,7 @@ class LoginRequest(BaseModel):
 async def login(req: LoginRequest):
     async with pool.acquire() as conn:
         user = await conn.fetchrow(
-            "SELECT u.*, r.nom as role FROM utilisateurs u LEFT JOIN roles r ON r.id=u.role_id WHERE u.login=$1 AND u.actif=true",
+            "SELECT u.* FROM utilisateurs u WHERE u.login=$1 AND u.actif=true",
             req.login
         )
         if not user:
