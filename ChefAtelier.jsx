@@ -1,22 +1,3 @@
-
-  // Filtrer le menu selon les permissions
-  const MENU_ITEMS = MENU_ITEMS_ALL.filter(item => {
-    if (item.separator) return true;
-    if (perms.is_super_admin) return true;
-    // Map id menu → module
-    const moduleMap = {
-      dashboard:'dashboard', production:'production', planning:'planning',
-      rapportjour:'production', articles:'articles', matieres:'stock',
-      stock:'stock', bons_cession:'bons_cession', clients:'vente',
-      vente:'vente', fournisseurs:'achat', achats:'achat',
-      qhse:'qhse', gmao:'gmao', rh:'rh', kpi:'kpi', ia:'ia',
-      utilisateurs:'utilisateurs', parametres:'parametres',
-    };
-    const mod = moduleMap[item.id];
-    if (!mod) return true;
-    return canAccess(mod);
-  });
-
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useAuth } from '../hooks/useAuth.jsx';
@@ -3104,159 +3085,203 @@ function QHSE() {
 }
 
 function AssistantIA() {
-  const [messages, setMessages] = useState([
-    { role:'assistant', content:'Bonjour ! Je suis l'assistant IA de NAI. Je peux vous aider avec la production, le stock, le QHSE, la maintenance et bien plus. Posez-moi votre question !', modele:'Système' }
+  const [conversations, setConversations] = React.useState(() => {
+    try { return JSON.parse(localStorage.getItem('naido_ia_convs') || '[]'); } catch { return []; }
+  });
+  const [convActuelle, setConvActuelle] = React.useState(null);
+  const [messages, setMessages] = React.useState([
+    { role:'assistant', content:"Bonjour ! Je suis l'assistant IA de NAI. J'ai accès à toutes les données de l'application en temps réel. Posez-moi votre question !" }
   ]);
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [provider, setProvider] = useState('');
-  const [actions, setActions] = useState([]);
+  const [input, setInput] = React.useState('');
+  const [loading, setLoading] = React.useState(false);
+  const [showHistory, setShowHistory] = React.useState(false);
   const messagesEndRef = React.useRef(null);
-
-  const ACTIONS_RAPIDES = [
-    { label:'📊 Rapport journalier', endpoint:'/ia/rapport-journalier', payload:{} },
-    { label:'📦 Analyse stock', endpoint:'/ia/analyser-stock', payload:{} },
-    { label:'🏭 Statut production AT3', endpoint:'/ia/chat', payload:{message:'Donne-moi un résumé du statut de production AT3 actuellement', avec_contexte_production:true} },
-    { label:'⚠ Risques QHSE', endpoint:'/ia/chat', payload:{message:'Quels sont les principaux risques QHSE à surveiller selon nos données actuelles ?'} },
-    { label:'🔧 Conseils maintenance', endpoint:'/ia/chat', payload:{message:'Quelles maintenances préventives sont à planifier cette semaine ?'} },
-    { label:'📈 Améliorer TRS', endpoint:'/ia/chat', payload:{message:'Comment améliorer notre TRS sur les extrudeuses AT3 ?'} },
-  ];
 
   React.useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior:'smooth' });
   }, [messages]);
 
+  // Sauvegarder conversation dans localStorage
+  const sauvegarderConv = (msgs) => {
+    if (msgs.length <= 1) return;
+    const titre = msgs[1]?.content?.slice(0,50) || 'Conversation';
+    const conv = {
+      id: convActuelle || Date.now(),
+      titre,
+      date: new Date().toLocaleDateString('fr-FR'),
+      messages: msgs
+    };
+    setConvActuelle(conv.id);
+    setConversations(prev => {
+      const updated = [conv, ...prev.filter(c => c.id !== conv.id)].slice(0,20);
+      try { localStorage.setItem('naido_ia_convs', JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+  };
+
+  const ACTIONS_RAPIDES = [
+    { label:'📊 Rapport journalier', endpoint:'/ia/rapport-journalier', payload:{} },
+    { label:'📦 Analyse stock',       endpoint:'/ia/analyser-stock',     payload:{} },
+    { label:'🏭 État production',     endpoint:'/ia/chat', payload:{message:"Donne-moi un bilan complet de la production AT3 aujourd'hui avec les KPIs."} },
+    { label:'⚠ Risques QHSE',        endpoint:'/ia/chat', payload:{message:"Quels sont les risques QHSE prioritaires à traiter selon nos données actuelles ?"} },
+    { label:'🔧 Maintenance',         endpoint:'/ia/chat', payload:{message:"Quelles maintenances préventives sont urgentes cette semaine ?"} },
+    { label:'📈 Améliorer TRS',       endpoint:'/ia/chat', payload:{message:"Comment améliorer notre TRS sur les extrudeuses AT3 ?"} },
+  ];
+
   const envoyer = async (msgText=null, endpoint='/ia/chat', payload=null) => {
     const texte = msgText || input.trim();
     if (!texte && !payload) return;
-    
     setLoading(true);
-    const userMsg = { role:'user', content: texte || '(Action rapide)' };
-    setMessages(prev => [...prev, userMsg]);
+    const userMsg = { role:'user', content: texte || 'Action rapide' };
+    const newMessages = [...messages, userMsg];
+    setMessages(newMessages);
     setInput('');
-
     try {
-      const body = payload || { message: texte, avec_contexte_production: true };
+      const body = payload || { 
+        message: texte, 
+        historique: messages.slice(-8),  // Envoyer les 8 derniers pour la mémoire
+        avec_contexte_production: true 
+      };
       const { data } = await axios.post(`${API}${endpoint}`, body);
-      
       if (data.erreur) {
-        setMessages(prev => [...prev, {
-          role:'assistant',
-          content:`❌ ${data.erreur}
+        const errMsg = { role:'assistant', content:`❌ ${data.erreur}
 
-💡 **Pour activer l'IA :**
-1. Allez dans Paramètres Système
-2. Configurez votre clé API Groq (gratuit sur console.groq.com)
-3. Ou votre clé API Mistral (gratuit sur console.mistral.ai)`,
-          modele:'Système'
-        }]);
+💡 Configurez les clés API dans ⚙ Paramètres Système.` };
+        const finalMsgs = [...newMessages, errMsg];
+        setMessages(finalMsgs);
       } else {
-        setProvider(data.provider || '');
-        setMessages(prev => [...prev, {
-          role:'assistant',
-          content: data.reponse,
-          modele: data.modele || 'IA'
-        }]);
+        const assistantMsg = { role:'assistant', content: data.reponse || data };
+        const finalMsgs = [...newMessages, assistantMsg];
+        setMessages(finalMsgs);
+        sauvegarderConv(finalMsgs);
       }
     } catch(e) {
-      setMessages(prev => [...prev, {
-        role:'assistant',
-        content:`❌ Erreur: ${e.response?.data?.detail || e.message}`,
-        modele:'Erreur'
-      }]);
+      setMessages(prev => [...prev, { role:'assistant', content:`❌ Erreur: ${e.response?.data?.detail || e.message}` }]);
     } finally {
       setLoading(false);
     }
   };
 
-  const formaterTexte = (texte) => {
-    // Formatage basique Markdown
-    return texte
+  const nouvelleConv = () => {
+    setMessages([{ role:'assistant', content:"Nouvelle conversation. Comment puis-je vous aider ?" }]);
+    setConvActuelle(null);
+    setShowHistory(false);
+  };
+
+  const chargerConv = (conv) => {
+    setMessages(conv.messages);
+    setConvActuelle(conv.id);
+    setShowHistory(false);
+  };
+
+  const formater = (texte) => {
+    if (!texte) return '';
+    return String(texte)
       .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
       .replace(/
 /g, '<br/>')
-      .replace(/^(\d+)\./gm, '<br/><strong>$1.</strong>');
+      .replace(/^(\d+)\.\s/gm, '<br/><strong>$1.</strong> ');
   };
 
   return (
-    <div style={{display:'flex',flexDirection:'column',height:'calc(100vh - 120px)'}}>
-      {/* Header */}
-      <div style={{background:'linear-gradient(135deg,#4338ca,#6366f1)',borderRadius:12,padding:'14px 20px',marginBottom:12,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-        <div>
-          <div style={{fontWeight:800,color:'#fff',fontSize:15}}>🤖 Assistant IA NAI</div>
-          <div style={{color:'#c7d2fe',fontSize:11}}>
-            {provider ? `Propulsé par ${provider === 'groq' ? '⚡ Groq (llama-3.3-70b)' : provider === 'mistral' ? '🌟 Mistral Large' : '🔵 Claude Sonnet'}` : 'Groq + Mistral — bascule automatique'}
+    <div style={{display:'flex',gap:12,height:'calc(100vh - 120px)'}}>
+      
+      {/* Panneau historique */}
+      {showHistory && (
+        <div style={{width:260,background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',display:'flex',flexDirection:'column',overflow:'hidden'}}>
+          <div style={{padding:'12px 16px',borderBottom:'1px solid #e5e7eb',fontWeight:700,color:'#4338ca',fontSize:13,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            📋 Historique
+            <button onClick={nouvelleConv} style={{background:'#4338ca',color:'#fff',border:'none',padding:'4px 10px',borderRadius:6,cursor:'pointer',fontSize:11,fontWeight:700}}>+ Nouveau</button>
+          </div>
+          <div style={{flex:1,overflowY:'auto',padding:8}}>
+            {conversations.length === 0 ? (
+              <div style={{textAlign:'center',padding:20,color:'#9ca3af',fontSize:12}}>Aucune conversation</div>
+            ) : conversations.map(c=>(
+              <div key={c.id} onClick={()=>chargerConv(c)}
+                style={{padding:'8px 10px',borderRadius:8,cursor:'pointer',marginBottom:4,
+                  background:convActuelle===c.id?'#eff6ff':'#f8f9ff',
+                  border:convActuelle===c.id?'1px solid #bfdbfe':'1px solid transparent'}}>
+                <div style={{fontSize:12,fontWeight:600,color:'#1d4ed8',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.titre}</div>
+                <div style={{fontSize:10,color:'#9ca3af',marginTop:2}}>{c.date} · {c.messages?.length} messages</div>
+              </div>
+            ))}
           </div>
         </div>
-        <button onClick={()=>setMessages([{role:'assistant',content:'Conversation réinitialisée. Comment puis-je vous aider ?',modele:'Système'}])}
-          style={{background:'rgba(255,255,255,0.2)',border:'none',color:'#fff',padding:'6px 14px',borderRadius:8,cursor:'pointer',fontSize:12}}>
-          🗑 Effacer
-        </button>
-      </div>
+      )}
 
-      {/* Actions rapides */}
-      <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:10}}>
-        {ACTIONS_RAPIDES.map((a,i)=>(
-          <button key={i} onClick={()=>envoyer(a.label, a.endpoint, a.payload)}
-            style={{background:'#f0f4ff',color:'#4338ca',border:'1px solid #c7d2fe',padding:'5px 12px',borderRadius:20,cursor:'pointer',fontSize:11,fontWeight:600,whiteSpace:'nowrap'}}>
-            {a.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Messages */}
-      <div style={{flex:1,overflowY:'auto',background:'#f8f9ff',borderRadius:12,border:'1px solid #e5e7eb',padding:16,display:'flex',flexDirection:'column',gap:10}}>
-        {messages.map((m,i)=>(
-          <div key={i} style={{display:'flex',justifyContent:m.role==='user'?'flex-end':'flex-start'}}>
-            <div style={{
-              maxWidth:'80%',
-              background:m.role==='user'?'#4338ca':'#fff',
-              color:m.role==='user'?'#fff':'#1f2937',
-              borderRadius:m.role==='user'?'14px 14px 4px 14px':'14px 14px 14px 4px',
-              padding:'12px 16px',
-              boxShadow:'0 1px 4px rgba(0,0,0,0.08)',
-              border:m.role==='user'?'none':'1px solid #e5e7eb',
-            }}>
-              {m.role==='assistant'&&(
-                <div style={{fontSize:10,color:'#9ca3af',marginBottom:6,fontWeight:600}}>
-                  🤖 {m.modele}
-                </div>
-              )}
-              <div style={{fontSize:13,lineHeight:1.6}}
-                dangerouslySetInnerHTML={{__html:formaterTexte(m.content)}}/>
-            </div>
+      {/* Zone principale */}
+      <div style={{flex:1,display:'flex',flexDirection:'column'}}>
+        {/* Header */}
+        <div style={{background:'linear-gradient(135deg,#4338ca,#6366f1)',borderRadius:12,padding:'12px 16px',marginBottom:10,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <div>
+            <div style={{fontWeight:800,color:'#fff',fontSize:14}}>🤖 Assistant IA NAI</div>
+            <div style={{color:'#c7d2fe',fontSize:11}}>Accès complet aux données · Mémoire de conversation</div>
           </div>
-        ))}
-        {loading && (
-          <div style={{display:'flex',justifyContent:'flex-start'}}>
-            <div style={{background:'#fff',borderRadius:'14px 14px 14px 4px',padding:'12px 16px',border:'1px solid #e5e7eb',fontSize:13,color:'#9ca3af'}}>
-              <div style={{display:'flex',gap:4,alignItems:'center'}}>
-                {[0,1,2].map(i=>(
-                  <div key={i} style={{width:8,height:8,borderRadius:'50%',background:'#6366f1',animation:'pulse 1.4s infinite',animationDelay:`${i*0.2}s`}}/>
-                ))}
-                <span style={{marginLeft:6}}>L'IA réfléchit...</span>
+          <div style={{display:'flex',gap:8}}>
+            <button onClick={()=>setShowHistory(!showHistory)}
+              style={{background:'rgba(255,255,255,0.2)',border:'none',color:'#fff',padding:'6px 12px',borderRadius:8,cursor:'pointer',fontSize:11,fontWeight:600}}>
+              📋 {conversations.length}
+            </button>
+            <button onClick={nouvelleConv}
+              style={{background:'rgba(255,255,255,0.2)',border:'none',color:'#fff',padding:'6px 12px',borderRadius:8,cursor:'pointer',fontSize:11}}>
+              ✨ Nouveau
+            </button>
+          </div>
+        </div>
+
+        {/* Actions rapides */}
+        <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8}}>
+          {ACTIONS_RAPIDES.map((a,i)=>(
+            <button key={i} onClick={()=>envoyer(a.label.replace(/^[^\s]+\s/,''), a.endpoint, a.payload)}
+              style={{background:'#f0f4ff',color:'#4338ca',border:'1px solid #c7d2fe',padding:'5px 10px',borderRadius:20,cursor:'pointer',fontSize:11,fontWeight:600,whiteSpace:'nowrap'}}>
+              {a.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Messages */}
+        <div style={{flex:1,overflowY:'auto',background:'#f8f9ff',borderRadius:12,border:'1px solid #e5e7eb',padding:12,display:'flex',flexDirection:'column',gap:10}}>
+          {messages.map((m,i)=>(
+            <div key={i} style={{display:'flex',justifyContent:m.role==='user'?'flex-end':'flex-start'}}>
+              <div style={{
+                maxWidth:'82%',
+                background:m.role==='user'?'#4338ca':'#fff',
+                color:m.role==='user'?'#fff':'#1f2937',
+                borderRadius:m.role==='user'?'14px 14px 4px 14px':'14px 14px 14px 4px',
+                padding:'10px 14px',
+                boxShadow:'0 1px 4px rgba(0,0,0,0.06)',
+                border:m.role==='user'?'none':'1px solid #e5e7eb',
+                fontSize:13, lineHeight:1.6
+              }}>
+                <div dangerouslySetInnerHTML={{__html:formater(m.content)}}/>
               </div>
             </div>
-          </div>
-        )}
-        <div ref={messagesEndRef}/>
-      </div>
+          ))}
+          {loading && (
+            <div style={{display:'flex',justifyContent:'flex-start'}}>
+              <div style={{background:'#fff',borderRadius:'14px 14px 14px 4px',padding:'10px 14px',border:'1px solid #e5e7eb',fontSize:13,color:'#9ca3af',display:'flex',gap:4,alignItems:'center'}}>
+                <span>L'IA analyse vos données</span>
+                {[0,1,2].map(i=>(
+                  <div key={i} style={{width:6,height:6,borderRadius:'50%',background:'#6366f1',opacity:0.6}}/>
+                ))}
+              </div>
+            </div>
+          )}
+          <div ref={messagesEndRef}/>
+        </div>
 
-      {/* Saisie */}
-      <div style={{display:'flex',gap:8,marginTop:10}}>
-        <input
-          value={input}
-          onChange={e=>setInput(e.target.value)}
-          onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&envoyer()}
-          placeholder="Posez votre question sur la production, le stock, le QHSE... (Entrée pour envoyer)"
-          style={{flex:1,border:'2px solid #c7d2fe',borderRadius:10,padding:'12px 16px',fontSize:13,outline:'none'}}
-          disabled={loading}
-        />
-        <button onClick={()=>envoyer()}
-          disabled={loading||!input.trim()}
-          style={{background:loading||!input.trim()?'#d1d5db':'#4338ca',color:'#fff',border:'none',padding:'12px 20px',borderRadius:10,cursor:loading||!input.trim()?'default':'pointer',fontWeight:700,fontSize:13}}>
-          {loading?'⏳':'Envoyer ▶'}
-        </button>
+        {/* Saisie */}
+        <div style={{display:'flex',gap:8,marginTop:8}}>
+          <input value={input} onChange={e=>setInput(e.target.value)}
+            onKeyDown={e=>e.key==='Enter'&&!e.shiftKey&&envoyer()}
+            placeholder="Posez votre question... (Entrée pour envoyer)"
+            style={{flex:1,border:'2px solid #c7d2fe',borderRadius:10,padding:'10px 14px',fontSize:13,outline:'none'}}
+            disabled={loading}/>
+          <button onClick={()=>envoyer()} disabled={loading||!input.trim()}
+            style={{background:loading||!input.trim()?'#d1d5db':'#4338ca',color:'#fff',border:'none',padding:'10px 18px',borderRadius:10,cursor:loading||!input.trim()?'default':'pointer',fontWeight:700,fontSize:13}}>
+            {loading?'⏳':'▶'}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -3317,7 +3342,7 @@ function Utilisateurs() {
     if (i.includes('chef') && i.includes('atelier')) return 'chef_atelier';
     if (i.includes('qhse') || i.includes('qualité')) return 'responsable_qhse';
     if (i.includes('rh') || i.includes('ressources humaines')) return 'responsable_rh';
-    if (i.includes('régleur') || i.includes('regleur')) return 'technicien_regleur';
+    if (i.includes('r\u00e9gleur') || i.includes('regleur')) return 'technicien_regleur';
     if (i.includes('contrôleur') || i.includes('qualit')) return 'controleur_qualite';
     if (i.includes('comptable') || i.includes('finance')) return 'comptable';
     if (i.includes('gmao') || i.includes('maintenance')) return 'technicien_gmao';
@@ -4955,6 +4980,55 @@ export default function ChefAtelier() {
   const hasFinance = () => perms.has_finance || perms.is_super_admin;
 
   const handleLogout = () => { logout(); navigate('/login'); };
+
+
+
+  const MENU_ITEMS = [
+    { id:'separator1',  label:'PRODUCTION',               separator:true },
+    { id:'dashboard',   label:'Tableau de bord',           icon:'home',        color:'#1d4ed8' },
+    { id:'production',  label:'Suivi Production',          icon:'activity',    color:'#059669' },
+    { id:'planning',    label:'Planning Machines',          icon:'calendar',    color:'#7c3aed' },
+    { id:'rapportjour', label:'Rapports Journaliers',       icon:'file-text',   color:'#0891b2' },
+    { id:'separator2',  label:'STOCKS & ARTICLES',          separator:true },
+    { id:'articles',    label:'Articles (Produits)',        icon:'package',     color:'#b45309' },
+    { id:'matieres',    label:'Matières Premières',        icon:'layers',      color:'#92400e' },
+    { id:'stock',       label:'Stock',                     icon:'archive',     color:'#15803d' },
+    { id:'cession',     label:'Bons de Cession',           icon:'shuffle',     color:'#1d4ed8' },
+    { id:'separator3',  label:'VENTE & ACHAT',             separator:true },
+    { id:'clients',     label:'Clients',                   icon:'users',       color:'#dc2626' },
+    { id:'vente',       label:'Ventes',                    icon:'trending-up', color:'#059669' },
+    { id:'fournisseurs',label:'Fournisseurs',              icon:'truck',       color:'#7c3aed' },
+    { id:'achats',      label:'Commandes Achat',           icon:'shopping-cart',color:'#0891b2' },
+    { id:'separator3b', label:'GMAO & MAINTENANCE',        separator:true },
+    { id:'gmao',        label:'GMAO / Maintenance',        icon:'tool',        color:'#059669' },
+    { id:'separator4',  label:'QHSE & MAINTENANCE',        separator:true },
+    { id:'qhse',        label:'QHSE / NC',                 icon:'qhse',        color:'#b45309' },
+    { id:'separator4b', label:'RESSOURCES HUMAINES',       separator:true },
+    { id:'rh',          label:'RH — Employés & Paie',      icon:'users',       color:'#0891b2' },
+    { id:'separator5',  label:'ADMIN & IA',                separator:true },
+    { id:'kpi',         label:'KPI & Rapports',            icon:'bar-chart',   color:'#1d4ed8' },
+    { id:'ia',          label:'Assistant IA',              icon:'cpu',         color:'#7c3aed' },
+    { id:'utilisateurs',label:'Utilisateurs',              icon:'users',       color:'#6d28d9' },
+    { id:'parametres',  label:'⚙ Paramètres Système',     separator:false,    icon:'settings',    color:'#1e1b4b' },
+    { id:'separator6',  label:'RÉFÉRENTIELS',              separator:true },
+    { id:'alertes',     label:'Alertes',                   icon:'bell',        color:'#dc2626' },
+    { id:'referentiels',label:'Référentiels',              icon:'database',    color:'#374151' },
+    { id:'import',      label:'Import Sage',               icon:'upload',      color:'#6b7280' },
+  ].filter(item => {
+    if (item.separator) return true;
+    if (perms.is_super_admin) return true;
+    const moduleMap = {
+      dashboard:'dashboard', production:'production', planning:'planning',
+      rapportjour:'production', articles:'articles', matieres:'stock',
+      stock:'stock', cession:'bons_cession', clients:'vente',
+      vente:'vente', fournisseurs:'achat', achats:'achat',
+      qhse:'qhse', gmao:'gmao', rh:'rh', kpi:'kpi', ia:'ia',
+      utilisateurs:'utilisateurs', parametres:'parametres',
+    };
+    const mod = moduleMap[item.id];
+    if (!mod) return true;
+    return !perms.permissions || perms.permissions[mod]?.voir !== false;
+  });
 
   const SECTIONS = {
     dashboard:   <Dashboard />,

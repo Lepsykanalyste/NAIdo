@@ -6,8 +6,6 @@ from contextlib import asynccontextmanager
 from typing import Optional, List, Any
 from pydantic import BaseModel
 import uvicorn
-from pathlib import Path
-from datetime import datetime, date
 
 # ── CONFIG ─────────────────────────────────────────────────────
 DB_URL = os.getenv("DATABASE_URL", "postgresql://naido_user:naido_pass_2026@naido_postgres:5436/naido_db")
@@ -115,7 +113,7 @@ class LoginRequest(BaseModel):
 async def login(req: LoginRequest):
     async with pool.acquire() as conn:
         user = await conn.fetchrow(
-            "SELECT u.* FROM utilisateurs u WHERE u.login=$1 AND u.actif=true",
+            "SELECT u.*, r.nom as role FROM utilisateurs u LEFT JOIN roles r ON r.id=u.role_id WHERE u.login=$1 AND u.actif=true",
             req.login
         )
         if not user:
@@ -1689,33 +1687,118 @@ Date du jour : {datetime.utcnow().strftime('%d/%m/%Y')}"""
 
 @app.post("/api/ia/chat")
 async def ia_chat(payload: dict, user=Depends(get_current_user)):
-    """Chat IA principal avec contexte NAI"""
+    """Chat IA principal avec contexte NAI complet + mémoire conversation"""
     prompt = payload.get("message", "")
+    historique = payload.get("historique", [])  # Messages précédents
     if not prompt:
         raise HTTPException(400, "Message requis")
     
-    # Enrichir avec données contextuelles si demandé
-    contexte_additionnel = ""
-    if payload.get("avec_contexte_production"):
+    # Collecter TOUTES les données de l'application
+    contexte_complet = ""
+    try:
         async with pool.acquire() as conn:
-            stats = await conn.fetchrow("""
+            # Production
+            prod = await conn.fetchrow("""
                 SELECT
-                    (SELECT COUNT(*) FROM ordres_fabrication WHERE statut='en_cours') AS of_actifs,
-                    (SELECT COUNT(*) FROM machines WHERE statut='en_panne') AS pannes,
-                    (SELECT COUNT(*) FROM non_conformites WHERE statut NOT IN ('clos','annule')) AS nc_ouvertes
+                    (SELECT COUNT(*) FROM sessions_production WHERE DATE(date_debut)=CURRENT_DATE) AS sessions_jour,
+                    (SELECT COALESCE(SUM(quantite_conforme),0) FROM sessions_production WHERE DATE(date_debut)=CURRENT_DATE) AS prod_jour,
+                    (SELECT COALESCE(SUM(poids_dechets_kg),0) FROM sessions_production WHERE DATE(date_debut)=CURRENT_DATE) AS dechets_jour
             """)
-            if stats:
-                contexte_additionnel = f"""
-Données temps réel :
-- {stats['of_actifs']} ordres de fabrication en cours
-- {stats['pannes']} machines en panne
-- {stats['nc_ouvertes']} non-conformités ouvertes"""
+            # Stock
+            stock = await conn.fetchrow("""
+                SELECT 
+                    COUNT(*) AS nb_articles,
+                    COALESCE(SUM(sa.qte_disponible),0) AS stock_total,
+                    (SELECT COUNT(*) FROM articles a2 LEFT JOIN stock_articles sa2 ON sa2.article_id=a2.id 
+                     WHERE COALESCE(sa2.qte_disponible,0) <= COALESCE(a2.stock_mini,0) AND a2.actif=true) AS alertes_stock
+                FROM articles a LEFT JOIN stock_articles sa ON sa.article_id=a.id WHERE a.actif=true
+            """)
+            # GMAO
+            gmao = await conn.fetchrow("""
+                SELECT
+                    (SELECT COUNT(*) FROM equipements WHERE actif=true) AS nb_equipements,
+                    (SELECT COUNT(*) FROM equipements WHERE statut='en_panne' AND actif=true) AS en_panne,
+                    (SELECT COUNT(*) FROM equipements WHERE statut='operationnel' AND actif=true) AS operationnels,
+                    (SELECT COUNT(*) FROM ordres_travail WHERE statut NOT IN ('termine','annule')) AS ot_ouverts
+            """)
+            # QHSE
+            qhse = await conn.fetchrow("""
+                SELECT
+                    (SELECT COUNT(*) FROM non_conformites WHERE statut NOT IN ('clos','annule')) AS nc_ouvertes,
+                    (SELECT COUNT(*) FROM non_conformites WHERE DATE(created_at)=CURRENT_DATE) AS nc_jour,
+                    (SELECT COUNT(*) FROM risques_opportunites WHERE type='risque') AS nb_risques,
+                    (SELECT COUNT(*) FROM documents_qhse WHERE actif=true) AS nb_documents
+            """)
+            # RH
+            rh = await conn.fetchrow("""
+                SELECT
+                    (SELECT COUNT(*) FROM employes WHERE actif=true AND statut='actif') AS effectif,
+                    (SELECT COUNT(*) FROM conges WHERE statut='en_attente') AS conges_attente
+            """)
+            # Énergie du mois
+            energie = await conn.fetchrow("""
+                SELECT COALESCE(SUM(consommation_kwh),0) AS kwh_mois
+                FROM releves_energie 
+                WHERE DATE_TRUNC('month',date_releve)=DATE_TRUNC('month',CURRENT_DATE)
+            """)
+            
+            contexte_complet = f"""
+=== DONNÉES TEMPS RÉEL NAI ===
+Date: {datetime.utcnow().strftime('%d/%m/%Y %H:%M')} UTC
+
+PRODUCTION (aujourd'hui):
+- Sessions actives: {prod['sessions_jour'] or 0}
+- Production conforme: {float(prod['prod_jour'] or 0):.0f} unités
+- Déchets: {float(prod['dechets_jour'] or 0):.1f} kg
+
+STOCK:
+- Articles actifs: {stock['nb_articles'] or 0}
+- Alertes rupture: {stock['alertes_stock'] or 0}
+
+GMAO - ÉQUIPEMENTS AT3:
+- Total équipements: {gmao['nb_equipements'] or 0}
+- En service: {gmao['operationnels'] or 0}
+- En panne: {gmao['en_panne'] or 0}
+- Ordres de travail ouverts: {gmao['ot_ouverts'] or 0}
+
+QHSE:
+- Non-conformités ouvertes: {qhse['nc_ouvertes'] or 0}
+- NC créées aujourd'hui: {qhse['nc_jour'] or 0}
+- Risques identifiés: {qhse['nb_risques'] or 0}
+- Documents GED: {qhse['nb_documents'] or 0}
+
+RH:
+- Effectif actif: {rh['effectif'] or 0} employés
+- Congés en attente: {rh['conges_attente'] or 0}
+
+ÉNERGIE (mois en cours):
+- Consommation: {float(energie['kwh_mois'] or 0):.1f} kWh
+=== FIN DONNÉES ==="""
+    except Exception as e:
+        contexte_complet = f"(Données temps réel indisponibles: {str(e)[:50]})"
     
-    result = await appel_ia(pool, prompt, contexte_additionnel)
+    # Intégrer l'historique de conversation pour la mémoire
+    contexte_historique = ""
+    if historique:
+        derniers = historique[-6:]  # 6 derniers messages max
+        contexte_historique = "
+=== HISTORIQUE CONVERSATION ===
+"
+        for msg in derniers:
+            role = "Utilisateur" if msg.get("role") == "user" else "Assistant"
+            contexte_historique += f"{role}: {msg.get('content','')[:200]}
+"
+        contexte_historique += "=== FIN HISTORIQUE ===
+"
     
-    # Logger l'utilisation IA
-    await log_action(pool, user.get("id"), "ia_chat", "ia", details={"provider": result.get("provider")})
+    result = await appel_ia(pool, prompt, contexte_complet + contexte_historique)
     
+    # Masquer le provider technique
+    if "reponse" in result:
+        result.pop("provider", None)
+        result.pop("modele", None)
+    
+    await log_action(pool, user.get("id"), "ia_chat", "ia")
     return result
 
 @app.post("/api/ia/analyser-nc")
@@ -1799,7 +1882,7 @@ async def ia_rapport_journalier(user=Depends(get_current_user)):
                 (SELECT COUNT(*) FROM sessions_production WHERE DATE(date_debut)=CURRENT_DATE) AS sessions,
                 (SELECT COALESCE(SUM(quantite_conforme),0) FROM sessions_production WHERE DATE(date_debut)=CURRENT_DATE) AS prod_conforme,
                 (SELECT COALESCE(SUM(poids_dechets_kg),0) FROM sessions_production WHERE DATE(date_debut)=CURRENT_DATE) AS dechets,
-                (SELECT COUNT(*) FROM machines WHERE statut='en_panne') AS pannes,
+                (SELECT COUNT(*) FROM equipements WHERE statut='en_panne' AND actif=true) AS pannes,
                 (SELECT COUNT(*) FROM non_conformites WHERE DATE(created_at)=CURRENT_DATE) AS nc_jour,
                 (SELECT COUNT(*) FROM ordres_travail WHERE DATE(created_at)=CURRENT_DATE) AS ot_jour
         """)
