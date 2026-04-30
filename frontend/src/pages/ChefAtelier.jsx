@@ -123,9 +123,9 @@ const MENU = [
   { id:'kpi',         label:'KPI & Rapports',      icon:'kpi',         color:'#be185d' },
   { id:'ia',          label:'Assistant IA',        icon:'ia',          color:'#1e40af' },
   { id:'users',       label:'Utilisateurs',        icon:'users',       color:'#374151' },
-  { id:'import',      label:'Import Sage',         icon:'import',      color:'#15803d' },
   { id:'alertes',     label:'Alertes',             icon:'alertes',     color:'#dc2626' },
   { id:'parametres',  label:'⚙ Paramètres',  icon:'settings',    color:'#1e1b4b' },
+  { id:'parametres', label:'⚙ Paramètres', icon:'settings', color:'#1e1b4b' },
   { id:'referentiels',label:'Référentiels',        icon:'articles',    color:'#6b7280' },
 ];
 
@@ -5017,7 +5017,6 @@ export default function ChefAtelier() {
     { id:'alertes',     label:'Alertes',                   icon:'bell',        color:'#dc2626' },
     { id:'parametres',  label:'⚙ Paramètres',  icon:'settings',    color:'#1e1b4b' },
   { id:'referentiels',label:'Référentiels',              icon:'database',    color:'#374151' },
-    { id:'import',      label:'Import Sage',               icon:'upload',      color:'#6b7280' },
   ].filter(item => {
     if (item.separator) return true;
     if (perms.is_super_admin) return true;
