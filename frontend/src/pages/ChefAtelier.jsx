@@ -672,6 +672,9 @@ function RapportsJournaliers() {
 }
 
 function Articles() {
+  const perms = usePerms();
+  const { user } = useAuth();
+  const hasFinance = () => perms.has_finance || perms.is_super_admin || user?.role === 'super_admin';
   const [articles, setArticles] = useState([]);
   const [familles, setFamilles] = useState([]);
   const [unites, setUnites] = useState([]);
@@ -3928,6 +3931,9 @@ function Referentiels() {
 }
 
 function KPIRapports() {
+  const perms = usePerms();
+  const { user } = useAuth();
+  const hasFinance = () => perms.has_finance || perms.is_super_admin || user?.role === 'super_admin';
   const [trs, setTrs] = useState([]);
   const [rapports, setRapports] = useState([]);
   const [generating, setGenerating] = useState(false);
@@ -4017,6 +4023,9 @@ function KPIRapports() {
 }
 
 function Stock() {
+  const perms = usePerms();
+  const { user } = useAuth();
+  const hasFinance = () => perms.has_finance || perms.is_super_admin || user?.role === 'super_admin';
   const [onglet, setOnglet] = useState('inventaire');
   const [inventaire, setInventaire] = useState([]);
   const [resume, setResume] = useState({});
@@ -5336,6 +5345,9 @@ function Fournisseurs() {
 // MODULE VENTE — inspiré de Leinad Sale
 // ══════════════════════════════════════════════════════════════
 function Vente() {
+  const perms = usePerms();
+  const { user } = useAuth();
+  const hasFinance = () => perms.has_finance || perms.is_super_admin || user?.role === 'super_admin';
   const [onglet, setOnglet] = useState('liste');
   const [ventes, setVentes] = useState([]);
   const [clients, setClients] = useState([]);
@@ -5551,6 +5563,9 @@ function Vente() {
 // MODULE ACHAT — inspiré de Leinad PurchaseOrder
 // ══════════════════════════════════════════════════════════════
 function Achat() {
+  const perms = usePerms();
+  const { user } = useAuth();
+  const hasFinance = () => perms.has_finance || perms.is_super_admin || user?.role === 'super_admin';
   const [commandes, setCommandes] = useState([]);
   const [fournisseurs, setFournisseurs] = useState([]);
   const [articles, setArticles] = useState([]);
@@ -5727,6 +5742,9 @@ function Achat() {
 // MODULE RH
 // ══════════════════════════════════════════════════════════════
 function RH() {
+  const perms = usePerms();
+  const { user } = useAuth();
+  const hasFinance = () => perms.has_finance || perms.is_super_admin || user?.role === 'super_admin';
   const [onglet, setOnglet] = useState('dashboard');
   const [dashboard, setDashboard] = useState({});
   const [employes, setEmployes] = useState([]);
@@ -6290,6 +6308,9 @@ function RH() {
 // MODULE GMAO
 // ══════════════════════════════════════════════════════════════
 function GMAO() {
+  const perms = usePerms();
+  const { user } = useAuth();
+  const hasFinance = () => perms.has_finance || perms.is_super_admin || user?.role === 'super_admin';
   const [onglet, setOnglet] = useState('dashboard');
   const [dashboard, setDashboard] = useState({});
   const [equipements, setEquipements] = useState([]);
