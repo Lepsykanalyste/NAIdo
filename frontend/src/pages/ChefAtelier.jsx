@@ -4916,15 +4916,10 @@ export default function ChefAtelier() {
       try {
         const {data} = await axios.get(`${API}/permissions/moi`);
         setPerms(data);
-        setPermsLoaded(true);
-        // Rediriger si pas accès au module actuel
-        if (data.permissions && !data.is_super_admin) {
-          const allowed = Object.keys(data.permissions).filter(k=>data.permissions[k]?.voir);
-          if (!allowed.includes(ongletActif) && !allowed.includes('*')) {
-            setOngletActif(allowed[0] || 'dashboard');
-          }
-        }
       } catch {}
+      finally {
+        setPermsLoaded(true);
+      }
     };
     chargerAlertes();
     chargerPerms();
