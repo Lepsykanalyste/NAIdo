@@ -166,7 +166,6 @@ function OrdresFabrication() {
         axios.get(`${API}/vente/clients`).catch(()=>({data:[]})),
         axios.get(`${API}/machines`),
         axios.get(`${API}/ateliers`),
-      axios.get(`${API}/machines`),
       ]);
       setOfs(o.data||[]); setArticles(a.data||[]);
       setClients(c.data||[]); setMachines(m.data||[]);
