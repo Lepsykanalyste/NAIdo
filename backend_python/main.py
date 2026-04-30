@@ -1700,9 +1700,9 @@ async def ia_chat(payload: dict, user=Depends(get_current_user)):
             # Production
             prod = await conn.fetchrow("""
                 SELECT
-                    (SELECT COUNT(*) FROM sessions_production WHERE DATE(date_debut)=CURRENT_DATE) AS sessions_jour,
-                    (SELECT COALESCE(SUM(quantite_conforme),0) FROM sessions_production WHERE DATE(date_debut)=CURRENT_DATE) AS prod_jour,
-                    (SELECT COALESCE(SUM(poids_dechets_kg),0) FROM sessions_production WHERE DATE(date_debut)=CURRENT_DATE) AS dechets_jour
+                    (SELECT COUNT(*) FROM sessions_production WHERE DATE(date_session)=CURRENT_DATE) AS sessions_jour,
+                    (SELECT COALESCE(SUM(poids_net_kg),0) FROM tickets_production WHERE DATE(created_at)=CURRENT_DATE) AS prod_jour,
+                    (SELECT COALESCE(SUM(poids_dechets_kg),0) FROM tickets_production WHERE DATE(created_at)=CURRENT_DATE) AS dechets_jour
             """)
             # Stock
             stock = await conn.fetchrow("""
@@ -1879,9 +1879,9 @@ async def ia_rapport_journalier(user=Depends(get_current_user)):
     async with pool.acquire() as conn:
         stats = await conn.fetchrow("""
             SELECT
-                (SELECT COUNT(*) FROM sessions_production WHERE DATE(date_debut)=CURRENT_DATE) AS sessions,
-                (SELECT COALESCE(SUM(quantite_conforme),0) FROM sessions_production WHERE DATE(date_debut)=CURRENT_DATE) AS prod_conforme,
-                (SELECT COALESCE(SUM(poids_dechets_kg),0) FROM sessions_production WHERE DATE(date_debut)=CURRENT_DATE) AS dechets,
+                (SELECT COUNT(*) FROM sessions_production WHERE DATE(date_session)=CURRENT_DATE) AS sessions,
+                (SELECT COALESCE(SUM(poids_net_kg),0) FROM tickets_production WHERE DATE(created_at)=CURRENT_DATE) AS prod_conforme,
+                (SELECT COALESCE(SUM(poids_dechets_kg),0) FROM tickets_production WHERE DATE(created_at)=CURRENT_DATE) AS dechets,
                 (SELECT COUNT(*) FROM equipements WHERE statut='en_panne' AND actif=true) AS pannes,
                 (SELECT COUNT(*) FROM non_conformites WHERE DATE(created_at)=CURRENT_DATE) AS nc_jour,
                 (SELECT COUNT(*) FROM ordres_travail WHERE DATE(created_at)=CURRENT_DATE) AS ot_jour

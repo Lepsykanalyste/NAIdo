@@ -124,8 +124,8 @@ const MENU = [
   { id:'ia',          label:'Assistant IA',        icon:'ia',          color:'#1e40af' },
   { id:'users',       label:'Utilisateurs',        icon:'users',       color:'#374151' },
   { id:'alertes',     label:'Alertes',             icon:'alertes',     color:'#dc2626' },
-  { id:'parametres',  label:'⚙ Paramètres',  icon:'settings',    color:'#1e1b4b' },
-  { id:'parametres', label:'⚙ Paramètres', icon:'settings', color:'#1e1b4b' },
+
+
   { id:'parametres',  label:'⚙ Paramètres', icon:'settings', color:'#1e1b4b' },
   { id:'referentiels',label:'Référentiels',        icon:'articles',    color:'#6b7280' },
 ];
