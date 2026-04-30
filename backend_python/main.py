@@ -1721,6 +1721,165 @@ async def get_acces_utilisateur(user_id: str, user=Depends(get_current_user)):
         role = row["role"]
         return {"role": role, "permissions": ROLES_PERMISSIONS.get(role,{})}
 
+
+# ══════════════════════════════════════════════════════════════
+# SÉCURITÉ & PERMISSIONS v3.2
+# ══════════════════════════════════════════════════════════════
+
+FINANCE_ROLES = {"super_admin", "directeur", "comptable"}
+
+def has_finance_access(user: dict) -> bool:
+    return user.get("role") in FINANCE_ROLES
+
+def is_super_admin(user: dict) -> bool:
+    return user.get("role") == "super_admin"
+
+def filter_finance(data: dict, user: dict) -> dict:
+    """Masque les champs financiers selon le rôle"""
+    if has_finance_access(user):
+        return data
+    finance_fields = {
+        "prix_achat","prix_vente","valeur_totale","valeur_stock",
+        "salaire_base","salaire_brut","salaire_net","cout_total",
+        "cout_fcfa","cout_maintenance_annee","masse_salariale_mois",
+        "valeur_acquisition","valeur_actuelle","cout_nc","cout_panne",
+        "montant_ht","montant_ttc","montant_tva","cout_ht","cout_ttc"
+    }
+    return {k: ("***" if k in finance_fields and v not in (None, 0, "0") else v)
+            for k,v in data.items()}
+
+# ── PERMISSIONS ───────────────────────────────────────────────
+@app.get("/api/permissions/moi")
+async def mes_permissions(user=Depends(get_current_user)):
+    """Retourne les permissions de l'utilisateur connecté"""
+    role = user.get("role", "operateur")
+    async with pool.acquire() as conn:
+        # Récupérer permissions depuis la table
+        rows = await conn.fetch(
+            "SELECT * FROM permissions_roles WHERE role=$1 OR role='*'",
+            role
+        )
+        perms = {}
+        for r in rows:
+            perms[r["module"]] = {
+                "voir": r["peut_voir"],
+                "creer": r["peut_creer"],
+                "modifier": r["peut_modifier"],
+                "supprimer": r["peut_supprimer"],
+                "finance": r["voir_finance"],
+            }
+    return {
+        "role": role,
+        "is_super_admin": is_super_admin(user),
+        "has_finance": has_finance_access(user),
+        "permissions": perms,
+        "utilisateur": {
+            "id": user.get("id"),
+            "login": user.get("login"),
+            "nom": user.get("nom"),
+            "prenom": user.get("prenom"),
+            "atelier_id": user.get("atelier_id"),
+        }
+    }
+
+@app.get("/api/permissions/roles")
+async def get_permissions_roles(user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("SELECT * FROM permissions_roles ORDER BY role, module")
+        return [dict(r) for r in rows]
+
+@app.put("/api/permissions/roles/{role}/{module}")
+async def update_permission(role: str, module: str, payload: dict, user=Depends(get_current_user)):
+    if not is_super_admin(user):
+        raise HTTPException(403, "Réservé au super administrateur")
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("""
+            INSERT INTO permissions_roles (role, module, peut_voir, peut_creer, peut_modifier, peut_supprimer, voir_finance)
+            VALUES ($1,$2,$3,$4,$5,$6,$7)
+            ON CONFLICT (role, module) DO UPDATE SET
+                peut_voir=$3, peut_creer=$4, peut_modifier=$5,
+                peut_supprimer=$6, voir_finance=$7
+            RETURNING *
+        """,
+            role, module,
+            bool(payload.get("peut_voir", True)),
+            bool(payload.get("peut_creer", False)),
+            bool(payload.get("peut_modifier", False)),
+            bool(payload.get("peut_supprimer", False)),
+            bool(payload.get("voir_finance", False))
+        )
+        return dict(row)
+
+# ── PARAMÈTRES SYSTÈME ────────────────────────────────────────
+@app.get("/api/parametres")
+async def get_parametres(user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("SELECT * FROM parametres_systeme ORDER BY cle")
+        result = []
+        for r in rows:
+            d = dict(r)
+            # Filtrer selon droits
+            if d["modifiable_par"] == "super_admin" and not is_super_admin(user):
+                d["valeur"] = "***"  # Masqué
+            result.append(d)
+        return result
+
+@app.put("/api/parametres/{cle}")
+async def update_parametre(cle: str, payload: dict, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        param = await conn.fetchrow("SELECT * FROM parametres_systeme WHERE cle=$1", cle)
+        if not param:
+            raise HTTPException(404, "Paramètre introuvable")
+        # Vérifier droits
+        role_requis = param["modifiable_par"]
+        role_user = user.get("role")
+        if role_requis == "super_admin" and not is_super_admin(user):
+            raise HTTPException(403, "Réservé au super administrateur")
+        if role_requis not in ("super_admin",) and role_user not in (role_requis, "super_admin", "directeur"):
+            raise HTTPException(403, f"Rôle {role_requis} requis")
+        row = await conn.fetchrow(
+            "UPDATE parametres_systeme SET valeur=$1, updated_at=NOW() WHERE cle=$2 RETURNING *",
+            str(payload["valeur"]), cle
+        )
+        return dict(row)
+
+@app.get("/api/parametres/{cle}")
+async def get_parametre(cle: str, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT * FROM parametres_systeme WHERE cle=$1", cle)
+        if not row: raise HTTPException(404)
+        return dict(row)
+
+# ── LOGS D'ACTIVITÉ ───────────────────────────────────────────
+@app.get("/api/logs")
+async def get_logs(module: Optional[str]=None, limit: int=100, user=Depends(get_current_user)):
+    if not is_super_admin(user) and user.get("role") != "directeur":
+        raise HTTPException(403, "Accès restreint")
+    async with pool.acquire() as conn:
+        q = """
+            SELECT l.*, u.login, u.nom, u.prenom
+            FROM logs_activite l
+            LEFT JOIN utilisateurs u ON u.id=l.utilisateur_id
+            WHERE 1=1
+        """
+        params = []
+        if module:
+            params.append(module); q += f" AND l.module=${len(params)}"
+        q += f" ORDER BY l.created_at DESC LIMIT {limit}"
+        rows = await conn.fetch(q, *params)
+        return [dict(r) for r in rows]
+
+async def log_action(pool, user_id: str, action: str, module: str, ressource_id: str=None, details: dict=None):
+    """Enregistre une action dans les logs"""
+    try:
+        async with pool.acquire() as conn:
+            await conn.execute("""
+                INSERT INTO logs_activite (utilisateur_id, action, module, ressource_id, details)
+                VALUES ($1,$2,$3,$4,$5)
+            """, user_id, action, module, ressource_id, json.dumps(details or {}))
+    except:
+        pass  # Les logs ne doivent jamais faire planter l'app
+
 # ── HEALTH CHECK ───────────────────────────────────────────────
 @app.get("/api/health")
 async def health():

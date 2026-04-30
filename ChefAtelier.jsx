@@ -1,3 +1,22 @@
+
+  // Filtrer le menu selon les permissions
+  const MENU_ITEMS = MENU_ITEMS_ALL.filter(item => {
+    if (item.separator) return true;
+    if (perms.is_super_admin) return true;
+    // Map id menu → module
+    const moduleMap = {
+      dashboard:'dashboard', production:'production', planning:'planning',
+      rapportjour:'production', articles:'articles', matieres:'stock',
+      stock:'stock', bons_cession:'bons_cession', clients:'vente',
+      vente:'vente', fournisseurs:'achat', achats:'achat',
+      qhse:'qhse', gmao:'gmao', rh:'rh', kpi:'kpi', ia:'ia',
+      utilisateurs:'utilisateurs', parametres:'parametres',
+    };
+    const mod = moduleMap[item.id];
+    if (!mod) return true;
+    return canAccess(mod);
+  });
+
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useAuth } from '../hooks/useAuth.jsx';
@@ -3921,7 +3940,7 @@ function Stock() {
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))', gap:12, marginBottom:20 }}>
         {[
           { label:'Articles en stock', value: resume.nb_articles || inventaire.length, color:'#1d4ed8', bg:'#dbeafe', icon:'📦' },
-          { label:'Valeur totale', value: `${parseFloat(resume.valeur_totale||0).toLocaleString('fr-FR')} FCFA`, color:'#15803d', bg:'#dcfce7', icon:'💰' },
+          { label:'Valeur totale', value: hasFinance() ? `${parseFloat(resume.valeur_totale||0).toLocaleString('fr-FR')} FCFA` : '••••', color:'#15803d', bg:'#dcfce7', icon:'💰' },
           { label:'Alertes stock bas', value: resume.nb_alertes || alertesBas, color: (resume.nb_alertes||alertesBas)>0?'#dc2626':'#15803d', bg: (resume.nb_alertes||alertesBas)>0?'#fee2e2':'#dcfce7', icon:'⚠' },
           { label:'Lots actifs', value: resume.nb_lots_actifs || lots.filter(l=>l.statut==='disponible').length, color:'#15803d', bg:'#dcfce7', icon:'🏷' },
           { label:'Lots expirés', value: resume.nb_lots_expires || lotsExpires, color: (resume.nb_lots_expires||lotsExpires)>0?'#dc2626':'#15803d', bg: (resume.nb_lots_expires||lotsExpires)>0?'#fee2e2':'#dcfce7', icon:'⏰' },
@@ -4121,7 +4140,9 @@ function Stock() {
                   <td style={{ padding:'9px 14px', fontWeight:800, fontSize:15, color: parseFloat(a.qte_disponible||0) === 0 ? '#dc2626' : '#15803d' }}>
                     {parseFloat(a.qte_disponible||0).toFixed(3)}
                   </td>
-                  <td style={{ padding:'9px 14px', fontWeight:600 }}>{parseFloat(a.valeur_stock||0).toLocaleString('fr-FR')} FCFA</td>
+                  <td style={{ padding:'9px 14px', fontWeight:600 }}>
+                    {hasFinance() ? `${parseFloat(a.valeur_stock||0).toLocaleString('fr-FR')} FCFA` : <span style={{color:'#d1d5db'}}>••••</span>}
+                  </td>
                   <td style={{ padding:'9px 14px', textAlign:'center' }}>
                     {a.alerte_stock_bas && <span style={{ color:'#d97706', fontWeight:700 }}>⚠</span>}
                   </td>
@@ -4410,21 +4431,316 @@ function Alertes() {
 // COMPOSANT PRINCIPAL — CHEF ATELIER
 // ══════════════════════════════════════════════════════════════
 
+// ══════════════════════════════════════════════════════════════
+// PAGE PARAMÈTRES SYSTÈME (Super Admin)
+// ══════════════════════════════════════════════════════════════
+function ParametresSysteme() {
+  const perms = usePerms();
+  const [params, setParams] = useState([]);
+  const [permRoles, setPermRoles] = useState([]);
+  const [onglet, setOnglet] = useState('systeme');
+  const [editing, setEditing] = useState({});
+  const [logs, setLogs] = useState([]);
+
+  const MODULES = ['dashboard','production','planning','stock','articles','bons_cession',
+    'vente','achat','qhse','gmao','rh','kpi','ia','utilisateurs','parametres'];
+  const ROLES = ['directeur','chef_atelier','responsable_qhse','responsable_rh',
+    'technicien_regleur','operateur','controleur_qualite','comptable',
+    'responsable_stock','commercial','technicien_gmao','emballeur'];
+  const ROLE_LABELS = {
+    directeur:'Directeur', chef_atelier:'Chef Atelier', responsable_qhse:'Resp. QHSE',
+    responsable_rh:'Resp. RH', technicien_regleur:'Tech. Régleur', operateur:'Opérateur',
+    controleur_qualite:'Ctrl. Qualité', comptable:'Comptable',
+    responsable_stock:'Resp. Stock', commercial:'Commercial',
+    technicien_gmao:'Tech. GMAO', emballeur:'Emballeur',
+  };
+
+  const charger = async () => {
+    try {
+      const [p, pr] = await Promise.all([
+        axios.get(`${API}/parametres`),
+        axios.get(`${API}/permissions/roles`),
+      ]);
+      setParams(p.data);
+      setPermRoles(pr.data);
+    } catch(e) { toast.error('Erreur chargement'); }
+  };
+
+  const chargerLogs = async () => {
+    try { const {data}=await axios.get(`${API}/logs?limit=50`); setLogs(data); } catch {}
+  };
+
+  useEffect(() => { charger(); }, []);
+  useEffect(() => { if (onglet==='logs') chargerLogs(); }, [onglet]);
+
+  const sauverParam = async (cle, valeur) => {
+    try {
+      await axios.put(`${API}/parametres/${cle}`, {valeur});
+      toast.success('Paramètre sauvegardé ✓');
+      setEditing(prev => ({...prev, [cle]:false}));
+      charger();
+    } catch(e) { toast.error(e.response?.data?.detail || 'Erreur'); }
+  };
+
+  const togglePerm = async (role, module, field, currentVal) => {
+    const perm = permRoles.find(p=>p.role===role&&p.module===module) || {
+      role, module, peut_voir:false, peut_creer:false, peut_modifier:false, peut_supprimer:false, voir_finance:false
+    };
+    const updated = {...perm, [field]: !currentVal};
+    try {
+      await axios.put(`${API}/permissions/roles/${role}/${module}`, updated);
+      charger();
+    } catch { toast.error('Erreur'); }
+  };
+
+  const getPerm = (role, module, field) => {
+    const p = permRoles.find(r=>r.role===role&&r.module===module);
+    return p?.[field] || false;
+  };
+
+  if (!perms.is_super_admin) {
+    return (
+      <div style={{textAlign:'center',padding:80}}>
+        <div style={{fontSize:60,marginBottom:16}}>🔒</div>
+        <h2 style={{color:'#dc2626'}}>Accès Restreint</h2>
+        <p style={{color:'#6b7280'}}>Cette page est réservée au Super Administrateur Sophopsy</p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{background:'linear-gradient(135deg,#1e1b4b,#312e81)',borderRadius:14,padding:'20px 24px',marginBottom:20,display:'flex',gap:16,alignItems:'center'}}>
+        <span style={{fontSize:32}}>⚙</span>
+        <div>
+          <div style={{fontWeight:800,color:'#fff',fontSize:18}}>Paramètres Système NAIdo</div>
+          <div style={{color:'#a5b4fc',fontSize:13}}>Configuration réservée à Sophopsy — Super Administrateur</div>
+        </div>
+      </div>
+
+      {/* Onglets */}
+      <div style={{display:'flex',gap:0,marginBottom:20,borderBottom:'2px solid #e5e7eb',overflowX:'auto'}}>
+        {[
+          {id:'systeme',label:'⚙ Paramètres système'},
+          {id:'permissions',label:'🔐 Permissions par rôle'},
+          {id:'ia',label:'🤖 IA & Assistant'},
+          {id:'logs',label:'📋 Logs activité'},
+        ].map(o=>(
+          <button key={o.id} onClick={()=>setOnglet(o.id)} style={{
+            padding:'10px 18px',border:'none',background:'none',cursor:'pointer',
+            fontSize:12,whiteSpace:'nowrap',fontWeight:onglet===o.id?700:400,
+            color:onglet===o.id?'#4338ca':'#6b7280',
+            borderBottom:onglet===o.id?'3px solid #4338ca':'3px solid transparent',
+          }}>{o.label}</button>
+        ))}
+      </div>
+
+      {/* ══ PARAMÈTRES SYSTÈME ══ */}
+      {onglet==='systeme' && (
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(350px,1fr))',gap:12}}>
+          {params.map(p=>(
+            <div key={p.cle} style={{background:'#fff',borderRadius:10,border:'1px solid #e5e7eb',padding:16}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
+                <div>
+                  <div style={{fontWeight:700,fontSize:13,color:'#1e1b4b'}}>{p.cle.replace(/_/g,' ')}</div>
+                  <div style={{fontSize:11,color:'#9ca3af',marginTop:2}}>{p.description}</div>
+                </div>
+                <span style={{background:'#f0f0ff',color:'#4338ca',padding:'2px 6px',borderRadius:20,fontSize:10,fontWeight:700}}>{p.type_valeur}</span>
+              </div>
+              {editing[p.cle] ? (
+                <div style={{display:'flex',gap:8}}>
+                  <input defaultValue={p.valeur}
+                    id={`param-${p.cle}`}
+                    style={{flex:1,border:'2px solid #818cf8',borderRadius:6,padding:'7px',fontSize:13}}/>
+                  <button onClick={()=>sauverParam(p.cle, document.getElementById(`param-${p.cle}`).value)}
+                    style={{background:'#4338ca',color:'#fff',border:'none',padding:'7px 14px',borderRadius:6,cursor:'pointer',fontWeight:700}}>✓</button>
+                  <button onClick={()=>setEditing(prev=>({...prev,[p.cle]:false}))}
+                    style={{background:'#f3f4f6',border:'none',padding:'7px 10px',borderRadius:6,cursor:'pointer'}}>✕</button>
+                </div>
+              ) : (
+                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <span style={{fontFamily:'monospace',fontSize:14,fontWeight:700,color:'#1e1b4b'}}>
+                    {p.valeur==='***'?'•••••':p.valeur}
+                  </span>
+                  <button onClick={()=>setEditing(prev=>({...prev,[p.cle]:true}))}
+                    style={{background:'#f0f0ff',color:'#4338ca',border:'none',padding:'4px 10px',borderRadius:6,cursor:'pointer',fontSize:11,fontWeight:600}}>✏ Modifier</button>
+                </div>
+              )}
+              <div style={{fontSize:10,color:'#d1d5db',marginTop:6}}>Modifiable par : {p.modifiable_par}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ══ PERMISSIONS PAR RÔLE ══ */}
+      {onglet==='permissions' && (
+        <div style={{overflow:'auto'}}>
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:11,minWidth:900}}>
+            <thead>
+              <tr style={{background:'#1e1b4b'}}>
+                <th style={{padding:'10px 12px',textAlign:'left',color:'#fff',fontWeight:700,position:'sticky',left:0,background:'#1e1b4b',zIndex:10}}>Module</th>
+                {ROLES.map(r=>(
+                  <th key={r} style={{padding:'8px 6px',color:'#a5b4fc',fontWeight:600,textAlign:'center',whiteSpace:'nowrap',fontSize:10}}>
+                    {ROLE_LABELS[r]||r}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {MODULES.map((mod,mi)=>(
+                <tr key={mod} style={{background:mi%2===0?'#fff':'#f8f9ff'}}>
+                  <td style={{padding:'8px 12px',fontWeight:700,color:'#1e1b4b',position:'sticky',left:0,background:mi%2===0?'#fff':'#f8f9ff',borderRight:'2px solid #e5e7eb'}}>
+                    {mod}
+                  </td>
+                  {ROLES.map(role=>{
+                    const voir = getPerm(role, mod, 'peut_voir');
+                    const creer = getPerm(role, mod, 'peut_creer');
+                    const fin = getPerm(role, mod, 'voir_finance');
+                    return (
+                      <td key={role} style={{padding:'6px',textAlign:'center',borderRight:'1px solid #f0f0ff'}}>
+                        <div style={{display:'flex',gap:2,justifyContent:'center',flexDirection:'column',alignItems:'center'}}>
+                          <button onClick={()=>togglePerm(role,mod,'peut_voir',voir)}
+                            title="Voir" style={{
+                              background:voir?'#dcfce7':'#fee2e2',color:voir?'#15803d':'#dc2626',
+                              border:'none',borderRadius:4,padding:'2px 5px',cursor:'pointer',fontSize:9,fontWeight:700,width:36
+                            }}>{voir?'👁 Oui':'✗ Non'}</button>
+                          {voir && <button onClick={()=>togglePerm(role,mod,'peut_creer',creer)}
+                            title="Créer" style={{
+                              background:creer?'#dbeafe':'#f3f4f6',color:creer?'#1d4ed8':'#9ca3af',
+                              border:'none',borderRadius:4,padding:'2px 5px',cursor:'pointer',fontSize:9,width:36
+                            }}>{creer?'✏+':'✏-'}</button>}
+                          {voir && <button onClick={()=>togglePerm(role,mod,'voir_finance',fin)}
+                            title="Finance" style={{
+                              background:fin?'#fef3c7':'#f3f4f6',color:fin?'#92400e':'#9ca3af',
+                              border:'none',borderRadius:4,padding:'2px 5px',cursor:'pointer',fontSize:9,width:36
+                            }}>{fin?'💰+':'💰-'}</button>}
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{marginTop:12,fontSize:11,color:'#9ca3af'}}>
+            👁 = Voir le module | ✏± = Créer/Modifier | 💰± = Voir les données financières
+          </div>
+        </div>
+      )}
+
+      {/* ══ PARAMÈTRES IA ══ */}
+      {onglet==='ia' && (
+        <div style={{maxWidth:600}}>
+          <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',padding:20,marginBottom:16}}>
+            <div style={{fontWeight:700,color:'#4338ca',marginBottom:16,fontSize:15}}>🤖 Configuration Assistant IA</div>
+            {params.filter(p=>['ia_enabled','ia_modele','ia_contexte_entreprise'].includes(p.cle)).map(p=>(
+              <div key={p.cle} style={{marginBottom:16,paddingBottom:16,borderBottom:'1px solid #f3f4f6'}}>
+                <div style={{fontWeight:600,fontSize:13,marginBottom:4}}>{p.description}</div>
+                {editing[p.cle] ? (
+                  <div style={{display:'flex',gap:8}}>
+                    {p.type_valeur==='boolean' ? (
+                      <select id={`param-${p.cle}`} defaultValue={p.valeur}
+                        style={{flex:1,border:'2px solid #818cf8',borderRadius:6,padding:'7px',fontSize:13}}>
+                        <option value="true">Activé</option>
+                        <option value="false">Désactivé</option>
+                      </select>
+                    ) : p.cle==='ia_contexte_entreprise' ? (
+                      <textarea id={`param-${p.cle}`} defaultValue={p.valeur} rows={4}
+                        style={{flex:1,border:'2px solid #818cf8',borderRadius:6,padding:'7px',fontSize:13,resize:'vertical'}}/>
+                    ) : (
+                      <input id={`param-${p.cle}`} defaultValue={p.valeur}
+                        style={{flex:1,border:'2px solid #818cf8',borderRadius:6,padding:'7px',fontSize:13}}/>
+                    )}
+                    <button onClick={()=>sauverParam(p.cle, document.getElementById(`param-${p.cle}`).value)}
+                      style={{background:'#4338ca',color:'#fff',border:'none',padding:'7px 14px',borderRadius:6,cursor:'pointer',fontWeight:700}}>✓</button>
+                  </div>
+                ) : (
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:'#f8f9ff',borderRadius:8,padding:'10px 14px'}}>
+                    <span style={{fontSize:13,color:'#1e1b4b'}}>{p.valeur}</span>
+                    <button onClick={()=>setEditing(prev=>({...prev,[p.cle]:true}))}
+                      style={{background:'#e0e7ff',color:'#4338ca',border:'none',padding:'4px 10px',borderRadius:6,cursor:'pointer',fontSize:11,fontWeight:600}}>✏</button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          <div style={{background:'#fffbeb',borderRadius:12,border:'1px solid #fde68a',padding:16,fontSize:12,color:'#92400e'}}>
+            ⚠ L'assistant IA utilise l'API Anthropic Claude. Assurez-vous que la clé API est configurée côté serveur.
+            Le contexte entreprise aide l'IA à donner des réponses adaptées à NAI.
+          </div>
+        </div>
+      )}
+
+      {/* ══ LOGS ACTIVITÉ ══ */}
+      {onglet==='logs' && (
+        <div>
+          <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',overflow:'auto'}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:12,minWidth:700}}>
+              <thead>
+                <tr style={{background:'#1e1b4b'}}>
+                  {['Date/Heure','Utilisateur','Action','Module','Détails'].map(h=>(
+                    <th key={h} style={{padding:'10px 12px',textAlign:'left',color:'#a5b4fc',fontWeight:700}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {logs.map((l,i)=>(
+                  <tr key={l.id} style={{borderBottom:'1px solid #f0f0ff',background:i%2===0?'#fff':'#f8f9ff'}}>
+                    <td style={{padding:'8px 12px',fontSize:11,color:'#6b7280',whiteSpace:'nowrap'}}>{new Date(l.created_at).toLocaleString('fr-FR')}</td>
+                    <td style={{padding:'8px 12px',fontWeight:600}}>{l.login} <span style={{fontSize:10,color:'#9ca3af'}}>{l.nom}</span></td>
+                    <td style={{padding:'8px 12px'}}><span style={{background:'#e0e7ff',color:'#4338ca',padding:'1px 6px',borderRadius:20,fontSize:10,fontWeight:700}}>{l.action}</span></td>
+                    <td style={{padding:'8px 12px',fontSize:11}}>{l.module||'—'}</td>
+                    <td style={{padding:'8px 12px',fontSize:10,color:'#6b7280',maxWidth:200}}>{l.details?JSON.stringify(l.details).slice(0,100):'—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {logs.length===0&&<div style={{textAlign:'center',padding:40,color:'#9ca3af'}}><div style={{fontSize:36,marginBottom:8}}>📋</div><p>Aucun log d'activité</p></div>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 export default function ChefAtelier() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [ongletActif, setOngletActif] = useState('dashboard');
   const [sidebarOuverte, setSidebarOuverte] = useState(true);
   const [nbAlertes, setNbAlertes] = useState(0);
+  const [perms, setPerms] = useState({ permissions:{}, is_super_admin:false, has_finance:false, role:'' });
 
   useEffect(() => {
     const chargerAlertes = () => {
       axios.get(`${API}/alertes/count`).then(({data}) => setNbAlertes(data.count)).catch(() => {});
     };
+    const chargerPerms = async () => {
+      try {
+        const {data} = await axios.get(`${API}/permissions/moi`);
+        setPerms(data);
+        // Rediriger si pas accès au module actuel
+        if (data.permissions && !data.is_super_admin) {
+          const allowed = Object.keys(data.permissions).filter(k=>data.permissions[k]?.voir);
+          if (!allowed.includes(ongletActif) && !allowed.includes('*')) {
+            setOngletActif(allowed[0] || 'dashboard');
+          }
+        }
+      } catch {}
+    };
     chargerAlertes();
+    chargerPerms();
     const iv = setInterval(chargerAlertes, 30000);
     return () => clearInterval(iv);
   }, []);
+
+  const canAccess = (module) => {
+    if (perms.is_super_admin) return true;
+    if (perms.permissions?.['*']?.voir) return true;
+    return perms.permissions?.[module]?.voir || false;
+  };
+  const hasFinance = () => perms.has_finance || perms.is_super_admin;
 
   const handleLogout = () => { logout(); navigate('/login'); };
 
@@ -4445,6 +4761,7 @@ export default function ChefAtelier() {
     rh:          <RH />,
     gmao:        <GMAO />,
     kpi:         <KPIRapports />,
+    parametres:  <ParametresSysteme />,
     ia:          <AssistantIA />,
     users:       <Utilisateurs />,
     import:      <ImportSage />,
@@ -4455,6 +4772,7 @@ export default function ChefAtelier() {
   const menuItem = MENU.find(m => m.id === ongletActif);
 
   return (
+    <PermissionsContext.Provider value={perms}>
     <div style={{ display:'flex', height:'100vh', fontFamily:'system-ui,sans-serif', background:'#f8fafc' }}>
 
       {/* ── SIDEBAR ── */}
@@ -6466,5 +6784,6 @@ function GMAO() {
         </div>
       )}
     </div>
+  </PermissionsContext.Provider>
   );
 }
