@@ -123,7 +123,6 @@ const MENU = [
   { id:'kpi',         label:'KPI & Rapports',      icon:'kpi',         color:'#be185d' },
   { id:'ia',          label:'Assistant IA',        icon:'ia',          color:'#1e40af' },
   { id:'users',       label:'Utilisateurs',        icon:'users',       color:'#374151' },
-  { id:'import',      label:'Import Sage',         icon:'import',      color:'#15803d' },
   { id:'alertes',     label:'Alertes',             icon:'alertes',     color:'#dc2626' },
   { id:'referentiels',label:'Référentiels',        icon:'articles',    color:'#6b7280' },
 ];
