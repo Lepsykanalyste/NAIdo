@@ -1,22 +1,3 @@
-
-  // Filtrer le menu selon les permissions
-  const MENU_ITEMS = MENU_ITEMS_ALL.filter(item => {
-    if (item.separator) return true;
-    if (perms.is_super_admin) return true;
-    // Map id menu → module
-    const moduleMap = {
-      dashboard:'dashboard', production:'production', planning:'planning',
-      rapportjour:'production', articles:'articles', matieres:'stock',
-      stock:'stock', bons_cession:'bons_cession', clients:'vente',
-      vente:'vente', fournisseurs:'achat', achats:'achat',
-      qhse:'qhse', gmao:'gmao', rh:'rh', kpi:'kpi', ia:'ia',
-      utilisateurs:'utilisateurs', parametres:'parametres',
-    };
-    const mod = moduleMap[item.id];
-    if (!mod) return true;
-    return canAccess(mod);
-  });
-
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useAuth } from '../hooks/useAuth.jsx';
@@ -4955,6 +4936,55 @@ export default function ChefAtelier() {
   const hasFinance = () => perms.has_finance || perms.is_super_admin;
 
   const handleLogout = () => { logout(); navigate('/login'); };
+
+
+
+  const MENU_ITEMS = [
+    { id:'separator1',  label:'PRODUCTION',               separator:true },
+    { id:'dashboard',   label:'Tableau de bord',           icon:'home',        color:'#1d4ed8' },
+    { id:'production',  label:'Suivi Production',          icon:'activity',    color:'#059669' },
+    { id:'planning',    label:'Planning Machines',          icon:'calendar',    color:'#7c3aed' },
+    { id:'rapportjour', label:'Rapports Journaliers',       icon:'file-text',   color:'#0891b2' },
+    { id:'separator2',  label:'STOCKS & ARTICLES',          separator:true },
+    { id:'articles',    label:'Articles (Produits)',        icon:'package',     color:'#b45309' },
+    { id:'matieres',    label:'Matières Premières',        icon:'layers',      color:'#92400e' },
+    { id:'stock',       label:'Stock',                     icon:'archive',     color:'#15803d' },
+    { id:'cession',     label:'Bons de Cession',           icon:'shuffle',     color:'#1d4ed8' },
+    { id:'separator3',  label:'VENTE & ACHAT',             separator:true },
+    { id:'clients',     label:'Clients',                   icon:'users',       color:'#dc2626' },
+    { id:'vente',       label:'Ventes',                    icon:'trending-up', color:'#059669' },
+    { id:'fournisseurs',label:'Fournisseurs',              icon:'truck',       color:'#7c3aed' },
+    { id:'achats',      label:'Commandes Achat',           icon:'shopping-cart',color:'#0891b2' },
+    { id:'separator3b', label:'GMAO & MAINTENANCE',        separator:true },
+    { id:'gmao',        label:'GMAO / Maintenance',        icon:'tool',        color:'#059669' },
+    { id:'separator4',  label:'QHSE & MAINTENANCE',        separator:true },
+    { id:'qhse',        label:'QHSE / NC',                 icon:'qhse',        color:'#b45309' },
+    { id:'separator4b', label:'RESSOURCES HUMAINES',       separator:true },
+    { id:'rh',          label:'RH — Employés & Paie',      icon:'users',       color:'#0891b2' },
+    { id:'separator5',  label:'ADMIN & IA',                separator:true },
+    { id:'kpi',         label:'KPI & Rapports',            icon:'bar-chart',   color:'#1d4ed8' },
+    { id:'ia',          label:'Assistant IA',              icon:'cpu',         color:'#7c3aed' },
+    { id:'utilisateurs',label:'Utilisateurs',              icon:'users',       color:'#6d28d9' },
+    { id:'parametres',  label:'⚙ Paramètres Système',     separator:false,    icon:'settings',    color:'#1e1b4b' },
+    { id:'separator6',  label:'RÉFÉRENTIELS',              separator:true },
+    { id:'alertes',     label:'Alertes',                   icon:'bell',        color:'#dc2626' },
+    { id:'referentiels',label:'Référentiels',              icon:'database',    color:'#374151' },
+    { id:'import',      label:'Import Sage',               icon:'upload',      color:'#6b7280' },
+  ].filter(item => {
+    if (item.separator) return true;
+    if (perms.is_super_admin) return true;
+    const moduleMap = {
+      dashboard:'dashboard', production:'production', planning:'planning',
+      rapportjour:'production', articles:'articles', matieres:'stock',
+      stock:'stock', cession:'bons_cession', clients:'vente',
+      vente:'vente', fournisseurs:'achat', achats:'achat',
+      qhse:'qhse', gmao:'gmao', rh:'rh', kpi:'kpi', ia:'ia',
+      utilisateurs:'utilisateurs', parametres:'parametres',
+    };
+    const mod = moduleMap[item.id];
+    if (!mod) return true;
+    return !perms.permissions || perms.permissions[mod]?.voir !== false;
+  });
 
   const SECTIONS = {
     dashboard:   <Dashboard />,
