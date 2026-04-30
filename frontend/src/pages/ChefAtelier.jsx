@@ -180,7 +180,7 @@ function Dashboard() {
     <div>
       {/* Sélecteur de vue */}
       <div style={{display:'flex',gap:0,marginBottom:20,borderRadius:10,overflow:'hidden',border:'2px solid #e5e7eb',width:'fit-content'}}>
-        {[['general','🏭 NAI — Vue Générale'],['at3','⚙ Atelier 3 — Production']].map(([id,label])=>(
+        {[['general','🏭 NAI — Vue Générale'],['at3','⚙ Atelier 3'],['mag','🏪 Magasin'],['qhse','🛡 QHSE'],['rh','👥 RH'],['meca','🔧 Mécanique']].map(([id,label])=>(
           <button key={id} onClick={()=>setVueMode(id)} style={{
             padding:'10px 24px',border:'none',cursor:'pointer',fontSize:13,fontWeight:700,
             background:vueMode===id?'#1d4ed8':'#fff',color:vueMode===id?'#fff':'#6b7280'
@@ -4045,15 +4045,17 @@ function KPIRapports() {
         <div style={{ background:'#fff', borderRadius:14, border:'1px solid #e5e7eb', overflow:'hidden', marginTop:20 }}>
           <div style={{ padding:'14px 20px', borderBottom:'1px solid #e5e7eb', fontWeight:700, fontSize:14 }}>Rapports générés</div>
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
-            <thead><tr style={{ background:'#fdf2f8' }}>{['Type','Période','Date génération','PDF','Excel'].map(h => <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:600, color:'#be185d', borderBottom:'2px solid #fbcfe8' }}>{h}</th>)}</tr></thead>
+            <thead><tr style={{ background:'#fdf2f8' }}>{['Type','Période','Généré le','Télécharger'].map(h => <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:600, color:'#be185d', borderBottom:'2px solid #fbcfe8' }}>{h}</th>)}</tr></thead>
             <tbody>
               {rapports.map((r,i) => (
                 <tr key={r.id} style={{ borderBottom:'1px solid #fdf2f8', background:i%2===0?'#fff':'#fdfafc' }}>
                   <td style={{ padding:'10px 14px' }}><span style={{ background:'#fce7f3', color:'#be185d', padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:700 }}>{r.type}</span></td>
                   <td style={{ padding:'10px 14px', fontFamily:'monospace', fontSize:12 }}>{r.periode_debut} → {r.periode_fin}</td>
                   <td style={{ padding:'10px 14px', fontSize:12, color:'#6b7280' }}>{new Date(r.created_at).toLocaleString('fr-FR')}</td>
-                  <td style={{ padding:'10px 14px' }}>{r.pdf_path && <button onClick={async()=>{const {data}=await axios.get(`${API}/rapports/${r.id}/pdf`,{responseType:'blob'});const url=URL.createObjectURL(data);window.open(url,'_blank');}} style={{ background:'#fee2e2', color:'#dc2626', border:'1px solid #fca5a5', padding:'3px 10px', borderRadius:6, cursor:'pointer', fontSize:11 }}>📄 PDF</button>}</td>
-                  <td style={{ padding:'10px 14px' }}>{r.excel_path && <button onClick={async()=>{const {data}=await axios.get(`${API}/rapports/${r.id}/excel`,{responseType:'blob'});const url=URL.createObjectURL(data);const a=document.createElement('a');a.href=url;a.download='rapport.xlsx';a.click();}} style={{ background:'#dcfce7', color:'#15803d', border:'1px solid #86efac', padding:'3px 10px', borderRadius:6, cursor:'pointer', fontSize:11 }}>📊 Excel</button>}</td>
+                  <td style={{ padding:'10px 14px', display:'flex', gap:6 }}>
+                    {r.pdf_path && <button onClick={async()=>{const {data}=await axios.get(`${API}/rapports/${r.id}/pdf`,{responseType:'blob'});const url=URL.createObjectURL(data);window.open(url,'_blank');}} style={{ background:'#fee2e2', color:'#dc2626', border:'1px solid #fca5a5', padding:'3px 10px', borderRadius:6, cursor:'pointer', fontSize:11 }}>📄 PDF</button>}
+                    {r.excel_path && <button onClick={async()=>{const {data}=await axios.get(`${API}/rapports/${r.id}/excel`,{responseType:'blob'});const url=URL.createObjectURL(data);const a=document.createElement('a');a.href=url;a.download='rapport.xlsx';a.click();}} style={{ background:'#dcfce7', color:'#15803d', border:'1px solid #86efac', padding:'3px 10px', borderRadius:6, cursor:'pointer', fontSize:11 }}>📊 Excel</button>}
+                  </td>
                 </tr>
               ))}
             </tbody>
