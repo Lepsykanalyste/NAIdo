@@ -294,24 +294,50 @@ function OrdresFabrication() {
                 {machinesFiltrees.map(m=><option key={m.id} value={m.id}>{m.code} — {m.nom}</option>)}
               </select>
             </F>
-            <F label="Quantité cible (kg)">
-              <input type="number" value={form.quantite_cible} onChange={e=>setForm({...form,quantite_cible:e.target.value})}
-                style={sel} placeholder="ex: 1000"/>
-            </F>
-            <F label="Date livraison prévue">
-              <input type="date" value={form.date_livraison_prevue} onChange={e=>setForm({...form,date_livraison_prevue:e.target.value})} style={sel}/>
-            </F>
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Quantité cible (kg)</div>
+              <input
+                type="number"
+                min="0"
+                step="any"
+                value={form.quantite_cible}
+                onChange={e => { const v=e.target.value; setForm(prev=>({...prev,quantite_cible:v})); }}
+                style={{width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid #e5e7eb',fontSize:13}}
+                placeholder="ex: 1000"
+              />
+            </div>
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Date livraison prévue</div>
+              <input
+                type="date"
+                value={form.date_livraison_prevue}
+                onChange={e => setForm(prev=>({...prev,date_livraison_prevue:e.target.value}))}
+                style={{width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid #e5e7eb',fontSize:13}}
+              />
+            </div>
             <F label="Priorité (1=basse, 5=urgente)">
               <select value={form.priorite} onChange={e=>setForm({...form,priorite:e.target.value})} style={sel}>
                 {[1,2,3,4,5].map(p=><option key={p} value={p}>{p} — {['Très basse','Basse','Normale','Haute','Urgente'][p-1]}</option>)}
               </select>
             </F>
-            <F label="Référence Sage (optionnel)">
-              <input value={form.reference_sage} onChange={e=>setForm({...form,reference_sage:e.target.value})} style={sel} placeholder="Réf. commande Sage"/>
-            </F>
-            <F label="Instructions spéciales">
-              <input value={form.instructions} onChange={e=>setForm({...form,instructions:e.target.value})} style={sel} placeholder="Couleur, dimensions, notes..."/>
-            </F>
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Référence Sage (optionnel)</div>
+              <input
+                value={form.reference_sage}
+                onChange={e => setForm(prev=>({...prev,reference_sage:e.target.value}))}
+                style={{width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid #e5e7eb',fontSize:13}}
+                placeholder="Réf. commande Sage"
+              />
+            </div>
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Instructions spéciales</div>
+              <input
+                value={form.instructions}
+                onChange={e => setForm(prev=>({...prev,instructions:e.target.value}))}
+                style={{width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid #e5e7eb',fontSize:13}}
+                placeholder="Couleur, dimensions, notes..."
+              />
+            </div>
           </div>
 
           {/* Calcul temps prévu */}
