@@ -142,6 +142,7 @@ function Dashboard() {
   const [dashGeneral, setDashGeneral] = useState({});
   const [machinesStatut, setMachinesStatut] = useState([]);
   const [alertes, setAlertes] = useState([]);
+  const [ateliersDash, setAteliersDash] = useState([]);
 
   const charger = async () => {
     try {
@@ -153,6 +154,7 @@ function Dashboard() {
       setData(d1.data || {}); setTrs(d2.data || []); setKpi(d3.data || {});
     } catch {}
     try { const {data}=await axios.get(`${API}/alertes`); setAlertes(data||[]); } catch {}
+    try { const {data}=await axios.get(`${API}/ateliers`); setAteliersDash((data||[]).map(a=>({...a,icon:a.type==='production'?'🏭':a.type==='magasin'?'🏪':a.type==='qhse'?'🛡':a.type==='rh'?'👥':a.type==='mecanique'?'🔧':a.type==='technique'?'⚙':a.type==='achat'?'🛒':a.type==='vente'?'💼':a.type==='transit'?'🚛':'🏢'}))); } catch {}
     try {
       const {data}=await axios.get(`${API}/gmao/dashboard`);
       setDashGeneral(prev=>({...prev, ...data}));
@@ -180,7 +182,7 @@ function Dashboard() {
     <div>
       {/* Sélecteur de vue */}
       <div style={{display:'flex',gap:0,marginBottom:20,borderRadius:10,overflow:'hidden',border:'2px solid #e5e7eb',width:'fit-content'}}>
-        {[['general','🏭 NAI — Vue Générale'],['at3','⚙ Atelier 3'],['mag','🏪 Magasin'],['qhse','🛡 QHSE'],['rh','👥 RH'],['meca','🔧 Mécanique']].map(([id,label])=>(
+        {[['general','🏭 NAI — Vue Générale'],...(ateliersDash||[]).map(a=>[a.code.toLowerCase(),a.icon+' '+a.libelle])].map(([id,label])=>(
           <button key={id} onClick={()=>setVueMode(id)} style={{
             padding:'10px 24px',border:'none',cursor:'pointer',fontSize:13,fontWeight:700,
             background:vueMode===id?'#1d4ed8':'#fff',color:vueMode===id?'#fff':'#6b7280'
@@ -4047,14 +4049,20 @@ function KPIRapports() {
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
             <thead><tr style={{ background:'#fdf2f8' }}>{['Type','Période','Généré le','Télécharger'].map(h => <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:600, color:'#be185d', borderBottom:'2px solid #fbcfe8' }}>{h}</th>)}</tr></thead>
             <tbody>
-              {rapports.map((r,i) => (
-                <tr key={r.id} style={{ borderBottom:'1px solid #fdf2f8', background:i%2===0?'#fff':'#fdfafc' }}>
+              {Object.values(rapports.reduce((acc,r)=>{
+                const key=r.periode_debut+'_'+r.periode_fin;
+                if(!acc[key]) acc[key]={...r,pdf_id:null,excel_id:null};
+                if(r.pdf_path) acc[key].pdf_id=r.id;
+                if(r.excel_path) acc[key].excel_id=r.id;
+                return acc;
+              },{})).map((r,i) => (
+                <tr key={i} style={{ borderBottom:'1px solid #fdf2f8', background:i%2===0?'#fff':'#fdfafc' }}>
                   <td style={{ padding:'10px 14px' }}><span style={{ background:'#fce7f3', color:'#be185d', padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:700 }}>{r.type}</span></td>
                   <td style={{ padding:'10px 14px', fontFamily:'monospace', fontSize:12 }}>{r.periode_debut} → {r.periode_fin}</td>
                   <td style={{ padding:'10px 14px', fontSize:12, color:'#6b7280' }}>{new Date(r.created_at).toLocaleString('fr-FR')}</td>
                   <td style={{ padding:'10px 14px', display:'flex', gap:6 }}>
-                    {r.pdf_path && <button onClick={async()=>{const {data}=await axios.get(`${API}/rapports/${r.id}/pdf`,{responseType:'blob'});const url=URL.createObjectURL(data);window.open(url,'_blank');}} style={{ background:'#fee2e2', color:'#dc2626', border:'1px solid #fca5a5', padding:'3px 10px', borderRadius:6, cursor:'pointer', fontSize:11 }}>📄 PDF</button>}
-                    {r.excel_path && <button onClick={async()=>{const {data}=await axios.get(`${API}/rapports/${r.id}/excel`,{responseType:'blob'});const url=URL.createObjectURL(data);const a=document.createElement('a');a.href=url;a.download='rapport.xlsx';a.click();}} style={{ background:'#dcfce7', color:'#15803d', border:'1px solid #86efac', padding:'3px 10px', borderRadius:6, cursor:'pointer', fontSize:11 }}>📊 Excel</button>}
+                    {r.pdf_id && <button onClick={async()=>{const {data}=await axios.get(`${API}/rapports/${r.pdf_id}/pdf`,{responseType:'blob'});const url=URL.createObjectURL(data);window.open(url,'_blank');}} style={{ background:'#fee2e2', color:'#dc2626', border:'1px solid #fca5a5', padding:'3px 10px', borderRadius:6, cursor:'pointer', fontSize:11 }}>📄 PDF</button>}
+                    {r.excel_id && <button onClick={async()=>{const {data}=await axios.get(`${API}/rapports/${r.excel_id}/excel`,{responseType:'blob'});const url=URL.createObjectURL(data);const a=document.createElement('a');a.href=url;a.download='rapport.xlsx';a.click();}} style={{ background:'#dcfce7', color:'#15803d', border:'1px solid #86efac', padding:'3px 10px', borderRadius:6, cursor:'pointer', fontSize:11 }}>📊 Excel</button>}
                   </td>
                 </tr>
               ))}
