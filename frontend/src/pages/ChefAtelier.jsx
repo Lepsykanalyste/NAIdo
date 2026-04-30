@@ -126,6 +126,7 @@ const MENU = [
   { id:'alertes',     label:'Alertes',             icon:'alertes',     color:'#dc2626' },
   { id:'parametres',  label:'⚙ Paramètres',  icon:'settings',    color:'#1e1b4b' },
   { id:'parametres', label:'⚙ Paramètres', icon:'settings', color:'#1e1b4b' },
+  { id:'parametres',  label:'⚙ Paramètres', icon:'settings', color:'#1e1b4b' },
   { id:'referentiels',label:'Référentiels',        icon:'articles',    color:'#6b7280' },
 ];
 
@@ -4676,6 +4677,7 @@ function Alertes() {
 // ══════════════════════════════════════════════════════════════
 function ParametresSysteme() {
   const perms = usePerms();
+  const { user } = useAuth();
   const [params, setParams] = useState([]);
   const [permRoles, setPermRoles] = useState([]);
   const [onglet, setOnglet] = useState('systeme');
@@ -4738,7 +4740,7 @@ function ParametresSysteme() {
     return p?.[field] || false;
   };
 
-  if (!perms.is_super_admin) {
+  if (!perms.is_super_admin && user && user.role !== 'super_admin') {
     return (
       <div style={{textAlign:'center',padding:80}}>
         <div style={{fontSize:60,marginBottom:16}}>🔒</div>
@@ -5016,6 +5018,7 @@ export default function ChefAtelier() {
     { id:'separator6',  label:'RÉFÉRENTIELS',              separator:true },
     { id:'alertes',     label:'Alertes',                   icon:'bell',        color:'#dc2626' },
     { id:'parametres',  label:'⚙ Paramètres',  icon:'settings',    color:'#1e1b4b' },
+  { id:'parametres',  label:'⚙ Paramètres', icon:'settings', color:'#1e1b4b' },
   { id:'referentiels',label:'Référentiels',              icon:'database',    color:'#374151' },
   ].filter(item => {
     if (item.separator) return true;
@@ -5174,6 +5177,7 @@ export default function ChefAtelier() {
         </footer>
       </div>
     </div>
+  </PermissionsContext.Provider>
   );
 }
 
@@ -7073,6 +7077,5 @@ function GMAO() {
         </div>
       )}
     </div>
-  </PermissionsContext.Provider>
   );
 }
