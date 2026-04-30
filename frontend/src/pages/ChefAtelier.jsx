@@ -3105,7 +3105,7 @@ function QHSE() {
 
 function AssistantIA() {
   const [messages, setMessages] = useState([
-    { role:'assistant', content:'Bonjour ! Je suis l'assistant IA de NAI. Je peux vous aider avec la production, le stock, le QHSE, la maintenance et bien plus. Posez-moi votre question !', modele:'Système' }
+    { role:'assistant', content:"Bonjour ! Je suis l'assistant IA de NAI. Je peux vous aider avec la production, le stock, le QHSE, la maintenance et bien plus. Posez-moi votre question !", modele:'Système' }
   ]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -3317,7 +3317,7 @@ function Utilisateurs() {
     if (i.includes('chef') && i.includes('atelier')) return 'chef_atelier';
     if (i.includes('qhse') || i.includes('qualité')) return 'responsable_qhse';
     if (i.includes('rh') || i.includes('ressources humaines')) return 'responsable_rh';
-    if (i.includes('régleur') || i.includes('regleur')) return 'technicien_regleur';
+    if (i.includes('r\u00e9gleur') || i.includes('regleur')) return 'technicien_regleur';
     if (i.includes('contrôleur') || i.includes('qualit')) return 'controleur_qualite';
     if (i.includes('comptable') || i.includes('finance')) return 'comptable';
     if (i.includes('gmao') || i.includes('maintenance')) return 'technicien_gmao';
