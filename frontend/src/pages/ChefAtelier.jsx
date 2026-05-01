@@ -1019,15 +1019,45 @@ function Dashboard() {
 
   return (
     <div>
-      {/* Sélecteur de vue */}
-      <div style={{display:'flex',gap:0,marginBottom:20,borderRadius:10,overflow:'hidden',border:'2px solid #e5e7eb',width:'fit-content'}}>
-        {[['general','🏭 NAI — Vue Générale'],...(ateliersDash||[]).filter(a=>['AT3','AT3-EXT','AT3-SOU','AT3-IMP','AT3-DEC','MAG'].includes(a.code)).map(a=>[a.code.toLowerCase(),a.icon+' '+a.libelle])].map(([id,label])=>(
-          <button key={id} onClick={()=>setVueMode(id)} style={{
-            padding:'10px 24px',border:'none',cursor:'pointer',fontSize:13,fontWeight:700,
-            background:vueMode===id?'#1d4ed8':'#fff',color:vueMode===id?'#fff':'#6b7280'
-          }}>{label}</button>
-        ))}
-        <button onClick={charger} style={{padding:'10px 14px',border:'none',background:'#f3f4f6',cursor:'pointer',borderLeft:'2px solid #e5e7eb'}}>🔄</button>
+      {/* Sélecteur de vue hiérarchique */}
+      <div style={{marginBottom:20}}>
+        {/* Ligne 1 - Vue générale + Services */}
+        <div style={{display:'flex',gap:6,marginBottom:6,flexWrap:'wrap'}}>
+          {[
+            ['general','🏭 Vue Générale','#1d4ed8'],
+            ['mag','🏪 Magasin','#0891b2'],
+            ['meca','🔧 Mécanique','#6b7280'],
+            ['qhse','🛡 QHSE','#dc2626'],
+            ['rh','👥 RH','#7c3aed'],
+          ].map(([id,label,color])=>(
+            <button key={id} onClick={()=>setVueMode(id)} style={{
+              padding:'8px 16px',border:'2px solid',borderRadius:8,cursor:'pointer',fontSize:12,fontWeight:700,
+              borderColor:vueMode===id?color:'#e5e7eb',
+              background:vueMode===id?color:'#fff',
+              color:vueMode===id?'#fff':'#6b7280'
+            }}>{label}</button>
+          ))}
+          <button onClick={charger} style={{padding:'8px 12px',border:'1px solid #e5e7eb',background:'#f3f4f6',cursor:'pointer',borderRadius:8}}>🔄</button>
+        </div>
+        {/* Ligne 2 - AT3 et ses départements */}
+        <div style={{display:'flex',gap:4,flexWrap:'wrap',background:'#f0f9ff',borderRadius:10,padding:'8px',border:'1px solid #bae6fd'}}>
+          <span style={{fontSize:11,fontWeight:700,color:'#0369a1',padding:'6px 8px',alignSelf:'center'}}>AT3 :</span>
+          {[
+            ['at3','🏭 Production complète','#0369a1'],
+            ['at3-ext','🔥 Extrusion','#d97706'],
+            ['at3-sou','⚡ Soudure','#7c3aed'],
+            ['at3-imp','🖨 Impression','#0891b2'],
+            ['at3-dec','📦 Découpe/Emballage','#15803d'],
+            ['at3-mag','🏪 Stock AT3','#6b7280'],
+          ].map(([id,label,color])=>(
+            <button key={id} onClick={()=>setVueMode(id)} style={{
+              padding:'7px 12px',border:'2px solid',borderRadius:7,cursor:'pointer',fontSize:12,fontWeight:700,
+              borderColor:vueMode===id?color:'#bae6fd',
+              background:vueMode===id?color:'#fff',
+              color:vueMode===id?'#fff':'#374151'
+            }}>{label}</button>
+          ))}
+        </div>
       </div>
 
       {/* ══ VUE GÉNÉRALE NAI ══ */}
