@@ -1005,6 +1005,7 @@ onClick={()=>window.open(`/api/of/${of.id}/pdf`,'_blank')}
 }
 
 function Dashboard() {
+  const { user } = useAuth();
   const [data, setData] = useState({ sessions_actives:0, trs_moyen:0, poids_net_total:0, poids_dechets_total:0, nb_tickets:0, arrets_actifs:0, alertes_rebus:[] });
   const [trs, setTrs] = useState([]);
   const [kpi, setKpi] = useState({});
