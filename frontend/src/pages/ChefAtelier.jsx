@@ -1021,7 +1021,7 @@ function Dashboard() {
     <div>
       {/* Sélecteur de vue */}
       <div style={{display:'flex',gap:0,marginBottom:20,borderRadius:10,overflow:'hidden',border:'2px solid #e5e7eb',width:'fit-content'}}>
-        {[['general','🏭 NAI — Vue Générale'],...(ateliersDash||[]).map(a=>[a.code.toLowerCase(),a.icon+' '+a.libelle])].map(([id,label])=>(
+        {[['general','🏭 NAI — Vue Générale'],...(ateliersDash||[]).filter(a=>['AT3','AT3-EXT','AT3-SOU','AT3-IMP','AT3-DEC','MAG'].includes(a.code)).map(a=>[a.code.toLowerCase(),a.icon+' '+a.libelle])].map(([id,label])=>(
           <button key={id} onClick={()=>setVueMode(id)} style={{
             padding:'10px 24px',border:'none',cursor:'pointer',fontSize:13,fontWeight:700,
             background:vueMode===id?'#1d4ed8':'#fff',color:vueMode===id?'#fff':'#6b7280'
