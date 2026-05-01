@@ -2904,3 +2904,165 @@ async def of_pdf(of_id: str):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── PDF TICKET PRODUCTION ───────────────────────────────────────
+@app.get("/api/ticket-prod/{ticket_id}/pdf")
+async def ticket_prod_pdf(ticket_id: str):
+    try:
+        from weasyprint import HTML
+        import asyncio, httpx
+        global pool
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow("""
+                SELECT t.*,
+                       o.numero_of, o.atelier_id, o.instructions,
+                       a.designation AS article_nom, a.code AS article_code,
+                       a.longueur_mm, a.largeur_mm,
+                       m.code AS machine_code, m.nom AS machine_nom,
+                       u.nom AS operateur_nom, u.prenom AS operateur_prenom,
+                       s.date_session, s.heure_debut,
+                       c.raison_sociale AS client_nom_of
+                FROM tickets_production t
+                LEFT JOIN sessions_production s ON s.id=t.session_id
+                LEFT JOIN ordres_fabrication o ON o.id=t.of_id
+                LEFT JOIN articles a ON a.id=t.article_id
+                LEFT JOIN machines m ON m.id=t.machine_id
+                LEFT JOIN utilisateurs u ON u.id=t.operateur_id
+                LEFT JOIN clients_complet c ON c.id=o.client_id
+                WHERE t.id=$1
+            """, ticket_id)
+
+        if not row:
+            raise HTTPException(status_code=404, detail="Ticket introuvable")
+        t = dict(row)
+
+        from datetime import datetime
+        client = t.get('client_nom') or t.get('client_nom_of') or 'NAI'
+        date_str = t['date_session'].strftime('%d/%m/%Y') if t.get('date_session') else datetime.now().strftime('%d/%m/%Y')
+        heure_str = str(t.get('heure_debut',''))[:5] if t.get('heure_debut') else datetime.now().strftime('%H:%M')
+
+        type_labels = {
+            'extrusion': ('🏭 EXTRUSION', '#0369a1'),
+            'soudure': ('🔧 SOUDURE', '#d97706'),
+            'impression': ('🖨 IMPRESSION', '#0891b2'),
+            'emballage': ('📦 EMBALLAGE', '#7c3aed'),
+            'of_recap': ('📋 RÉCAP OF', '#15803d'),
+        }
+        type_label, couleur = type_labels.get(t.get('type_ticket','extrusion'), ('🏭 PRODUCTION', '#0369a1'))
+
+        pdf_url = f"http://100.85.252.109:8095/api/ticket-prod/{ticket_id}/pdf"
+        qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=100x100&data={pdf_url.replace(':','%3A').replace('/','%2F')}&color={couleur.replace('#','')}"
+
+        poids_net = float(t.get('poids_net_kg') or 0)
+        poids_brut = float(t.get('poids_brut_kg') or 0)
+        poids_mandrin = float(t.get('poids_mandrin_kg') or 0)
+        poids_dechets = float(t.get('poids_dechets_kg') or 0)
+        poids_rebuts = float(t.get('poids_rebuts_kg') or 0)
+        qte_pieces = t.get('qte_pieces') or 0
+
+        pesee_html = ''
+        if t.get('type_ticket') == 'emballage':
+            pesee_html = f"""
+            <div class="row"><span class="lbl">N° Colis</span><span class="val">{t.get('numero_colis') or '—'}</span></div>
+            <div class="row"><span class="lbl">Qté pièces</span><span class="val">{qte_pieces} pcs</span></div>
+            <div class="row"><span class="lbl">Poids carton</span><span class="val">{float(t.get('poids_carton_kg') or 0):.3f} kg</span></div>
+            <div class="sep"></div>
+            <div class="poids-net">{poids_net:.3f} kg</div>
+            <div class="poids-lbl">POIDS NET CONTENU</div>"""
+        else:
+            pesee_html = f"""
+            <div class="row"><span class="lbl">Poids brut</span><span class="val">{poids_brut:.3f} kg</span></div>
+            <div class="row"><span class="lbl">Tare / Mandrin</span><span class="val">{poids_mandrin:.3f} kg</span></div>
+            <div class="sep"></div>
+            <div class="poids-net">{poids_net:.3f} kg</div>
+            <div class="poids-lbl">POIDS NET</div>
+            {f'<div class="row" style="margin-top:4px;"><span class="lbl">Déchets/Rebuts</span><span style="background:#fee2e2;color:#dc2626;border-radius:6px;padding:1px 6px;font-weight:700;font-size:8pt;">{(poids_dechets+poids_rebuts):.3f} kg</span></div>' if (poids_dechets+poids_rebuts)>0 else ''}"""
+
+        html_content = f"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<style>
+  *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  @page {{ size: 80mm 180mm; margin: 4mm; }}
+  body {{ font-family: Arial, sans-serif; font-size: 8.5pt; color: #1f2937; width: 72mm; }}
+  .header {{ border-bottom: 2.5px solid {couleur}; padding-bottom: 5px; margin-bottom: 6px; text-align: center; }}
+  .company {{ font-size: 13pt; font-weight: 900; color: {couleur}; letter-spacing: 1px; }}
+  .banner {{ background: {couleur}; color: #fff; text-align: center; padding: 5px; border-radius: 3px; margin-bottom: 6px; font-size: 9pt; font-weight: 700; letter-spacing: 0.5px; }}
+  .ticket-num {{ text-align: center; font-size: 8pt; color: #6b7280; margin-bottom: 3px; }}
+  .of-num {{ font-size: 14pt; font-weight: 900; color: {couleur}; text-align: center; margin: 3px 0 2px; }}
+  .client-line {{ text-align: center; font-size: 8pt; font-weight: 700; color: #374151; margin-bottom: 6px; }}
+  .sec {{ border: 1px solid #e5e7eb; border-radius: 3px; margin-bottom: 5px; overflow: hidden; }}
+  .sec-h {{ background: #f3f4f6; padding: 2px 7px; font-size: 7pt; font-weight: 700; text-transform: uppercase; color: #374151; border-bottom: 1px solid #e5e7eb; }}
+  .sec-b {{ padding: 5px 7px; }}
+  .row {{ display: flex; justify-content: space-between; margin-bottom: 2px; }}
+  .lbl {{ color: #6b7280; font-size: 7.5pt; }}
+  .val {{ font-weight: 700; color: #111827; font-size: 8pt; }}
+  .poids-net {{ font-size: 18pt; font-weight: 900; color: #15803d; text-align: center; margin: 3px 0 1px; }}
+  .poids-lbl {{ text-align: center; font-size: 7pt; color: #6b7280; margin-bottom: 3px; }}
+  .sep {{ border-top: 1px dashed #d1d5db; margin: 4px 0; }}
+  .qr-wrap {{ text-align: center; margin: 6px 0 4px; }}
+  .footer {{ border-top: 1px solid #e5e7eb; padding-top: 4px; text-align: center; font-size: 6.5pt; color: #9ca3af; margin-top: 4px; }}
+  .dest {{ background: #f0fdf4; border: 1px solid #86efac; border-radius: 3px; padding: 4px 7px; margin-bottom: 5px; }}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="company">NAI</div>
+  <div style="font-size:7pt;color:#6b7280;">Atelier 3 — Production</div>
+</div>
+<div class="banner">{type_label}</div>
+<div class="ticket-num">N° {t.get('numero_ticket','—')}</div>
+<div class="of-num">{t.get('numero_of','—')}</div>
+<div class="client-line">Client : {client}</div>
+
+<div class="sec">
+  <div class="sec-h">Article</div>
+  <div class="sec-b">
+    <div class="row"><span class="lbl">Code</span><span class="val">{t.get('article_code') or '—'}</span></div>
+    <div class="row"><span class="lbl">Désignation</span><span class="val" style="font-size:7.5pt;max-width:40mm;text-align:right;">{t.get('article_nom') or '—'}</span></div>
+    {f'<div class="row"><span class="lbl">Dimensions</span><span class="val">{t["longueur_mm"]}×{t["largeur_mm"]} mm</span></div>' if t.get("longueur_mm") else ''}
+    {f'<div class="row"><span class="lbl">Instructions</span><span class="val" style="font-size:7pt;">{t["instructions"]}</span></div>' if t.get("instructions") else ''}
+  </div>
+</div>
+
+<div class="sec">
+  <div class="sec-h">Opération</div>
+  <div class="sec-b">
+    <div class="row"><span class="lbl">Machine</span><span class="val">{t.get('machine_code') or '—'} — {t.get('machine_nom') or ''}</span></div>
+    <div class="row"><span class="lbl">Opérateur</span><span class="val">{t.get('operateur_prenom') or ''} {t.get('operateur_nom') or '—'}</span></div>
+    <div class="row"><span class="lbl">Date</span><span class="val">{date_str} {heure_str}</span></div>
+    {f'<div class="row"><span class="lbl">Séquence</span><span class="val">#{t["numero_sequence"]}</span></div>' if t.get("numero_sequence") else ''}
+  </div>
+</div>
+
+<div class="sec">
+  <div class="sec-h">Pesée &amp; Quantités</div>
+  <div class="sec-b">{pesee_html}</div>
+</div>
+
+{f'<div class="dest"><span style="font-size:7pt;color:#15803d;font-weight:700;">→ Destination : {t["etape_dest"]}</span></div>' if t.get("etape_dest") else ''}
+
+<div class="qr-wrap">
+  <img src="{qr_url}" width="90" height="90" alt="QR"/>
+  <div style="font-size:6pt;color:#9ca3af;margin-top:2px;">{t.get('numero_ticket','')}</div>
+</div>
+
+<div class="footer">
+  {datetime.now().strftime('%d/%m/%Y %H:%M')} · NAIdo — SOPHOPSY pour NAI
+</div>
+</body>
+</html>"""
+
+        pdf_bytes = await asyncio.get_event_loop().run_in_executor(
+            None, lambda: HTML(string=html_content).write_pdf()
+        )
+        from fastapi.responses import Response
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"inline; filename=ticket-{t.get('numero_ticket','prod')}.pdf"}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
