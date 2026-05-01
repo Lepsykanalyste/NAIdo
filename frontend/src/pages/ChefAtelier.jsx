@@ -1039,8 +1039,8 @@ function Dashboard() {
             {[
               {icon:'⚙',label:'Sessions actives',value:data.sessions_actives||0,color:'#1d4ed8',bg:'#dbeafe'},
               {icon:'📊',label:'TRS moyen',value:`${parseFloat(data.trs_moyen||0).toFixed(1)}%`,color:trsColor(data.trs_moyen||0),bg:'#f0fdf4'},
-              {icon:'⚖',label:'Production nette',value:`${parseFloat(data.poids_net_total||0).toFixed(0)} kg`,color:'#15803d',bg:'#dcfce7'},
-              {icon:'🗑',label:'Déchets',value:`${parseFloat(data.poids_dechets_total||0).toFixed(0)} kg`,color:'#d97706',bg:'#fef3c7'},
+              {icon:'⚖',label:'Production nette',value:`${parseFloat(data.poids_net_total||0).toFixed(1)} kg`,color:'#15803d',bg:'#dcfce7'},
+              {icon:'🗑',label:'Déchets',value:`${parseFloat(data.poids_dechets_total||0).toFixed(1)} kg`,color:'#d97706',bg:'#fef3c7'},
               {icon:'🔴',label:'Arrêts actifs',value:data.arrets_actifs||0,color:data.arrets_actifs>0?'#dc2626':'#15803d',bg:data.arrets_actifs>0?'#fee2e2':'#dcfce7'},
             ].map(k=>(
               <div key={k.label} style={{background:k.bg,borderRadius:12,padding:'14px 16px'}}>
@@ -1192,7 +1192,7 @@ function Dashboard() {
             {[
               {icon:'⚙',label:'Sessions AT3',value:data.sessions_actives||0,color:'#1d4ed8',bg:'#dbeafe'},
               {icon:'📊',label:'TRS moyen AT3',value:`${parseFloat(data.trs_moyen||0).toFixed(1)}%`,color:trsColor(data.trs_moyen||0),bg:'#f0fdf4'},
-              {icon:'⚖',label:'Production nette',value:`${parseFloat(data.poids_net_total||0).toFixed(0)} kg`,color:'#15803d',bg:'#dcfce7'},
+              {icon:'⚖',label:'Production nette',value:`${parseFloat(data.poids_net_total||0).toFixed(1)} kg`,color:'#15803d',bg:'#dcfce7'},
               {icon:'🔴',label:'Arrêts',value:data.arrets_actifs||0,color:data.arrets_actifs>0?'#dc2626':'#15803d',bg:data.arrets_actifs>0?'#fee2e2':'#dcfce7'},
               {icon:'🏭',label:'Pannes GMAO',value:dashGeneral.equipements_en_panne||0,color:dashGeneral.equipements_en_panne>0?'#dc2626':'#15803d',bg:dashGeneral.equipements_en_panne>0?'#fee2e2':'#dcfce7'},
             ].map(k=>(
