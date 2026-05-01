@@ -100,6 +100,7 @@ const ICONS = {
 const MENU = [
   { id:'dashboard',   label:'Tableau de bord',    icon:'dashboard',   color:'#14532d' },
   { id:'separator1',  label:'PRODUCTION',          separator:true },
+  { id:'df',          label:'Demandes de Fabrication', icon:'clipboard', color:'#7c3aed' },
   { id:'of',          label:'Ordres de Fabrication', icon:'clipboard', color:'#0369a1' },
   { id:'production',  label:'Suivi Production',    icon:'production',  color:'#1d4ed8' },
   { id:'planning',    label:'Planning Machines',   icon:'planning',    color:'#0369a1' },
@@ -135,6 +136,271 @@ const MENU = [
 // COMPOSANTS DE SECTION
 // ══════════════════════════════════════════════════════════════
 
+
+
+// ══════════════════════════════════════════════════════════════
+// MODULE DEMANDES DE FABRICATION
+// ══════════════════════════════════════════════════════════════
+function DemandesFabrication() {
+  const { user } = useAuth();
+  const [dfs, setDfs] = useState([]);
+  const [articles, setArticles] = useState([]);
+  const [clients, setClients] = useState([]);
+  const [showForm, setShowForm] = useState(false);
+  const [detail, setDetail] = useState(null);
+  const [showValider, setShowValider] = useState(null);
+  const [filtreStatut, setFiltreStatut] = useState('');
+  const [form, setForm] = useState({
+    article_id:'', client_id:'', quantite_demandee:'',
+    description:'', specifications:'', date_livraison_souhaitee:'',
+    priorite:'3', notes:''
+  });
+  const [valForm, setValForm] = useState({ machine_id:'', atelier_id:'AT3', date_debut_prevue:'' });
+  const [machines, setMachines] = useState([]);
+
+  const charger = async () => {
+    try {
+      const [d,a,c] = await Promise.all([
+        axios.get(`${API}/df${filtreStatut?'?statut='+filtreStatut:''}`).catch(()=>({data:[]})),
+        axios.get(`${API}/articles`).catch(()=>({data:[]})),
+        axios.get(`${API}/vente/clients`).catch(()=>({data:[]})),
+      ]);
+      setDfs(Array.isArray(d.data)?d.data:[]);
+      setArticles(Array.isArray(a.data)?a.data:[]);
+      setClients(Array.isArray(c.data)?c.data:[]);
+    } catch {}
+  };
+
+  useEffect(() => { charger(); }, [filtreStatut]);
+
+  const chargerMachines = async (atelier) => {
+    try {
+      const {data} = await axios.get(`${API}/machines?atelier_id=${atelier}`);
+      setMachines(data||[]);
+    } catch {}
+  };
+
+  const creerDF = async () => {
+    if (!form.article_id || !form.quantite_demandee) {
+      toast.error('Article et quantité requis'); return;
+    }
+    try {
+      await axios.post(`${API}/df`, {
+        ...form,
+        quantite_demandee: parseFloat(form.quantite_demandee),
+        priorite: parseInt(form.priorite||3)
+      });
+      toast.success('Demande créée !');
+      setShowForm(false);
+      setForm({article_id:'',client_id:'',quantite_demandee:'',description:'',specifications:'',date_livraison_souhaitee:'',priorite:'3',notes:''});
+      charger();
+    } catch(e) { toast.error(e.response?.data?.error||'Erreur'); }
+  };
+
+  const valider = async () => {
+    try {
+      const res = await axios.put(`${API}/df/${showValider.id}/valider`, valForm);
+      toast.success('DF validée — OF ' + res.data.of.numero_of + ' créé !');
+      setShowValider(null);
+      setDetail(null);
+      charger();
+    } catch(e) { toast.error(e.response?.data?.error||'Erreur validation'); }
+  };
+
+  const refuser = async (id, motif) => {
+    try {
+      await axios.put(`${API}/df/${id}/refuser`, { motif_refus: motif });
+      toast.success('DF refusée');
+      setDetail(null);
+      charger();
+    } catch { toast.error('Erreur'); }
+  };
+
+  const couleurStatut = s => ({
+    en_attente:'#d97706', validee:'#15803d', refusee:'#dc2626', annulee:'#6b7280'
+  }[s]||'#6b7280');
+  const bgStatut = s => ({
+    en_attente:'#fef3c7', validee:'#dcfce7', refusee:'#fee2e2', annulee:'#f3f4f6'
+  }[s]||'#f3f4f6');
+  const labelStatut = s => ({
+    en_attente:'En attente', validee:'Validée → OF', refusee:'Refusée', annulee:'Annulée'
+  }[s]||s);
+
+  const isDir = user?.role==='super_admin'||user?.role==='directeur'||user?.role==='chef_atelier';
+  const sel = {width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid #e5e7eb',fontSize:13};
+
+  return (
+    <div>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+        <div style={{display:'flex',gap:8}}>
+          {['','en_attente','validee','refusee'].map(s=>(
+            <button key={s} onClick={()=>setFiltreStatut(s)}
+              style={{padding:'6px 14px',borderRadius:8,border:'none',cursor:'pointer',fontSize:12,fontWeight:600,
+                background:filtreStatut===s?'#7c3aed':'#f3f4f6',color:filtreStatut===s?'#fff':'#374151'}}>
+              {s===''?'Toutes':labelStatut(s)}
+            </button>
+          ))}
+        </div>
+        <button onClick={()=>setShowForm(!showForm)}
+          style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:8,padding:'9px 18px',cursor:'pointer',fontWeight:700,fontSize:13}}>
+          {showForm?'✕ Annuler':'+ Nouvelle demande'}
+        </button>
+      </div>
+
+      {/* Formulaire création DF */}
+      {showForm && (
+        <div style={{background:'#faf5ff',borderRadius:14,padding:20,marginBottom:20,border:'1px solid #e9d5ff'}}>
+          <div style={{fontWeight:700,fontSize:15,color:'#7c3aed',marginBottom:16}}>📝 Nouvelle Demande de Fabrication</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12}}>
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Article à fabriquer *</div>
+              <select value={form.article_id} onChange={e=>setForm({...form,article_id:e.target.value})} style={sel}>
+                <option value="">-- Sélectionner --</option>
+                {articles.filter(a=>a.type_article==='produit_fini').map(a=>(
+                  <option key={a.id} value={a.id}>{a.code} — {a.designation}</option>
+                ))}
+              </select>
+            </div>
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Client</div>
+              <select value={form.client_id} onChange={e=>setForm({...form,client_id:e.target.value})} style={sel}>
+                <option value="">-- Sans client --</option>
+                {clients.map(c=><option key={c.id} value={c.id}>{c.raison_sociale||c.nom}</option>)}
+              </select>
+            </div>
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Quantité demandée (kg) *</div>
+              <input type="number" min="0" value={form.quantite_demandee}
+                onChange={e=>setForm(prev=>({...prev,quantite_demandee:e.target.value}))}
+                style={sel} placeholder="ex: 1000"/>
+            </div>
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Date livraison souhaitée</div>
+              <input type="date" value={form.date_livraison_souhaitee}
+                onChange={e=>setForm(prev=>({...prev,date_livraison_souhaitee:e.target.value}))} style={sel}/>
+            </div>
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Priorité</div>
+              <select value={form.priorite} onChange={e=>setForm({...form,priorite:e.target.value})} style={sel}>
+                {[1,2,3,4,5].map(p=><option key={p} value={p}>{p} — {['Très basse','Basse','Normale','Haute','Urgente'][p-1]}</option>)}
+              </select>
+            </div>
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Description / Spécifications</div>
+              <input value={form.description}
+                onChange={e=>setForm(prev=>({...prev,description:e.target.value}))}
+                style={sel} placeholder="Sac 38x63x8/100 naturel, impression 2 couleurs..."/>
+            </div>
+          </div>
+          <div style={{display:'flex',gap:10,marginTop:8}}>
+            <button onClick={creerDF} style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:8,padding:'10px 24px',cursor:'pointer',fontWeight:700}}>
+              ✓ Envoyer la demande
+            </button>
+            <button onClick={()=>setShowForm(false)} style={{background:'#f3f4f6',border:'none',borderRadius:8,padding:'10px 24px',cursor:'pointer'}}>
+              Annuler
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal validation (Direction) */}
+      {showValider && isDir && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:999,display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <div style={{background:'#fff',borderRadius:16,padding:28,width:480,maxWidth:'90vw'}}>
+            <div style={{fontWeight:800,fontSize:16,marginBottom:16,color:'#15803d'}}>✓ Valider la demande</div>
+            <div style={{fontSize:13,color:'#374151',marginBottom:16,background:'#f0fdf4',padding:12,borderRadius:8}}>
+              <strong>{showValider.article_nom}</strong> — {showValider.quantite_demandee} kg<br/>
+              Client : {showValider.client_nom||'—'}
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
+              <div>
+                <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Atelier de production</div>
+                <select value={valForm.atelier_id}
+                  onChange={e=>{setValForm({...valForm,atelier_id:e.target.value,machine_id:''});chargerMachines(e.target.value);}}
+                  style={sel}>
+                  <option value="AT3">Atelier 3 — Production</option>
+                </select>
+              </div>
+              <div>
+                <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Machine (optionnel)</div>
+                <select value={valForm.machine_id} onChange={e=>setValForm({...valForm,machine_id:e.target.value})} style={sel}>
+                  <option value="">-- À définir par production --</option>
+                  {machines.map(m=><option key={m.id} value={m.id}>{m.code} — {m.nom}</option>)}
+                </select>
+              </div>
+              <div>
+                <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Date début prévue</div>
+                <input type="date" value={valForm.date_debut_prevue}
+                  onChange={e=>setValForm({...valForm,date_debut_prevue:e.target.value})} style={sel}/>
+              </div>
+            </div>
+            <div style={{display:'flex',gap:10}}>
+              <button onClick={valider} style={{background:'#15803d',color:'#fff',border:'none',borderRadius:8,padding:'10px 20px',cursor:'pointer',fontWeight:700,flex:1}}>
+                ✓ Valider — Créer l'OF
+              </button>
+              <button onClick={()=>setShowValider(null)} style={{background:'#f3f4f6',border:'none',borderRadius:8,padding:'10px 16px',cursor:'pointer'}}>
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Liste DF */}
+      <div style={{background:'#fff',borderRadius:14,border:'1px solid #e5e7eb',overflow:'hidden'}}>
+        {dfs.length===0 ? (
+          <div style={{padding:40,textAlign:'center',color:'#6b7280'}}>
+            <div style={{fontSize:32,marginBottom:8}}>📝</div>
+            Aucune demande — créez la première
+          </div>
+        ) : (
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+            <thead><tr style={{background:'#faf5ff'}}>
+              {['N° DF','Article','Client','Quantité','Livraison souhaitée','Priorité','Statut','OF créé','Actions'].map(h=>(
+                <th key={h} style={{padding:'10px 12px',textAlign:'left',fontWeight:600,color:'#7c3aed',borderBottom:'2px solid #e9d5ff',whiteSpace:'nowrap'}}>{h}</th>
+              ))}
+            </tr></thead>
+            <tbody>
+              {dfs.map((df,i)=>(
+                <tr key={df.id} style={{borderBottom:'1px solid #f3f4f6',background:i%2===0?'#fff':'#fafafa'}}>
+                  <td style={{padding:'9px 12px',fontWeight:700,color:'#7c3aed'}}>{df.numero_df}</td>
+                  <td style={{padding:'9px 12px'}}>{df.article_nom}<br/><span style={{fontSize:10,color:'#6b7280'}}>{df.article_code}</span></td>
+                  <td style={{padding:'9px 12px',fontSize:12}}>{df.client_nom||'—'}</td>
+                  <td style={{padding:'9px 12px',fontWeight:600}}>{parseFloat(df.quantite_demandee).toFixed(0)} kg</td>
+                  <td style={{padding:'9px 12px',fontSize:12}}>{df.date_livraison_souhaitee?new Date(df.date_livraison_souhaitee).toLocaleDateString('fr-FR'):'—'}</td>
+                  <td style={{padding:'9px 12px',textAlign:'center'}}>{'⭐'.repeat(df.priorite||1)}</td>
+                  <td style={{padding:'9px 12px'}}>
+                    <span style={{background:bgStatut(df.statut),color:couleurStatut(df.statut),padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:700}}>
+                      {labelStatut(df.statut)}
+                    </span>
+                  </td>
+                  <td style={{padding:'9px 12px',fontSize:12,color:'#0369a1',fontWeight:600}}>{df.numero_of||'—'}</td>
+                  <td style={{padding:'9px 12px',display:'flex',gap:6}}>
+                    {df.statut==='en_attente' && isDir && (
+                      <button onClick={()=>{setShowValider(df);chargerMachines('AT3');}}
+                        style={{background:'#dcfce7',color:'#15803d',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11,fontWeight:700}}>
+                        ✓ Valider
+                      </button>
+                    )}
+                    {df.statut==='en_attente' && isDir && (
+                      <button onClick={()=>{const m=window.prompt('Motif du refus:');if(m)refuser(df.id,m);}}
+                        style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>
+                        ✗ Refuser
+                      </button>
+                    )}
+                    {df.description && (
+                      <span title={df.description} style={{cursor:'help',fontSize:14}}>ℹ️</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // ══════════════════════════════════════════════════════════════
 // MODULE ORDRES DE FABRICATION
@@ -5311,7 +5577,8 @@ export default function ChefAtelier() {
   const MENU_ITEMS = [
     { id:'separator1',  label:'PRODUCTION',               separator:true },
     { id:'dashboard',   label:'Tableau de bord',           icon:'home',        color:'#1d4ed8' },
-    { id:'of',          label:'Ordres de Fabrication', icon:'clipboard', color:'#0369a1' },
+    { id:'df',          label:'Demandes de Fabrication', icon:'clipboard', color:'#7c3aed' },
+  { id:'of',          label:'Ordres de Fabrication', icon:'clipboard', color:'#0369a1' },
   { id:'production',  label:'Suivi Production',          icon:'activity',    color:'#059669' },
     { id:'planning',    label:'Planning Machines',          icon:'calendar',    color:'#7c3aed' },
     { id:'rapportjour', label:'Rapports Journaliers',       icon:'file-text',   color:'#0891b2' },
@@ -5358,6 +5625,7 @@ export default function ChefAtelier() {
   });
 
   const SECTIONS = {
+    df:          <DemandesFabrication />,
     of:          <OrdresFabrication />,
     dashboard:   <Dashboard />,
     production:  <SuiviProduction />,
