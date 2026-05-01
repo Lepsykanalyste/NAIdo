@@ -321,13 +321,7 @@ function DemandesFabrication() {
                   <option value="AT3">Atelier 3 — Production</option>
                 </select>
               </div>
-              <div>
-                <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Machine (optionnel)</div>
-                <select value={valForm.machine_id} onChange={e=>setValForm({...valForm,machine_id:e.target.value})} style={sel}>
-                  <option value="">-- À définir par production --</option>
-                  {machines.map(m=><option key={m.id} value={m.id}>{m.code} — {m.nom}</option>)}
-                </select>
-              </div>
+
               <div>
                 <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Date début prévue</div>
                 <input type="date" value={valForm.date_debut_prevue}
@@ -397,6 +391,268 @@ function DemandesFabrication() {
             </tbody>
           </table>
         )}
+      </div>
+    </div>
+  );
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// COMPOSANT DETAIL OF (avec composition lots)
+// ══════════════════════════════════════════════════════════════
+function DetailOF({ detail, machines, onClose, onRefresh, onStatut }) {
+  const [lots, setLots] = useState([]);
+  const [lotsDispo, setLotsDispo] = useState([]);
+  const [mpArticles, setMpArticles] = useState([]);
+  const [showAddLot, setShowAddLot] = useState(false);
+  const [editMachine, setEditMachine] = useState(false);
+  const [machineForm, setMachineForm] = useState({ machine_id: detail.machine_id||'', date_debut_prevue:'' });
+  const [lotForm, setLotForm] = useState({
+    article_mp_id:'', lot_id:'', nom_matiere:'', numero_lot:'',
+    qte_prevue:'', pourcentage:'', unite_label:'kg'
+  });
+
+  const sel = {width:'100%',padding:'7px 10px',borderRadius:7,border:'1px solid #e5e7eb',fontSize:12};
+
+  const chargerLots = async () => {
+    try {
+      const [l, mp] = await Promise.all([
+        axios.get(`${API}/lots-prod/of/${detail.id}`).catch(()=>({data:[]})),
+        axios.get(`${API}/articles?type_article=matiere_premiere`).catch(()=>({data:[]})),
+      ]);
+      setLots(Array.isArray(l.data)?l.data:[]);
+      setMpArticles(Array.isArray(mp.data)?mp.data:[]);
+    } catch {}
+  };
+
+  const chargerLotsDispo = async (article_mp_id) => {
+    if (!article_mp_id) return;
+    try {
+      const {data} = await axios.get(`${API}/lots-prod?article_id=${article_mp_id}&atelier=${detail.atelier_id}`);
+      setLotsDispo(data||[]);
+    } catch {}
+  };
+
+  useEffect(() => { chargerLots(); }, [detail.id]);
+
+  const saveMachine = async () => {
+    try {
+      await axios.put(`${API}/of/${detail.id}`, {
+        machine_id: machineForm.machine_id||null,
+        date_debut_prevue: machineForm.date_debut_prevue||null
+      });
+      toast.success('Machine mise à jour');
+      setEditMachine(false);
+      onRefresh();
+    } catch { toast.error('Erreur'); }
+  };
+
+  const addLot = async () => {
+    if (!lotForm.qte_prevue) { toast.error('Quantité requise'); return; }
+    try {
+      await axios.post(`${API}/lots-prod/of/${detail.id}`, {
+        ...lotForm,
+        qte_prevue: parseFloat(lotForm.qte_prevue),
+        pourcentage: parseFloat(lotForm.pourcentage||0),
+      });
+      toast.success('Matière ajoutée');
+      setShowAddLot(false);
+      setLotForm({article_mp_id:'',lot_id:'',nom_matiere:'',numero_lot:'',qte_prevue:'',pourcentage:'',unite_label:'kg'});
+      chargerLots();
+    } catch(e) { toast.error(e.response?.data?.error||'Erreur'); }
+  };
+
+  const removeLot = async (id) => {
+    try {
+      await axios.delete(`${API}/lots-prod/${id}`);
+      chargerLots();
+    } catch { toast.error('Erreur'); }
+  };
+
+  const totalPoids = lots.reduce((s,l)=>s+parseFloat(l.qte_prevue||0),0);
+  const totalPct = lots.reduce((s,l)=>s+parseFloat(l.pourcentage||0),0);
+
+  return (
+    <div style={{background:'#fff',borderRadius:14,padding:20,marginBottom:16,border:'2px solid #0369a1'}}>
+      {/* En-tête */}
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+        <div style={{fontWeight:800,fontSize:16,color:'#0369a1'}}>📋 {detail.numero_of}</div>
+        <button onClick={onClose} style={{background:'none',border:'none',fontSize:18,cursor:'pointer'}}>✕</button>
+      </div>
+
+      {/* Infos principales */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10,marginBottom:16,fontSize:12}}>
+        {[
+          ['Article', detail.article_nom+' ('+detail.article_code+')'],
+          ['Client', detail.client_nom||'—'],
+          ['Atelier', detail.atelier_id||'—'],
+          ['Statut', detail.statut],
+          ['Qté cible', parseFloat(detail.quantite_cible||0).toFixed(0)+' kg'],
+          ['Qté produite', parseFloat(detail.quantite_produite||0).toFixed(0)+' kg'],
+          ['Temps prévu', detail.temps_prevu_min?detail.temps_prevu_min+' min':'—'],
+          ['Livraison', detail.date_livraison_prevue?new Date(detail.date_livraison_prevue).toLocaleDateString('fr-FR'):'—'],
+        ].map(([l,v])=>(
+          <div key={l} style={{background:'#f0f9ff',borderRadius:8,padding:'8px 10px'}}>
+            <div style={{fontSize:10,color:'#6b7280',fontWeight:600}}>{l}</div>
+            <div style={{fontWeight:700,marginTop:2,color:'#1e3a5f'}}>{v}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Machine — saisie par production */}
+      <div style={{background:'#fffbeb',borderRadius:10,padding:14,marginBottom:16,border:'1px solid #fde68a'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:editMachine?10:0}}>
+          <div style={{fontWeight:700,fontSize:13,color:'#92400e'}}>
+            🏭 Machine : {detail.machine_nom||<span style={{color:'#d97706'}}>Non assignée — à définir par la production</span>}
+          </div>
+          {!editMachine && (
+            <button onClick={()=>setEditMachine(true)}
+              style={{background:'#fef3c7',color:'#92400e',border:'1px solid #fde68a',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:11,fontWeight:600}}>
+              ✏ {detail.machine_nom?'Modifier':'Assigner machine'}
+            </button>
+          )}
+        </div>
+        {editMachine && (
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr auto',gap:10,alignItems:'end'}}>
+            <div>
+              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Machine</div>
+              <select value={machineForm.machine_id} onChange={e=>setMachineForm({...machineForm,machine_id:e.target.value})} style={sel}>
+                <option value="">-- Sélectionner --</option>
+                {machines.map(m=><option key={m.id} value={m.id}>{m.code} — {m.nom}</option>)}
+              </select>
+            </div>
+            <div>
+              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Date début prévue</div>
+              <input type="date" value={machineForm.date_debut_prevue}
+                onChange={e=>setMachineForm({...machineForm,date_debut_prevue:e.target.value})} style={sel}/>
+            </div>
+            <div style={{display:'flex',gap:6}}>
+              <button onClick={saveMachine} style={{background:'#15803d',color:'#fff',border:'none',borderRadius:6,padding:'7px 14px',cursor:'pointer',fontSize:12,fontWeight:700}}>✓</button>
+              <button onClick={()=>setEditMachine(false)} style={{background:'#f3f4f6',border:'none',borderRadius:6,padding:'7px 10px',cursor:'pointer'}}>✕</button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Composition matières */}
+      <div style={{background:'#f0fdf4',borderRadius:10,padding:14,marginBottom:16,border:'1px solid #bbf7d0'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+          <div style={{fontWeight:700,fontSize:13,color:'#15803d'}}>
+            🧪 Composition matières premières
+            {lots.length>0 && <span style={{marginLeft:8,fontSize:11,color:'#6b7280'}}>({totalPoids.toFixed(1)} kg total — {totalPct.toFixed(1)}%)</span>}
+          </div>
+          <button onClick={()=>setShowAddLot(!showAddLot)}
+            style={{background:'#dcfce7',color:'#15803d',border:'1px solid #86efac',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:11,fontWeight:600}}>
+            {showAddLot?'✕ Annuler':'+ Ajouter matière'}
+          </button>
+        </div>
+
+        {/* Formulaire ajout lot */}
+        {showAddLot && (
+          <div style={{background:'#fff',borderRadius:8,padding:12,marginBottom:10,border:'1px solid #bbf7d0'}}>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:8,marginBottom:8}}>
+              <div>
+                <div style={{fontSize:10,fontWeight:600,color:'#6b7280',marginBottom:3}}>Type MP (composition article)</div>
+                <select value={lotForm.article_mp_id}
+                  onChange={e=>{setLotForm({...lotForm,article_mp_id:e.target.value,lot_id:'',nom_matiere:'',numero_lot:''});chargerLotsDispo(e.target.value);}}
+                  style={sel}>
+                  <option value="">-- Type MP --</option>
+                  {mpArticles.map(a=><option key={a.id} value={a.id}>{a.code} — {a.designation}</option>)}
+                </select>
+              </div>
+              <div>
+                <div style={{fontSize:10,fontWeight:600,color:'#6b7280',marginBottom:3}}>Lot en stock (FIFO)</div>
+                <select value={lotForm.lot_id}
+                  onChange={e=>{
+                    const l=lotsDispo.find(x=>x.id===e.target.value);
+                    setLotForm({...lotForm,lot_id:e.target.value,
+                      nom_matiere:l?.fournisseur_nom||l?.article_nom||'',
+                      numero_lot:l?.numero_lot||''});
+                  }} style={sel}>
+                  <option value="">-- Choisir lot --</option>
+                  {lotsDispo.map(l=>(
+                    <option key={l.id} value={l.id}>
+                      {l.fournisseur_nom||l.article_nom} — lot {l.numero_lot} ({parseFloat(l.qte_disponible).toFixed(0)} kg)
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <div style={{fontSize:10,fontWeight:600,color:'#6b7280',marginBottom:3}}>Nom fournisseur/marque</div>
+                <input value={lotForm.nom_matiere}
+                  onChange={e=>setLotForm(prev=>({...prev,nom_matiere:e.target.value}))}
+                  style={sel} placeholder="ex: Exxo, Lotrene, Shell..."/>
+              </div>
+              <div>
+                <div style={{fontSize:10,fontWeight:600,color:'#6b7280',marginBottom:3}}>N° lot</div>
+                <input value={lotForm.numero_lot}
+                  onChange={e=>setLotForm(prev=>({...prev,numero_lot:e.target.value}))}
+                  style={sel} placeholder="ex: lot001"/>
+              </div>
+              <div>
+                <div style={{fontSize:10,fontWeight:600,color:'#6b7280',marginBottom:3}}>Quantité (kg)</div>
+                <input type="number" min="0" value={lotForm.qte_prevue}
+                  onChange={e=>setLotForm(prev=>({...prev,qte_prevue:e.target.value}))}
+                  style={sel} placeholder="kg"/>
+              </div>
+              <div>
+                <div style={{fontSize:10,fontWeight:600,color:'#6b7280',marginBottom:3}}>Pourcentage (%)</div>
+                <input type="number" min="0" max="100" value={lotForm.pourcentage}
+                  onChange={e=>setLotForm(prev=>({...prev,pourcentage:e.target.value}))}
+                  style={sel} placeholder="%"/>
+              </div>
+            </div>
+            <button onClick={addLot} style={{background:'#15803d',color:'#fff',border:'none',borderRadius:6,padding:'6px 16px',cursor:'pointer',fontSize:12,fontWeight:700}}>
+              + Ajouter cette matière
+            </button>
+          </div>
+        )}
+
+        {/* Liste lots */}
+        {lots.length===0 ? (
+          <div style={{color:'#6b7280',fontSize:12,fontStyle:'italic'}}>Aucune matière saisie — la production doit sélectionner les lots</div>
+        ) : (
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+            <thead><tr style={{background:'#dcfce7'}}>
+              {['Type MP','Marque/Fournisseur','N° Lot','Qté prévue','%','Stock dispo','Action'].map(h=>(
+                <th key={h} style={{padding:'6px 10px',textAlign:'left',fontWeight:600,color:'#15803d'}}>{h}</th>
+              ))}
+            </tr></thead>
+            <tbody>
+              {lots.map(l=>(
+                <tr key={l.id} style={{borderBottom:'1px solid #dcfce7'}}>
+                  <td style={{padding:'6px 10px'}}>{l.mp_code||l.mp_nom||'—'}</td>
+                  <td style={{padding:'6px 10px',fontWeight:600}}>{l.nom_matiere||'—'}</td>
+                  <td style={{padding:'6px 10px',fontFamily:'monospace'}}>{l.numero_lot||'—'}</td>
+                  <td style={{padding:'6px 10px',fontWeight:700}}>{parseFloat(l.qte_prevue||0).toFixed(1)} kg</td>
+                  <td style={{padding:'6px 10px'}}>{parseFloat(l.pourcentage||0).toFixed(1)}%</td>
+                  <td style={{padding:'6px 10px',color:parseFloat(l.lot_stock||0)<parseFloat(l.qte_prevue||0)?'#dc2626':'#15803d'}}>
+                    {l.lot_stock?parseFloat(l.lot_stock).toFixed(0)+' kg':'—'}
+                  </td>
+                  <td style={{padding:'6px 10px'}}>
+                    <button onClick={()=>removeLot(l.id)} style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:4,padding:'2px 6px',cursor:'pointer',fontSize:10}}>✕</button>
+                  </td>
+                </tr>
+              ))}
+              <tr style={{background:'#f0fdf4',fontWeight:700}}>
+                <td colSpan={3} style={{padding:'6px 10px',color:'#15803d'}}>TOTAL</td>
+                <td style={{padding:'6px 10px'}}>{totalPoids.toFixed(1)} kg</td>
+                <td style={{padding:'6px 10px',color:Math.abs(totalPct-100)<1?'#15803d':'#d97706'}}>{totalPct.toFixed(1)}%</td>
+                <td colSpan={2}></td>
+              </tr>
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {/* Actions statut */}
+      <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+        {detail.statut==='planifie' && <button onClick={()=>{onStatut(detail.id,'lance');onClose();}} style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer',fontSize:13,fontWeight:700}}>▶ Lancer</button>}
+        {detail.statut==='lance' && <button onClick={()=>{onStatut(detail.id,'en_cours');onClose();}} style={{background:'#d97706',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer',fontSize:13,fontWeight:700}}>⚙ Démarrer</button>}
+        {detail.statut==='en_cours' && <button onClick={()=>{onStatut(detail.id,'pause');onClose();}} style={{background:'#6b7280',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer',fontSize:13,fontWeight:700}}>⏸ Pause</button>}
+        {detail.statut==='pause' && <button onClick={()=>{onStatut(detail.id,'en_cours');onClose();}} style={{background:'#d97706',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer',fontSize:13,fontWeight:700}}>▶ Reprendre</button>}
+        {detail.statut==='en_cours' && <button onClick={()=>{onStatut(detail.id,'termine');onClose();}} style={{background:'#15803d',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer',fontSize:13,fontWeight:700}}>✓ Terminer</button>}
+        {!['annule','termine'].includes(detail.statut) && <button onClick={()=>{onStatut(detail.id,'annule');onClose();}} style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer',fontSize:13}}>✕ Annuler</button>}
       </div>
     </div>
   );
@@ -624,39 +880,8 @@ function OrdresFabrication() {
         </div>
       )}
 
-      {/* Détail OF */}
-      {detail && (
-        <div style={{background:'#fff',borderRadius:14,padding:20,marginBottom:16,border:'2px solid #0369a1'}}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-            <div style={{fontWeight:800,fontSize:16,color:'#0369a1'}}>📋 OF {detail.numero_of}</div>
-            <button onClick={()=>setDetail(null)} style={{background:'none',border:'none',fontSize:18,cursor:'pointer'}}>✕</button>
-          </div>
-          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12,fontSize:13}}>
-            {[
-              ['Article',detail.article_nom+' ('+detail.article_code+')'],
-              ['Client',detail.client_nom||'—'],
-              ['Machine',detail.machine_nom||'—'],
-              ['Atelier',detail.atelier_id||'—'],
-              ['Quantité cible',detail.quantite_cible+' kg'],
-              ['Qté produite',(detail.quantite_produite||0)+' kg'],
-              ['Temps prévu',detail.temps_prevu_min?detail.temps_prevu_min+' min':'—'],
-              ['Livraison prévue',detail.date_livraison_prevue?new Date(detail.date_livraison_prevue).toLocaleDateString('fr-FR'):'—'],
-              ['Instructions',detail.instructions||'—'],
-            ].map(([l,v])=>(
-              <div key={l} style={{background:'#f9fafb',borderRadius:8,padding:'8px 12px'}}>
-                <div style={{fontSize:10,color:'#6b7280',fontWeight:600}}>{l}</div>
-                <div style={{fontWeight:600,marginTop:2}}>{v}</div>
-              </div>
-            ))}
-          </div>
-          <div style={{marginTop:12,display:'flex',gap:8,flexWrap:'wrap'}}>
-            {detail.statut==='planifie' && <button onClick={()=>changerStatut(detail.id,'lance')} style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:8,padding:'6px 14px',cursor:'pointer',fontSize:12}}>▶ Lancer</button>}
-            {detail.statut==='lance' && <button onClick={()=>changerStatut(detail.id,'en_cours')} style={{background:'#d97706',color:'#fff',border:'none',borderRadius:8,padding:'6px 14px',cursor:'pointer',fontSize:12}}>⚙ Démarrer production</button>}
-            {detail.statut==='en_cours' && <button onClick={()=>changerStatut(detail.id,'termine')} style={{background:'#15803d',color:'#fff',border:'none',borderRadius:8,padding:'6px 14px',cursor:'pointer',fontSize:12}}>✓ Terminer</button>}
-            {detail.statut!=='annule'&&detail.statut!=='termine' && <button onClick={()=>changerStatut(detail.id,'annule')} style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:8,padding:'6px 14px',cursor:'pointer',fontSize:12}}>✕ Annuler</button>}
-          </div>
-        </div>
-      )}
+      {/* Détail OF complet */}
+      {detail && <DetailOF detail={detail} machines={machines} onClose={()=>setDetail(null)} onRefresh={charger} onStatut={changerStatut}/>}
 
       {/* Liste OF */}
       <div style={{background:'#fff',borderRadius:14,border:'1px solid #e5e7eb',overflow:'hidden'}}>
