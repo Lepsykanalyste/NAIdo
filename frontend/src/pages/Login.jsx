@@ -12,8 +12,17 @@ export default function Login() {
   const [scanning, setScanning] = useState(false);
 
   const roleRedirect = (role) => {
-    const map = { operateur: '/operateur', regleur: '/regleur',
-                  qualite: '/qualite', chef_atelier: '/chef' };
+    const map = {
+      operateur: '/operateur', operateur_ext: '/operateur', operateur_sou: '/operateur',
+      operateur_imp: '/operateur', operateur_dec: '/operateur',
+      regleur: '/regleur',
+      qualite: '/qualite',
+      chef_atelier: '/chef',
+      commercial: '/chef', vente: '/chef', achat: '/chef',
+      magasinier: '/chef', magasinier_at3: '/chef', magasinier_central: '/chef',
+      directeur: '/chef', rh: '/chef', qhse: '/chef', technicien: '/chef',
+      super_admin: '/chef'
+    };
     return map[role] || '/';
   };
 
