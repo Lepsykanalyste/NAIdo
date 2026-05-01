@@ -112,3 +112,155 @@ router.put('/:id/refuser', auth, async (req, res) => {
 });
 
 module.exports = router;
+
+// GET /api/df/:id/ticket — Document de Demande de Fabrication
+router.get('/:id/ticket', async (req, res) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT df.*, 
+             c.raison_sociale AS client_nom, c.telephone, c.email,
+             a.designation AS article_nom, a.code AS article_code,
+             a.longueur_mm, a.largeur_mm,
+             u1.nom||' '||u1.prenom AS demandeur_nom,
+             u2.nom||' '||u2.prenom AS valideur_nom,
+             o.numero_of
+      FROM demandes_fabrication df
+      LEFT JOIN clients_complet c ON c.id=df.client_id
+      LEFT JOIN articles a ON a.id=df.article_id
+      LEFT JOIN utilisateurs u1 ON u1.id=df.demandeur_id
+      LEFT JOIN utilisateurs u2 ON u2.id=df.validee_par
+      LEFT JOIN ordres_fabrication o ON o.id=df.of_id
+      WHERE df.id=$1
+    `, [req.params.id]);
+
+    if (!rows.length) return res.status(404).json({ error: 'DF introuvable' });
+    const d = rows[0];
+
+    const qr_text = `NAI DEMANDE FABRICATION\nN: ${d.numero_df}\nARTICLE: ${d.article_code} ${d.article_nom}\nQTE: ${d.quantite_demandee} kg\nCLIENT: ${d.client_nom||'—'}\nSTATUT: ${d.statut}\nOF: ${d.numero_of||'—'}\nDATE: ${new Date(d.created_at).toLocaleDateString('fr-FR')}`;
+
+    const couleur = d.statut==='validee'?'#15803d':d.statut==='refusee'?'#dc2626':'#d97706';
+    const bgCouleur = d.statut==='validee'?'#dcfce7':d.statut==='refusee'?'#fee2e2':'#fef3c7';
+    const labelStatut = {en_attente:'En attente',validee:'Validée',refusee:'Refusée',annulee:'Annulée'}[d.statut]||d.statut;
+
+    const html = `<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>DF ${d.numero_df}</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  @page { size: A5; margin: 10mm; }
+  body { font-family: Arial, sans-serif; font-size: 9pt; color: #1f2937; background: #fff; }
+  .header { border-bottom: 3px solid #7c3aed; padding-bottom: 8px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: flex-start; }
+  .company { font-size: 14pt; font-weight: 900; color: #7c3aed; }
+  .sub { font-size: 7pt; color: #6b7280; }
+  .banner { background: #7c3aed; color: #fff; text-align: center; padding: 6px; border-radius: 4px; margin-bottom: 10px; font-size: 10pt; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; }
+  .df-num { font-size: 16pt; font-weight: 900; color: #7c3aed; text-align: center; margin: 6px 0 3px; }
+  .statut-badge { text-align: center; margin-bottom: 8px; }
+  .badge { display: inline-block; background: ${bgCouleur}; color: ${couleur}; border: 1px solid ${couleur}; border-radius: 12px; padding: 3px 12px; font-weight: 700; font-size: 9pt; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+  .sec { border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; }
+  .sec-h { background: #f3f4f6; padding: 3px 8px; font-size: 7pt; font-weight: 700; text-transform: uppercase; color: #374151; border-bottom: 1px solid #e5e7eb; letter-spacing: 0.3px; }
+  .sec-b { padding: 6px 8px; }
+  .row { display: flex; justify-content: space-between; margin-bottom: 2px; }
+  .lbl { color: #6b7280; font-size: 7.5pt; }
+  .val { font-weight: 700; color: #111827; font-size: 8pt; }
+  .qte-big { font-size: 18pt; font-weight: 900; color: #7c3aed; text-align: center; margin: 4px 0 2px; }
+  .qte-lbl { text-align: center; font-size: 7pt; color: #6b7280; margin-bottom: 4px; }
+  .of-link { background: #e0f2fe; border: 1px solid #bae6fd; border-radius: 4px; padding: 5px 8px; text-align: center; margin: 6px 0; }
+  .of-link .of-num { font-size: 13pt; font-weight: 800; color: #0369a1; }
+  .specs { background: #faf5ff; border: 1px solid #e9d5ff; border-radius: 4px; padding: 8px; margin-bottom: 8px; font-size: 8pt; color: #374151; }
+  .sigs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+  .sig-box { border: 1px solid #d1d5db; border-radius: 4px; padding: 10px; min-height: 60px; }
+  .sig-title { font-size: 7pt; font-weight: 700; text-transform: uppercase; color: #374151; margin-bottom: 3px; }
+  .sig-name { font-size: 7.5pt; color: #6b7280; margin-bottom: 25px; }
+  .sig-line { border-top: 1px solid #9ca3af; padding-top: 3px; font-size: 6.5pt; color: #9ca3af; text-align: center; }
+  .qr-wrap { text-align: center; margin: 8px 0; }
+  .footer { border-top: 1px solid #e5e7eb; padding-top: 5px; text-align: center; font-size: 6.5pt; color: #9ca3af; margin-top: 6px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="company">NAI</div>
+    <div class="sub">Atelier 3 — Système de Production</div>
+  </div>
+  <div style="text-align:right;">
+    <div style="font-size:7pt;color:#6b7280;">Date : ${new Date(d.created_at).toLocaleDateString('fr-FR')}</div>
+    <div style="font-size:7pt;color:#6b7280;">Demandeur : ${d.demandeur_nom||'—'}</div>
+  </div>
+</div>
+
+<div class="banner">📝 Demande de Fabrication</div>
+<div class="df-num">${d.numero_df}</div>
+<div class="statut-badge"><span class="badge">${labelStatut}</span></div>
+
+<div class="grid">
+  <div class="sec">
+    <div class="sec-h">Article à fabriquer</div>
+    <div class="sec-b">
+      <div class="row"><span class="lbl">Code</span><span class="val">${d.article_code||'—'}</span></div>
+      <div class="row"><span class="lbl">Désignation</span><span class="val" style="font-size:7.5pt;">${d.article_nom||'—'}</span></div>
+      ${d.longueur_mm ? `<div class="row"><span class="lbl">Dimensions</span><span class="val">${d.longueur_mm}×${d.largeur_mm||'?'} mm</span></div>` : ''}
+    </div>
+  </div>
+  <div class="sec">
+    <div class="sec-h">Client</div>
+    <div class="sec-b">
+      <div class="row"><span class="lbl">Nom</span><span class="val">${d.client_nom||'—'}</span></div>
+      ${d.telephone ? `<div class="row"><span class="lbl">Tél</span><span class="val">${d.telephone}</span></div>` : ''}
+      <div class="row"><span class="lbl">Livraison</span><span class="val">${d.date_livraison_souhaitee?new Date(d.date_livraison_souhaitee).toLocaleDateString('fr-FR'):'—'}</span></div>
+      <div class="row"><span class="lbl">Priorité</span><span class="val">${'⭐'.repeat(d.priorite||1)}</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="qte-big">${parseFloat(d.quantite_demandee).toFixed(0)} kg</div>
+<div class="qte-lbl">QUANTITÉ DEMANDÉE</div>
+
+${d.description ? `<div class="specs"><strong>Spécifications :</strong> ${d.description}</div>` : ''}
+
+${d.numero_of ? `
+<div class="of-link">
+  <div style="font-size:7pt;color:#6b7280;margin-bottom:2px;">Ordre de fabrication généré</div>
+  <div class="of-num">→ ${d.numero_of}</div>
+  ${d.valideur_nom ? `<div style="font-size:7pt;color:#6b7280;">Validé par : ${d.valideur_nom} — ${d.validee_at?new Date(d.validee_at).toLocaleDateString('fr-FR'):'—'}</div>` : ''}
+</div>
+` : `
+<div style="background:#fef3c7;border:1px solid #fde68a;border-radius:4px;padding:6px;text-align:center;font-size:8pt;color:#92400e;margin:6px 0;">
+  ⏳ En attente de validation par la Direction
+</div>
+`}
+
+<div class="qr-wrap">
+  <img src="https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${encodeURIComponent(qr_text)}&color=7c3aed" 
+       alt="QR" width="90" height="90"/>
+  <div style="font-size:6pt;color:#9ca3af;margin-top:2px;">${d.numero_df}</div>
+</div>
+
+<div class="sigs">
+  <div class="sig-box">
+    <div class="sig-title">Demandeur</div>
+    <div class="sig-name">${d.demandeur_nom||'—'}</div>
+    <div class="sig-line">Signature</div>
+  </div>
+  <div class="sig-box">
+    <div class="sig-title">Direction / Validation</div>
+    <div class="sig-name">${d.valideur_nom||'À signer'}</div>
+    <div class="sig-line">Signature</div>
+  </div>
+</div>
+
+<div class="footer">
+  Généré le ${new Date().toLocaleString('fr-FR')} · NAIdo — SOPHOPSY pour NAI
+</div>
+
+<script>window.onload=()=>setTimeout(()=>window.print(),800);</script>
+</body>
+</html>`;
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});

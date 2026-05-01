@@ -370,19 +370,12 @@ function DemandesFabrication() {
                   </td>
                   <td style={{padding:'9px 12px',fontSize:12,color:'#0369a1',fontWeight:600}}>{df.numero_of||'—'}</td>
                   <td style={{padding:'9px 12px',textAlign:'center'}}>
-                    {df.of_id && (
-                      <button
-                        onClick={async()=>{
-                          try {
-                            const {data}=await axios.get(`${API}/ticket-prod/of/${df.of_id}`);
-                            if(data&&data.length>0) window.open(`/api/ticket-prod/${data[0].id}`,'_blank');
-                            else toast('Aucun ticket');
-                          } catch { toast.error('Erreur'); }
-                        }}
-                        style={{background:'#e0f2fe',color:'#0369a1',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>
-                        🖨
-                      </button>
-                    )}
+                    <button
+                      onClick={()=>window.open(`/api/df/${df.id}/ticket`,'_blank')}
+                      title="Imprimer document DF"
+                      style={{background:'#f5f3ff',color:'#7c3aed',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>
+                      🖨
+                    </button>
                   </td>
                   <td style={{padding:'9px 12px',display:'flex',gap:6}}>
                     {df.statut==='en_attente' && isDir && (
