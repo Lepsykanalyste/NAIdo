@@ -371,7 +371,7 @@ function DemandesFabrication() {
                   <td style={{padding:'9px 12px',fontSize:12,color:'#0369a1',fontWeight:600}}>{df.numero_of||'—'}</td>
                   <td style={{padding:'9px 12px',textAlign:'center'}}>
                     <button
-                      onClick={()=>window.open(`/api/df/${df.id}/ticket`,'_blank')}
+                      onClick={()=>window.open(`/api/df/${df.id}/pdf`,'_blank')}
                       title="Imprimer document DF"
                       style={{background:'#f5f3ff',color:'#7c3aed',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>
                       🖨

@@ -2569,3 +2569,131 @@ async def health():
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=3000, reload=False)
+
+# ── PDF TICKETS ────────────────────────────────────────────────
+@app.get("/api/df/{df_id}/pdf")
+async def df_pdf(df_id: str, pool=Depends(get_pool)):
+    try:
+        from weasyprint import HTML
+        import asyncio
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow("""
+                SELECT df.*, 
+                       c.raison_sociale AS client_nom, c.telephone,
+                       a.designation AS article_nom, a.code AS article_code,
+                       a.longueur_mm, a.largeur_mm,
+                       u1.nom||' '||u1.prenom AS demandeur_nom,
+                       u2.nom||' '||u2.prenom AS valideur_nom,
+                       o.numero_of
+                FROM demandes_fabrication df
+                LEFT JOIN clients_complet c ON c.id=df.client_id
+                LEFT JOIN articles a ON a.id=df.article_id
+                LEFT JOIN utilisateurs u1 ON u1.id=df.demandeur_id
+                LEFT JOIN utilisateurs u2 ON u2.id=df.validee_par
+                LEFT JOIN ordres_fabrication o ON o.id=df.of_id
+                WHERE df.id=$1
+            """, df_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="DF introuvable")
+        d = dict(row)
+        
+        from datetime import datetime
+        date_str = d['created_at'].strftime('%d/%m/%Y') if d.get('created_at') else '—'
+        livr_str = d['date_livraison_souhaitee'].strftime('%d/%m/%Y') if d.get('date_livraison_souhaitee') else '—'
+        val_str = d['validee_at'].strftime('%d/%m/%Y') if d.get('validee_at') else '—'
+        
+        couleur = '#15803d' if d['statut']=='validee' else '#dc2626' if d['statut']=='refusee' else '#d97706'
+        bg_couleur = '#dcfce7' if d['statut']=='validee' else '#fee2e2' if d['statut']=='refusee' else '#fef3c7'
+        label_statut = {'en_attente':'En attente','validee':'Validée','refusee':'Refusée','annulee':'Annulée'}.get(d['statut'],d['statut'])
+        etoiles = '⭐' * (d.get('priorite') or 1)
+        
+        qr_text = f"NAI DF\nN: {d['numero_df']}\nARTICLE: {d['article_code']} {d['article_nom']}\nQTE: {d['quantite_demandee']} kg\nCLIENT: {d['client_nom'] or '—'}\nSTATUT: {d['statut']}\nOF: {d.get('numero_of') or '—'}"
+        qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=100x100&data={qr_text.replace(chr(10),'%0A').replace(' ','%20')}&color=7c3aed"
+        
+        html_content = f"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<style>
+  *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  @page {{ size: A5; margin: 10mm; }}
+  body {{ font-family: Arial, sans-serif; font-size: 9pt; color: #1f2937; }}
+  .header {{ border-bottom: 3px solid #7c3aed; padding-bottom: 8px; margin-bottom: 10px; display: flex; justify-content: space-between; }}
+  .company {{ font-size: 14pt; font-weight: 900; color: #7c3aed; }}
+  .banner {{ background: #7c3aed; color: #fff; text-align: center; padding: 6px; border-radius: 4px; margin-bottom: 10px; font-size: 10pt; font-weight: 700; text-transform: uppercase; }}
+  .df-num {{ font-size: 16pt; font-weight: 900; color: #7c3aed; text-align: center; margin: 6px 0 3px; }}
+  .badge {{ display: inline-block; background: {bg_couleur}; color: {couleur}; border: 1px solid {couleur}; border-radius: 12px; padding: 3px 12px; font-weight: 700; font-size: 9pt; }}
+  .grid {{ display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }}
+  .sec {{ border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; }}
+  .sec-h {{ background: #f3f4f6; padding: 3px 8px; font-size: 7pt; font-weight: 700; text-transform: uppercase; color: #374151; border-bottom: 1px solid #e5e7eb; }}
+  .sec-b {{ padding: 6px 8px; }}
+  .row {{ display: flex; justify-content: space-between; margin-bottom: 2px; }}
+  .lbl {{ color: #6b7280; font-size: 7.5pt; }}
+  .val {{ font-weight: 700; color: #111827; font-size: 8pt; }}
+  .qte-big {{ font-size: 18pt; font-weight: 900; color: #7c3aed; text-align: center; margin: 4px 0 2px; }}
+  .qte-lbl {{ text-align: center; font-size: 7pt; color: #6b7280; margin-bottom: 4px; }}
+  .of-link {{ background: #e0f2fe; border: 1px solid #bae6fd; border-radius: 4px; padding: 5px 8px; text-align: center; margin: 6px 0; }}
+  .sigs {{ display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }}
+  .sig-box {{ border: 1px solid #d1d5db; border-radius: 4px; padding: 10px; min-height: 60px; }}
+  .sig-title {{ font-size: 7pt; font-weight: 700; text-transform: uppercase; color: #374151; margin-bottom: 3px; }}
+  .sig-name {{ font-size: 7.5pt; color: #6b7280; margin-bottom: 25px; }}
+  .sig-line {{ border-top: 1px solid #9ca3af; padding-top: 3px; font-size: 6.5pt; color: #9ca3af; text-align: center; }}
+  .footer {{ border-top: 1px solid #e5e7eb; padding-top: 5px; text-align: center; font-size: 6.5pt; color: #9ca3af; margin-top: 6px; }}
+</style>
+</head>
+<body>
+<div class="header">
+  <div><div class="company">NAI</div><div style="font-size:7pt;color:#6b7280;">Atelier 3 — Système de Production</div></div>
+  <div style="text-align:right;"><div style="font-size:7pt;color:#6b7280;">Date : {date_str}</div><div style="font-size:7pt;color:#6b7280;">Demandeur : {d.get('demandeur_nom') or '—'}</div></div>
+</div>
+<div class="banner">📝 Demande de Fabrication</div>
+<div class="df-num">{d['numero_df']}</div>
+<div style="text-align:center;margin-bottom:8px;"><span class="badge">{label_statut}</span></div>
+<div class="grid">
+  <div class="sec">
+    <div class="sec-h">Article à fabriquer</div>
+    <div class="sec-b">
+      <div class="row"><span class="lbl">Code</span><span class="val">{d['article_code'] or '—'}</span></div>
+      <div class="row"><span class="lbl">Désignation</span><span class="val">{d['article_nom'] or '—'}</span></div>
+      {f'<div class="row"><span class="lbl">Dimensions</span><span class="val">{d["longueur_mm"]}x{d["largeur_mm"]} mm</span></div>' if d.get('longueur_mm') else ''}
+    </div>
+  </div>
+  <div class="sec">
+    <div class="sec-h">Client</div>
+    <div class="sec-b">
+      <div class="row"><span class="lbl">Nom</span><span class="val">{d.get('client_nom') or '—'}</span></div>
+      <div class="row"><span class="lbl">Livraison</span><span class="val">{livr_str}</span></div>
+      <div class="row"><span class="lbl">Priorité</span><span class="val">{etoiles}</span></div>
+    </div>
+  </div>
+</div>
+<div class="qte-big">{float(d['quantite_demandee']):.0f} kg</div>
+<div class="qte-lbl">QUANTITÉ DEMANDÉE</div>
+{f'<div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:4px;padding:8px;margin:6px 0;font-size:8pt;"><strong>Spécifications :</strong> {d["description"]}</div>' if d.get('description') else ''}
+{f'<div class="of-link"><div style="font-size:7pt;color:#6b7280;margin-bottom:2px;">Ordre de fabrication généré</div><div style="font-size:13pt;font-weight:800;color:#0369a1;">→ {d["numero_of"]}</div><div style="font-size:7pt;color:#6b7280;">Validé par : {d.get("valideur_nom") or "—"} — {val_str}</div></div>' if d.get('numero_of') else '<div style="background:#fef3c7;border:1px solid #fde68a;border-radius:4px;padding:6px;text-align:center;font-size:8pt;color:#92400e;margin:6px 0;">⏳ En attente de validation</div>'}
+<div style="text-align:center;margin:8px 0;">
+  <img src="{qr_url}" width="90" height="90" alt="QR"/>
+  <div style="font-size:6pt;color:#9ca3af;margin-top:2px;">{d['numero_df']}</div>
+</div>
+<div class="sigs">
+  <div class="sig-box"><div class="sig-title">Demandeur</div><div class="sig-name">{d.get('demandeur_nom') or '—'}</div><div class="sig-line">Signature</div></div>
+  <div class="sig-box"><div class="sig-title">Direction / Validation</div><div class="sig-name">{d.get('valideur_nom') or 'À signer'}</div><div class="sig-line">Signature</div></div>
+</div>
+<div class="footer">Généré le {datetime.now().strftime('%d/%m/%Y %H:%M')} · NAIdo — SOPHOPSY pour NAI</div>
+</body>
+</html>"""
+        
+        pdf_bytes = await asyncio.get_event_loop().run_in_executor(
+            None, lambda: HTML(string=html_content).write_pdf()
+        )
+        
+        from fastapi.responses import Response
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"inline; filename={d['numero_df']}.pdf"}
+        )
+    except ImportError:
+        raise HTTPException(status_code=500, detail="WeasyPrint non installé")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
