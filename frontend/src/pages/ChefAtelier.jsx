@@ -350,7 +350,7 @@ function DemandesFabrication() {
         ) : (
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
             <thead><tr style={{background:'#faf5ff'}}>
-              {['N° DF','Article','Client','Quantité','Livraison souhaitée','Priorité','Statut','OF créé','Actions'].map(h=>(
+              {['N° DF','Article','Client','Quantité','Livraison souhaitée','Priorité','Statut','OF créé','🖨','Actions'].map(h=>(
                 <th key={h} style={{padding:'10px 12px',textAlign:'left',fontWeight:600,color:'#7c3aed',borderBottom:'2px solid #e9d5ff',whiteSpace:'nowrap'}}>{h}</th>
               ))}
             </tr></thead>
@@ -369,6 +369,21 @@ function DemandesFabrication() {
                     </span>
                   </td>
                   <td style={{padding:'9px 12px',fontSize:12,color:'#0369a1',fontWeight:600}}>{df.numero_of||'—'}</td>
+                  <td style={{padding:'9px 12px',textAlign:'center'}}>
+                    {df.of_id && (
+                      <button
+                        onClick={async()=>{
+                          try {
+                            const {data}=await axios.get(`${API}/ticket-prod/of/${df.of_id}`);
+                            if(data&&data.length>0) window.open(`/api/ticket-prod/${data[0].id}`,'_blank');
+                            else toast('Aucun ticket');
+                          } catch { toast.error('Erreur'); }
+                        }}
+                        style={{background:'#e0f2fe',color:'#0369a1',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>
+                        🖨
+                      </button>
+                    )}
+                  </td>
                   <td style={{padding:'9px 12px',display:'flex',gap:6}}>
                     {df.statut==='en_attente' && isDir && (
                       <button onClick={()=>{setShowValider(df);chargerMachines('AT3');}}

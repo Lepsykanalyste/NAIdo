@@ -44,16 +44,7 @@ router.get('/:id', async (req, res) => {
       of_recap: '📋 RÉCAP OF'
     }[t.type_ticket] || '🏭 PRODUCTION';
 
-    const qr_data = [
-      'OF:' + (t.numero_of||''),
-      'TK:' + (t.numero_ticket||''),
-      'ART:' + (t.article_code||''),
-      'MACH:' + (t.machine_code||''),
-      'POIDS:' + (t.poids_net_kg||0),
-      'QTE:' + (t.qte_pieces||0),
-      'DATE:' + date_str,
-      'CLI:' + client
-    ].join('|');
+    const qr_data = `NAI PROD\nOF: ${t.numero_of||''}\nTICKET: ${t.numero_ticket||''}\nARTICLE: ${t.article_code||''} ${t.article_nom||''}\nMACHINE: ${t.machine_code||''}\nPOIDS NET: ${t.poids_net_kg||0} kg\nDATE: ${date_str}\nCLIENT: ${client}`;
 
     const html = `<!DOCTYPE html>
 <html lang="fr">
