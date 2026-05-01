@@ -133,6 +133,37 @@ const MENU = [
 ];
 
 // ══════════════════════════════════════════════════════════════
+// MENU PAR RÔLE
+// ══════════════════════════════════════════════════════════════
+const MENU_PAR_ROLE = {
+  super_admin:   null, // tout
+  directeur:     null, // tout
+  chef_atelier:  ['dashboard','separator1','df','of','production','planning','rapportjour','separator2','articles','matieres','stock','cession','separator3','qhse','gmao','separator4','kpi','ia','alertes'],
+  regleur:       ['dashboard','separator1','of','production','planning','alertes'],
+  commercial:    ['dashboard','separator1','df','separator2b','clients','vente','alertes'],
+  operateur:     ['dashboard','separator1','of','production','alertes'],
+  operateur_ext: ['dashboard','separator1','of','production','alertes'],
+  operateur_sou: ['dashboard','separator1','of','production','alertes'],
+  operateur_imp: ['dashboard','separator1','of','production','alertes'],
+  operateur_dec: ['dashboard','separator1','of','production','cession','alertes'],
+  magasinier:    ['dashboard','separator2','stock','cession','alertes'],
+  magasinier_at3:['dashboard','separator2','stock','cession','alertes'],
+  magasinier_central:['dashboard','separator2','stock','cession','separator2b','vente','alertes'],
+  qualite:       ['dashboard','separator1','of','production','separator3','qhse','alertes'],
+  qhse:          ['dashboard','separator3','qhse','gmao','alertes'],
+  rh:            ['dashboard','separator4b','rh','alertes'],
+  technicien:    ['dashboard','separator3','gmao','alertes'],
+  achat:         ['dashboard','separator2','articles','fournisseurs','achat','alertes'],
+  vente:         ['dashboard','separator2b','clients','vente','alertes'],
+};
+
+function getMenuFiltre(role) {
+  const autorise = MENU_PAR_ROLE[role];
+  if (!autorise) return MENU; // super_admin et directeur voient tout
+  return MENU.filter(item => autorise.includes(item.id));
+}
+
+// ══════════════════════════════════════════════════════════════
 // COMPOSANTS DE SECTION
 // ══════════════════════════════════════════════════════════════
 
@@ -5993,7 +6024,7 @@ export default function ChefAtelier() {
 
         {/* Menu */}
         <nav style={{ flex:1, overflowY:'auto', padding:'8px 0' }}>
-          {MENU.map(item => {
+          {getMenuFiltre(user?.role).map(item => {
             if (item.separator) {
               return sidebarOuverte ? (
                 <div key={item.id} style={{ padding:'12px 14px 4px', fontSize:10, fontWeight:700, color:'#4b5563', letterSpacing:1, textTransform:'uppercase', whiteSpace:'nowrap' }}>
