@@ -6470,7 +6470,7 @@ function Vente() {
           ))}
         </div>
         <button onClick={()=>{ setShowForm(true); setLignes([]); }} style={{background:'#15803d',color:'#fff',border:'none',padding:'9px 20px',borderRadius:8,cursor:'pointer',fontWeight:700,whiteSpace:'nowrap'}}>
-          + Nouvelle vente
+          {user?.role!=='commercial' && (+ Nouvelle vente)}
         </button>
       </div>
 
