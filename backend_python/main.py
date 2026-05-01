@@ -2572,7 +2572,7 @@ if __name__ == "__main__":
 
 # ── PDF TICKETS ────────────────────────────────────────────────
 @app.get("/api/df/{df_id}/pdf")
-async def df_pdf(df_id: str):
+async def df_pdf(df_id: str, token: str = ""):
     try:
         from weasyprint import HTML
         import asyncio
@@ -2609,7 +2609,8 @@ async def df_pdf(df_id: str):
         etoiles = '⭐' * (d.get('priorite') or 1)
         
         qr_text = f"NAI DF\nN: {d['numero_df']}\nARTICLE: {d['article_code']} {d['article_nom']}\nQTE: {d['quantite_demandee']} kg\nCLIENT: {d['client_nom'] or '—'}\nSTATUT: {d['statut']}\nOF: {d.get('numero_of') or '—'}"
-        qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=100x100&data={qr_text.replace(chr(10),'%0A').replace(' ','%20')}&color=7c3aed"
+        pdf_url = f"http://100.85.252.109:8095/api/df/{df_id}/pdf"
+        qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=120x120&data={pdf_url.replace(':','%3A').replace('/','%2F')}&color=7c3aed"
         
         html_content = f"""<!DOCTYPE html>
 <html lang="fr">
