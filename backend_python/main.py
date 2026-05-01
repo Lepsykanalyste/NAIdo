@@ -2572,10 +2572,11 @@ if __name__ == "__main__":
 
 # ── PDF TICKETS ────────────────────────────────────────────────
 @app.get("/api/df/{df_id}/pdf")
-async def df_pdf(df_id: str, pool=Depends(get_pool)):
+async def df_pdf(df_id: str):
     try:
         from weasyprint import HTML
         import asyncio
+        global pool
         async with pool.acquire() as conn:
             row = await conn.fetchrow("""
                 SELECT df.*, 
