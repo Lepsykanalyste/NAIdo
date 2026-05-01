@@ -547,64 +547,89 @@ function DetailOF({ detail, machines, onClose, onRefresh, onStatut }) {
           </button>
         </div>
 
-        {/* Formulaire ajout lot */}
+        {/* Formulaire ajout lot - tout auto */}
         {showAddLot && (
-          <div style={{background:'#fff',borderRadius:8,padding:12,marginBottom:10,border:'1px solid #bbf7d0'}}>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:8,marginBottom:8}}>
+          <div style={{background:'#fff',borderRadius:8,padding:14,marginBottom:10,border:'1px solid #bbf7d0'}}>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginBottom:10}}>
               <div>
-                <div style={{fontSize:10,fontWeight:600,color:'#6b7280',marginBottom:3}}>Type MP (composition article)</div>
+                <div style={{fontSize:10,fontWeight:600,color:'#6b7280',marginBottom:3}}>Type de matière (MP)</div>
                 <select value={lotForm.article_mp_id}
-                  onChange={e=>{setLotForm({...lotForm,article_mp_id:e.target.value,lot_id:'',nom_matiere:'',numero_lot:''});chargerLotsDispo(e.target.value);}}
+                  onChange={e=>{setLotForm(prev=>({...prev,article_mp_id:e.target.value,lot_id:'',nom_matiere:'',numero_lot:'',qte_prevue:'',pourcentage:''}));chargerLotsDispo(e.target.value);}}
                   style={sel}>
-                  <option value="">-- Type MP --</option>
+                  <option value="">-- Choisir type MP --</option>
                   {mpArticles.map(a=><option key={a.id} value={a.id}>{a.code} — {a.designation}</option>)}
                 </select>
               </div>
               <div>
-                <div style={{fontSize:10,fontWeight:600,color:'#6b7280',marginBottom:3}}>Lot en stock (FIFO)</div>
+                <div style={{fontSize:10,fontWeight:600,color:'#6b7280',marginBottom:3}}>
+                  Lot disponible (FIFO — plus ancien en premier)
+                </div>
                 <select value={lotForm.lot_id}
                   onChange={e=>{
                     const l=lotsDispo.find(x=>x.id===e.target.value);
-                    setLotForm({...lotForm,lot_id:e.target.value,
-                      nom_matiere:l?.fournisseur_nom||l?.article_nom||'',
-                      numero_lot:l?.numero_lot||''});
+                    if(l) setLotForm(prev=>({...prev,
+                      lot_id:e.target.value,
+                      nom_matiere:l.fournisseur_nom||l.article_nom||'',
+                      numero_lot:l.numero_lot||''
+                    }));
                   }} style={sel}>
                   <option value="">-- Choisir lot --</option>
                   {lotsDispo.map(l=>(
                     <option key={l.id} value={l.id}>
-                      {l.fournisseur_nom||l.article_nom} — lot {l.numero_lot} ({parseFloat(l.qte_disponible).toFixed(0)} kg)
+                      {l.fournisseur_nom||l.article_nom} | lot {l.numero_lot} | {parseFloat(l.qte_disponible).toFixed(0)} kg dispo
                     </option>
                   ))}
                 </select>
+                {lotForm.lot_id && lotsDispo.find(x=>x.id===lotForm.lot_id) && (
+                  <div style={{fontSize:10,color:'#15803d',marginTop:3}}>
+                    ✓ {lotsDispo.find(x=>x.id===lotForm.lot_id)?.fournisseur_nom} — lot {lotForm.numero_lot} — {parseFloat(lotsDispo.find(x=>x.id===lotForm.lot_id)?.qte_disponible||0).toFixed(0)} kg disponibles
+                  </div>
+                )}
               </div>
               <div>
-                <div style={{fontSize:10,fontWeight:600,color:'#6b7280',marginBottom:3}}>Nom fournisseur/marque</div>
-                <input value={lotForm.nom_matiere}
-                  onChange={e=>setLotForm(prev=>({...prev,nom_matiere:e.target.value}))}
-                  style={sel} placeholder="ex: Exxo, Lotrene, Shell..."/>
+                <div style={{fontSize:10,fontWeight:600,color:'#6b7280',marginBottom:3}}>
+                  Pourcentage dans l'OF (%)
+                  <span style={{fontWeight:400,color:'#9ca3af',marginLeft:4}}>→ calcul poids auto</span>
+                </div>
+                <input type="number" min="0" max="100" step="0.1"
+                  value={lotForm.pourcentage}
+                  onChange={e=>{
+                    const pct=parseFloat(e.target.value||0);
+                    const qte_of=parseFloat(detail.quantite_cible||0);
+                    const qte=qte_of>0?(qte_of*pct/100).toFixed(1):'';
+                    setLotForm(prev=>({...prev,pourcentage:e.target.value,qte_prevue:qte}));
+                  }}
+                  style={sel} placeholder="ex: 70"/>
               </div>
               <div>
-                <div style={{fontSize:10,fontWeight:600,color:'#6b7280',marginBottom:3}}>N° lot</div>
-                <input value={lotForm.numero_lot}
-                  onChange={e=>setLotForm(prev=>({...prev,numero_lot:e.target.value}))}
-                  style={sel} placeholder="ex: lot001"/>
-              </div>
-              <div>
-                <div style={{fontSize:10,fontWeight:600,color:'#6b7280',marginBottom:3}}>Quantité (kg)</div>
-                <input type="number" min="0" value={lotForm.qte_prevue}
-                  onChange={e=>setLotForm(prev=>({...prev,qte_prevue:e.target.value}))}
+                <div style={{fontSize:10,fontWeight:600,color:'#6b7280',marginBottom:3}}>
+                  Poids prévu (kg)
+                  <span style={{fontWeight:400,color:'#9ca3af',marginLeft:4}}>→ calcul % auto</span>
+                </div>
+                <input type="number" min="0" step="0.1"
+                  value={lotForm.qte_prevue}
+                  onChange={e=>{
+                    const qte=parseFloat(e.target.value||0);
+                    const qte_of=parseFloat(detail.quantite_cible||0);
+                    const pct=qte_of>0?(qte/qte_of*100).toFixed(1):'';
+                    setLotForm(prev=>({...prev,qte_prevue:e.target.value,pourcentage:pct}));
+                  }}
                   style={sel} placeholder="kg"/>
               </div>
-              <div>
-                <div style={{fontSize:10,fontWeight:600,color:'#6b7280',marginBottom:3}}>Pourcentage (%)</div>
-                <input type="number" min="0" max="100" value={lotForm.pourcentage}
-                  onChange={e=>setLotForm(prev=>({...prev,pourcentage:e.target.value}))}
-                  style={sel} placeholder="%"/>
+              <div style={{display:'flex',flexDirection:'column',justifyContent:'flex-end'}}>
+                {lotForm.qte_prevue && (
+                  <div style={{fontSize:11,color:'#0369a1',marginBottom:6,background:'#e0f2fe',padding:'4px 8px',borderRadius:6}}>
+                    Reste à affecter : <strong>{(parseFloat(detail.quantite_cible||0)-totalPoids-parseFloat(lotForm.qte_prevue||0)).toFixed(1)} kg</strong>
+                    {' '}({(100-totalPct-parseFloat(lotForm.pourcentage||0)).toFixed(1)}%)
+                  </div>
+                )}
+                <button onClick={addLot}
+                  disabled={!lotForm.lot_id || !lotForm.qte_prevue}
+                  style={{background:lotForm.lot_id&&lotForm.qte_prevue?'#15803d':'#d1d5db',color:'#fff',border:'none',borderRadius:6,padding:'8px 16px',cursor:lotForm.lot_id&&lotForm.qte_prevue?'pointer':'not-allowed',fontSize:12,fontWeight:700}}>
+                  + Confirmer
+                </button>
               </div>
             </div>
-            <button onClick={addLot} style={{background:'#15803d',color:'#fff',border:'none',borderRadius:6,padding:'6px 16px',cursor:'pointer',fontSize:12,fontWeight:700}}>
-              + Ajouter cette matière
-            </button>
           </div>
         )}
 
