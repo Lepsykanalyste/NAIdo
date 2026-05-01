@@ -1004,6 +1004,71 @@ onClick={()=>window.open(`/api/of/${of.id}/pdf`,'_blank')}
   );
 }
 
+function DashboardCommercial() {
+  const [dfs, setDfs] = useState([]);
+  const [stock, setStock] = useState({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([
+      axios.get(`${API}/df`).catch(()=>({data:[]})),
+      axios.get(`${API}/stock/resume`).catch(()=>({data:{}})),
+    ]).then(([d,s])=>{
+      setDfs(Array.isArray(d.data)?d.data:[]);
+      setStock(s.data||{});
+    }).finally(()=>setLoading(false));
+  }, []);
+
+  const dfEnAttente = dfs.filter(d=>d.statut==='en_attente').length;
+  const dfValidees = dfs.filter(d=>d.statut==='validee').length;
+
+  return (
+    <div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12,marginBottom:20}}>
+        {[
+          {icon:'📝',label:'DF en attente',value:dfEnAttente,color:'#d97706',bg:'#fef3c7'},
+          {icon:'✅',label:'DF validées → OF',value:dfValidees,color:'#15803d',bg:'#dcfce7'},
+          {icon:'📦',label:'Valeur stock',value:stock.valeur_totale?parseFloat(stock.valeur_totale).toLocaleString('fr-FR')+' FCFA':'—',color:'#7c3aed',bg:'#f5f3ff'},
+        ].map(k=>(
+          <div key={k.label} style={{background:k.bg,borderRadius:12,padding:'16px'}}>
+            <div style={{fontSize:10,color:'#6b7280',marginBottom:4}}>{k.icon} {k.label}</div>
+            <div style={{fontSize:22,fontWeight:800,color:k.color}}>{k.value}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{background:'#fff',borderRadius:14,border:'1px solid #e5e7eb',overflow:'hidden'}}>
+        <div style={{padding:'14px 20px',borderBottom:'1px solid #e5e7eb',fontWeight:700,fontSize:14}}>📝 Mes demandes de fabrication</div>
+        {loading ? <div style={{padding:20,textAlign:'center',color:'#6b7280'}}>Chargement...</div> :
+        dfs.length===0 ? <div style={{padding:30,textAlign:'center',color:'#6b7280'}}>Aucune demande — créez la première via le menu</div> :
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+          <thead><tr style={{background:'#faf5ff'}}>
+            {['N° DF','Article','Client','Quantité','Livraison','Statut','OF'].map(h=>(
+              <th key={h} style={{padding:'8px 12px',textAlign:'left',fontWeight:600,color:'#7c3aed',borderBottom:'2px solid #e9d5ff'}}>{h}</th>
+            ))}
+          </tr></thead>
+          <tbody>
+            {dfs.slice(0,10).map((df,i)=>(
+              <tr key={df.id} style={{borderBottom:'1px solid #f3f4f6',background:i%2===0?'#fff':'#fafafa'}}>
+                <td style={{padding:'8px 12px',fontWeight:700,color:'#7c3aed'}}>{df.numero_df}</td>
+                <td style={{padding:'8px 12px'}}>{df.article_nom}</td>
+                <td style={{padding:'8px 12px',fontSize:12}}>{df.client_nom||'—'}</td>
+                <td style={{padding:'8px 12px',fontWeight:600}}>{parseFloat(df.quantite_demandee).toFixed(0)} kg</td>
+                <td style={{padding:'8px 12px',fontSize:12}}>{df.date_livraison_souhaitee?new Date(df.date_livraison_souhaitee).toLocaleDateString('fr-FR'):'—'}</td>
+                <td style={{padding:'8px 12px'}}>
+                  <span style={{background:df.statut==='validee'?'#dcfce7':df.statut==='refusee'?'#fee2e2':'#fef3c7',color:df.statut==='validee'?'#15803d':df.statut==='refusee'?'#dc2626':'#d97706',padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:700}}>
+                    {df.statut==='validee'?'✅ Validée':df.statut==='refusee'?'❌ Refusée':'⏳ En attente'}
+                  </span>
+                </td>
+                <td style={{padding:'8px 12px',fontWeight:600,color:'#0369a1'}}>{df.numero_of||'—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>}
+      </div>
+    </div>
+  );
+}
+
 function Dashboard() {
   const { user } = useAuth();
   const [data, setData] = useState({ sessions_actives:0, trs_moyen:0, poids_net_total:0, poids_dechets_total:0, nb_tickets:0, arrets_actifs:0, alertes_rebus:[] });
