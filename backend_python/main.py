@@ -2699,3 +2699,208 @@ async def df_pdf(df_id: str, token: str = ""):
         raise HTTPException(status_code=500, detail="WeasyPrint non installé")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── PDF ORDRE DE FABRICATION ───────────────────────────────────
+@app.get("/api/of/{of_id}/pdf")
+async def of_pdf(of_id: str):
+    try:
+        from weasyprint import HTML
+        import asyncio
+        global pool
+        async with pool.acquire() as conn:
+            row = await conn.fetchrow("""
+                SELECT o.*,
+                       c.raison_sociale AS client_nom, c.telephone,
+                       a.designation AS article_nom, a.code AS article_code,
+                       a.longueur_mm, a.largeur_mm, a.composition,
+                       m.code AS machine_code, m.nom AS machine_nom,
+                       u.nom||' '||u.prenom AS chef_nom
+                FROM ordres_fabrication o
+                LEFT JOIN clients_complet c ON c.id=o.client_id
+                LEFT JOIN articles a ON a.id=o.article_id
+                LEFT JOIN machines m ON m.id=o.machine_id
+                LEFT JOIN utilisateurs u ON u.login='admin'
+                WHERE o.id=$1
+            """, of_id)
+            lots = await conn.fetch("""
+                SELECT ocl.*, a.code AS mp_code, a.designation AS mp_nom,
+                       ocl.nom_matiere, ocl.numero_lot,
+                       ocl.qte_prevue, ocl.pourcentage
+                FROM of_composition_lots ocl
+                LEFT JOIN articles a ON a.id=ocl.article_mp_id
+                WHERE ocl.of_id=$1 ORDER BY ocl.created_at
+            """, of_id)
+
+        if not row:
+            raise HTTPException(status_code=404, detail="OF introuvable")
+        d = dict(row)
+        lots_list = [dict(l) for l in lots]
+
+        from datetime import datetime
+        date_str = d['created_at'].strftime('%d/%m/%Y') if d.get('created_at') else '—'
+        livr_str = d['date_livraison_prevue'].strftime('%d/%m/%Y') if d.get('date_livraison_prevue') else '—'
+        debut_str = d['date_debut_prevue'].strftime('%d/%m/%Y') if d.get('date_debut_prevue') else '—'
+
+        statut_colors = {
+            'planifie': ('#0369a1','#e0f2fe'),
+            'lance': ('#7c3aed','#f5f3ff'),
+            'en_cours': ('#d97706','#fef3c7'),
+            'pause': ('#6b7280','#f3f4f6'),
+            'termine': ('#15803d','#dcfce7'),
+            'annule': ('#dc2626','#fee2e2'),
+        }
+        col, bg = statut_colors.get(d['statut'], ('#6b7280','#f3f4f6'))
+        label_statut = {'planifie':'Planifié','lance':'Lancé','en_cours':'En cours','pause':'En pause','termine':'Terminé','annule':'Annulé'}.get(d['statut'],d['statut'])
+        etoiles = '★' * (d.get('priorite') or 1)
+
+        lots_html = ''
+        if lots_list:
+            rows_html = ''
+            for i,l in enumerate(lots_list):
+                bg_row = '#f9fafb' if i%2==0 else '#fff'
+                rows_html += f"""<tr style="background:{bg_row};">
+                    <td style="padding:5px 8px;">{l.get('mp_code') or '—'}</td>
+                    <td style="padding:5px 8px;font-weight:700;">{l.get('nom_matiere') or l.get('mp_nom') or '—'}</td>
+                    <td style="padding:5px 8px;font-family:monospace;">{l.get('numero_lot') or '—'}</td>
+                    <td style="padding:5px 8px;font-weight:700;">{float(l.get('qte_prevue') or 0):.1f} kg</td>
+                    <td style="padding:5px 8px;">{float(l.get('pourcentage') or 0):.1f}%</td>
+                </tr>"""
+            total_poids = sum(float(l.get('qte_prevue') or 0) for l in lots_list)
+            total_pct = sum(float(l.get('pourcentage') or 0) for l in lots_list)
+            lots_html = f"""
+            <div style="margin-top:10px;">
+              <div style="background:#f3f4f6;padding:4px 8px;font-size:7pt;font-weight:700;text-transform:uppercase;color:#374151;border:1px solid #e5e7eb;border-bottom:none;border-radius:4px 4px 0 0;">🧪 Composition matières premières</div>
+              <table style="width:100%;border-collapse:collapse;font-size:8pt;border:1px solid #e5e7eb;">
+                <thead><tr style="background:#15803d;color:#fff;">
+                  <th style="padding:5px 8px;text-align:left;">Type MP</th>
+                  <th style="padding:5px 8px;text-align:left;">Marque/Fournisseur</th>
+                  <th style="padding:5px 8px;text-align:left;">N° Lot</th>
+                  <th style="padding:5px 8px;text-align:left;">Qté prévue</th>
+                  <th style="padding:5px 8px;text-align:left;">%</th>
+                </tr></thead>
+                <tbody>{rows_html}</tbody>
+                <tfoot><tr style="background:#dcfce7;font-weight:700;">
+                  <td colspan="3" style="padding:5px 8px;color:#15803d;">TOTAL</td>
+                  <td style="padding:5px 8px;">{total_poids:.1f} kg</td>
+                  <td style="padding:5px 8px;">{total_pct:.1f}%</td>
+                </tr></tfoot>
+              </table>
+            </div>"""
+
+        pdf_url = f"http://100.85.252.109:8095/api/of/{of_id}/pdf"
+        qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=100x100&data={pdf_url.replace(':','%3A').replace('/','%2F')}&color=0369a1"
+
+        html_content = f"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<style>
+  *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  @page {{ size: A4; margin: 12mm; }}
+  body {{ font-family: Arial, sans-serif; font-size: 9pt; color: #1f2937; }}
+  .header {{ border-bottom: 3px solid #0369a1; padding-bottom: 8px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: flex-start; }}
+  .company {{ font-size: 16pt; font-weight: 900; color: #0369a1; }}
+  .banner {{ background: #0369a1; color: #fff; text-align: center; padding: 7px; border-radius: 4px; margin-bottom: 10px; font-size: 11pt; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }}
+  .of-num {{ font-size: 20pt; font-weight: 900; color: #0369a1; text-align: center; margin: 6px 0 3px; }}
+  .grid2 {{ display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }}
+  .grid3 {{ display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px; }}
+  .sec {{ border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; }}
+  .sec-h {{ background: #f3f4f6; padding: 4px 8px; font-size: 7pt; font-weight: 700; text-transform: uppercase; color: #374151; border-bottom: 1px solid #e5e7eb; }}
+  .sec-b {{ padding: 7px 8px; }}
+  .row {{ display: flex; justify-content: space-between; margin-bottom: 3px; }}
+  .lbl {{ color: #6b7280; font-size: 7.5pt; }}
+  .val {{ font-weight: 700; color: #111827; font-size: 8.5pt; }}
+  .qte-big {{ font-size: 22pt; font-weight: 900; color: #0369a1; text-align: center; margin: 6px 0 2px; }}
+  .badge {{ display: inline-block; background: {bg}; color: {col}; border: 1px solid {col}; border-radius: 12px; padding: 3px 14px; font-weight: 700; font-size: 9pt; }}
+  .sigs {{ display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-top: 14px; }}
+  .sig-box {{ border: 1px solid #d1d5db; border-radius: 4px; padding: 10px; min-height: 70px; }}
+  .sig-title {{ font-size: 7pt; font-weight: 700; text-transform: uppercase; color: #374151; margin-bottom: 3px; }}
+  .sig-name {{ font-size: 7.5pt; color: #6b7280; margin-bottom: 30px; }}
+  .sig-line {{ border-top: 1px solid #9ca3af; padding-top: 3px; font-size: 6.5pt; color: #9ca3af; text-align: center; }}
+  .footer {{ border-top: 1px solid #e5e7eb; padding-top: 5px; text-align: center; font-size: 6.5pt; color: #9ca3af; margin-top: 10px; }}
+</style>
+</head>
+<body>
+<div class="header">
+  <div>
+    <div class="company">NAI</div>
+    <div style="font-size:7.5pt;color:#6b7280;">Atelier 3 — Système de Production MES</div>
+  </div>
+  <div style="text-align:right;">
+    <div style="font-size:7pt;color:#6b7280;">Créé le : {date_str}</div>
+    <div style="font-size:7pt;color:#6b7280;">Début prévu : {debut_str}</div>
+    <img src="{qr_url}" width="70" height="70" alt="QR"/>
+  </div>
+</div>
+
+<div class="banner">📋 Ordre de Fabrication</div>
+<div class="of-num">{d['numero_of']}</div>
+<div style="text-align:center;margin-bottom:10px;"><span class="badge">{label_statut}</span> <span style="font-size:12pt;">{etoiles}</span></div>
+
+<div class="grid2">
+  <div class="sec">
+    <div class="sec-h">Article à fabriquer</div>
+    <div class="sec-b">
+      <div class="row"><span class="lbl">Code</span><span class="val">{d['article_code'] or '—'}</span></div>
+      <div class="row"><span class="lbl">Désignation</span><span class="val">{d['article_nom'] or '—'}</span></div>
+      {f'<div class="row"><span class="lbl">Dimensions</span><span class="val">{d["longueur_mm"]}x{d["largeur_mm"]} mm</span></div>' if d.get('longueur_mm') else ''}
+      {f'<div class="row"><span class="lbl">Composition</span><span class="val" style="font-size:7pt;">{d["composition"]}</span></div>' if d.get('composition') else ''}
+    </div>
+  </div>
+  <div class="sec">
+    <div class="sec-h">Client</div>
+    <div class="sec-b">
+      <div class="row"><span class="lbl">Nom</span><span class="val">{d.get('client_nom') or '—'}</span></div>
+      {f'<div class="row"><span class="lbl">Tél</span><span class="val">{d["telephone"]}</span></div>' if d.get('telephone') else ''}
+      <div class="row"><span class="lbl">Livraison prévue</span><span class="val">{livr_str}</span></div>
+    </div>
+  </div>
+</div>
+
+<div class="grid3">
+  <div class="sec">
+    <div class="sec-h">Production</div>
+    <div class="sec-b">
+      <div class="row"><span class="lbl">Atelier</span><span class="val">{d.get('atelier_id') or '—'}</span></div>
+      <div class="row"><span class="lbl">Machine</span><span class="val">{d.get('machine_code') or '—'} {d.get('machine_nom') or ''}</span></div>
+    </div>
+  </div>
+  <div>
+    <div class="qte-big">{float(d['quantite_cible'] or 0):.0f} kg</div>
+    <div style="text-align:center;font-size:7pt;color:#6b7280;">QUANTITÉ CIBLE</div>
+  </div>
+  <div class="sec">
+    <div class="sec-h">Temps</div>
+    <div class="sec-b">
+      <div class="row"><span class="lbl">Temps prévu</span><span class="val">{d.get('temps_prevu_min') or '—'} min</span></div>
+      <div class="row"><span class="lbl">Début prévu</span><span class="val">{debut_str}</span></div>
+    </div>
+  </div>
+</div>
+
+{f'<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:4px;padding:8px;margin-bottom:10px;font-size:8pt;"><strong>Instructions :</strong> {d["instructions"]}</div>' if d.get('instructions') else ''}
+
+{lots_html}
+
+<div class="sigs">
+  <div class="sig-box"><div class="sig-title">Chef d'Atelier</div><div class="sig-name">{d.get('chef_nom') or '—'}</div><div class="sig-line">Signature</div></div>
+  <div class="sig-box"><div class="sig-title">Régleur</div><div class="sig-name">À compléter</div><div class="sig-line">Signature</div></div>
+  <div class="sig-box"><div class="sig-title">Opérateur</div><div class="sig-name">À compléter</div><div class="sig-line">Signature</div></div>
+</div>
+
+<div class="footer">Généré le {datetime.now().strftime('%d/%m/%Y %H:%M')} · OF {d['numero_of']} · NAIdo — SOPHOPSY pour NAI</div>
+</body>
+</html>"""
+
+        pdf_bytes = await asyncio.get_event_loop().run_in_executor(
+            None, lambda: HTML(string=html_content).write_pdf()
+        )
+        from fastapi.responses import Response
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"inline; filename={d['numero_of']}.pdf"}
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

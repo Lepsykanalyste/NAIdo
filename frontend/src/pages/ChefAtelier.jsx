@@ -953,16 +953,7 @@ function OrdresFabrication() {
                 </td>
                 <td style={{padding:'9px 12px',textAlign:'center'}} onClick={e=>e.stopPropagation()}>
                   <button
-                    onClick={async()=>{
-                      try {
-                        const {data} = await axios.get(`${API}/ticket-prod/of/${of.id}`);
-                        if(data && data.length>0) {
-                          window.open(`/api/ticket-prod/${data[0].id}`,'_blank');
-                        } else {
-                          toast('Aucun ticket pour cet OF');
-                        }
-                      } catch { toast.error('Erreur tickets'); }
-                    }}
+onClick={()=>window.open(`/api/of/${of.id}/pdf`,'_blank')}
                     title="Voir tickets"
                     style={{background:'#e0f2fe',color:'#0369a1',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>
                     🖨
