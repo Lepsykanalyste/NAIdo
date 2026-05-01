@@ -982,6 +982,7 @@ function Dashboard() {
   const [machinesStatut, setMachinesStatut] = useState([]);
   const [alertes, setAlertes] = useState([]);
   const [ateliersDash, setAteliersDash] = useState([]);
+  const [dossiersOuverts, setDossiersOuverts] = useState({});
 
   const charger = async () => {
     try {
@@ -1041,7 +1042,7 @@ function Dashboard() {
               minWidth:120
             }}>
               {/* En-tête dossier */}
-              <button onClick={()=>setVueMode(atelier.code.toLowerCase())} style={{
+              <button onClick={()=>{setVueMode(atelier.code.toLowerCase());setDossiersOuverts(prev=>({...prev,[atelier.code]:!prev[atelier.code]}));}} style={{
                 width:'100%',padding:'8px 12px',border:'none',cursor:'pointer',
                 background:vueMode===atelier.code.toLowerCase()?'#0369a1':estActif?'#e0f2fe':'#f9fafb',
                 color:vueMode===atelier.code.toLowerCase()?'#fff':'#374151',
@@ -1052,7 +1053,7 @@ function Dashboard() {
                 {enfants.length>0 && <span style={{marginLeft:'auto',fontSize:10,opacity:0.7}}>{estActif?'▾':'▸'}</span>}
               </button>
               {/* Sous-départements */}
-              {enfants.length>0 && (
+              {enfants.length>0 && (dossiersOuverts[atelier.code] || enfants.some(e=>vueMode===e.code.toLowerCase())) && (
                 <div style={{background:'#fff',borderTop:'1px solid #e5e7eb'}}>
                   {enfants.map(dep => {
                     const iconeDep = dep.code.includes('EXT')?'🔥':dep.code.includes('SOU')?'⚡':dep.code.includes('IMP')?'🖨':dep.code.includes('DEC')?'📦':dep.code.includes('MAG')?'🏪':'⚙';
