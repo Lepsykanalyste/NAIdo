@@ -1019,45 +1019,60 @@ function Dashboard() {
 
   return (
     <div>
-      {/* Sélecteur de vue hiérarchique */}
-      <div style={{marginBottom:20}}>
-        {/* Ligne 1 - Vue générale + Services */}
-        <div style={{display:'flex',gap:6,marginBottom:6,flexWrap:'wrap'}}>
-          {[
-            ['general','🏭 Vue Générale','#1d4ed8'],
-            ['mag','🏪 Magasin','#0891b2'],
-            ['meca','🔧 Mécanique','#6b7280'],
-            ['qhse','🛡 QHSE','#dc2626'],
-            ['rh','👥 RH','#7c3aed'],
-          ].map(([id,label,color])=>(
-            <button key={id} onClick={()=>setVueMode(id)} style={{
-              padding:'8px 16px',border:'2px solid',borderRadius:8,cursor:'pointer',fontSize:12,fontWeight:700,
-              borderColor:vueMode===id?color:'#e5e7eb',
-              background:vueMode===id?color:'#fff',
-              color:vueMode===id?'#fff':'#6b7280'
-            }}>{label}</button>
-          ))}
-          <button onClick={charger} style={{padding:'8px 12px',border:'1px solid #e5e7eb',background:'#f3f4f6',cursor:'pointer',borderRadius:8}}>🔄</button>
-        </div>
-        {/* Ligne 2 - AT3 et ses départements */}
-        <div style={{display:'flex',gap:4,flexWrap:'wrap',background:'#f0f9ff',borderRadius:10,padding:'8px',border:'1px solid #bae6fd'}}>
-          <span style={{fontSize:11,fontWeight:700,color:'#0369a1',padding:'6px 8px',alignSelf:'center'}}>AT3 :</span>
-          {[
-            ['at3','🏭 Production complète','#0369a1'],
-            ['at3-ext','🔥 Extrusion','#d97706'],
-            ['at3-sou','⚡ Soudure','#7c3aed'],
-            ['at3-imp','🖨 Impression','#0891b2'],
-            ['at3-dec','📦 Découpe/Emballage','#15803d'],
-            ['at3-mag','🏪 Stock AT3','#6b7280'],
-          ].map(([id,label,color])=>(
-            <button key={id} onClick={()=>setVueMode(id)} style={{
-              padding:'7px 12px',border:'2px solid',borderRadius:7,cursor:'pointer',fontSize:12,fontWeight:700,
-              borderColor:vueMode===id?color:'#bae6fd',
-              background:vueMode===id?color:'#fff',
-              color:vueMode===id?'#fff':'#374151'
-            }}>{label}</button>
-          ))}
-        </div>
+      {/* Navigation en dossiers ateliers */}
+      <div style={{marginBottom:20,display:'flex',gap:12,flexWrap:'wrap',alignItems:'flex-start'}}>
+        {/* Vue générale */}
+        <button onClick={()=>setVueMode('general')} style={{
+          padding:'10px 18px',border:'2px solid',borderRadius:10,cursor:'pointer',fontSize:13,fontWeight:700,
+          borderColor:vueMode==='general'?'#1d4ed8':'#e5e7eb',
+          background:vueMode==='general'?'#1d4ed8':'#fff',
+          color:vueMode==='general'?'#fff':'#374151'
+        }}>🏭 Vue Générale</button>
+
+        {/* Dossiers ateliers depuis DB */}
+        {(ateliersDash||[]).filter(a=>!a.parent_code).map(atelier => {
+          const enfants = (ateliersDash||[]).filter(e=>e.parent_code===atelier.code);
+          const iconeAtelier = atelier.type==='production'?'🏭':atelier.type==='magasin'?'🏪':atelier.type==='mecanique'?'🔧':atelier.type==='qhse'?'🛡':atelier.type==='rh'?'👥':atelier.type==='achat'?'🛒':atelier.type==='vente'?'💼':atelier.type==='transit'?'🚛':'🏢';
+          const estActif = vueMode===atelier.code.toLowerCase() || enfants.some(e=>vueMode===e.code.toLowerCase());
+          return (
+            <div key={atelier.code} style={{
+              border:'2px solid',borderRadius:10,overflow:'hidden',
+              borderColor:estActif?'#0369a1':'#e5e7eb',
+              minWidth:120
+            }}>
+              {/* En-tête dossier */}
+              <button onClick={()=>setVueMode(atelier.code.toLowerCase())} style={{
+                width:'100%',padding:'8px 12px',border:'none',cursor:'pointer',
+                background:vueMode===atelier.code.toLowerCase()?'#0369a1':estActif?'#e0f2fe':'#f9fafb',
+                color:vueMode===atelier.code.toLowerCase()?'#fff':'#374151',
+                fontWeight:700,fontSize:12,textAlign:'left',display:'flex',alignItems:'center',gap:6
+              }}>
+                <span>{iconeAtelier}</span>
+                <span>{atelier.libelle}</span>
+                {enfants.length>0 && <span style={{marginLeft:'auto',fontSize:10,opacity:0.7}}>{estActif?'▾':'▸'}</span>}
+              </button>
+              {/* Sous-départements */}
+              {enfants.length>0 && (
+                <div style={{background:'#fff',borderTop:'1px solid #e5e7eb'}}>
+                  {enfants.map(dep => {
+                    const iconeDep = dep.code.includes('EXT')?'🔥':dep.code.includes('SOU')?'⚡':dep.code.includes('IMP')?'🖨':dep.code.includes('DEC')?'📦':dep.code.includes('MAG')?'🏪':'⚙';
+                    return (
+                      <button key={dep.code} onClick={()=>setVueMode(dep.code.toLowerCase())} style={{
+                        width:'100%',padding:'6px 12px 6px 24px',border:'none',borderBottom:'1px solid #f3f4f6',cursor:'pointer',
+                        background:vueMode===dep.code.toLowerCase()?'#dbeafe':'#fff',
+                        color:vueMode===dep.code.toLowerCase()?'#1d4ed8':'#6b7280',
+                        fontSize:11,fontWeight:vueMode===dep.code.toLowerCase()?700:500,textAlign:'left'
+                      }}>
+                        {iconeDep} {dep.libelle.replace(/AT3 — /,'')}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        <button onClick={charger} style={{padding:'10px 12px',border:'1px solid #e5e7eb',background:'#f3f4f6',cursor:'pointer',borderRadius:10,alignSelf:'flex-start'}}>🔄</button>
       </div>
 
       {/* ══ VUE GÉNÉRALE NAI ══ */}
