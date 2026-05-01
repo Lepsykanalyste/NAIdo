@@ -1052,7 +1052,7 @@ function Dashboard() {
   return (
     <div>
       {/* Navigation en dossiers ateliers */}
-      <div style={{marginBottom:20,display:'flex',gap:12,flexWrap:'wrap',alignItems:'flex-start'}}>
+      {!['commercial','vente','achat','rh','qhse'].includes(user?.role||'') && (<div style={{marginBottom:20,display:'flex',gap:12,flexWrap:'wrap',alignItems:'flex-start'}}>
         {/* Vue générale */}
         <button onClick={()=>setVueMode('general')} style={{
           padding:'10px 18px',border:'2px solid',borderRadius:10,cursor:'pointer',fontSize:13,fontWeight:700,
@@ -1105,10 +1105,15 @@ function Dashboard() {
           );
         })}
         <button onClick={charger} style={{padding:'10px 12px',border:'1px solid #e5e7eb',background:'#f3f4f6',cursor:'pointer',borderRadius:10,alignSelf:'flex-start'}}>🔄</button>
-      </div>
+      </div>)}
+
+      {/* ══ VUE COMMERCIAL ══ */}
+      {vueMode==='general' && user?.role==='commercial' && (
+        <DashboardCommercial />
+      )}
 
       {/* ══ VUE GÉNÉRALE NAI ══ */}
-      {vueMode==='general' && (
+      {vueMode==='general' && user?.role!=='commercial' && (
         <div>
           {/* KPIs production */}
           <div style={{fontSize:11,fontWeight:700,color:'#6b7280',letterSpacing:1,textTransform:'uppercase',marginBottom:10}}>📊 Production temps réel</div>
