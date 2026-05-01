@@ -110,6 +110,7 @@ const MENU = [
   { id:'matieres',    label:'Matières Premières',   icon:'articles',    color:'#1d4ed8' },
   { id:'stock',       label:'Stock',               icon:'stock',       color:'#6d28d9' },
   { id:'cession',     label:'Bons de Cession',     icon:'cession',     color:'#4338ca' },
+  { id:'ol',          label:'Ordres de Livraison', icon:'cession',     color:'#15803d' },
   { id:'separator2b', label:'VENTE & ACHAT',        separator:true },
   { id:'clients',     label:'Clients',             icon:'articles',    color:'#0369a1' },
   { id:'vente',       label:'Ventes',              icon:'stock',       color:'#15803d' },
@@ -140,7 +141,7 @@ const MENU_PAR_ROLE = {
   directeur:     null, // tout
   chef_atelier:  ['dashboard','separator1','df','of','production','planning','rapportjour','separator2','articles','matieres','stock','cession','separator3','qhse','gmao','separator4','kpi','ia','alertes'],
   regleur:       ['dashboard','separator1','of','production','planning','alertes'],
-  commercial:    ['dashboard','separator1','df','separator2b','clients','vente','alertes'],
+  commercial:    ['dashboard','separator1','df','ol','separator2b','clients','vente','alertes'],
   operateur:     ['dashboard','separator1','of','production','alertes'],
   operateur_ext: ['dashboard','separator1','of','production','alertes'],
   operateur_sou: ['dashboard','separator1','of','production','alertes'],

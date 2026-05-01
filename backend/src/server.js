@@ -62,6 +62,7 @@ app.use('/api/planning',       require('./routes/planning'));
 // Import
 app.use('/api/import',         require('./routes/import'));
 // Qualité
+app.use('/api/ol', require('./routes/ordres_livraison'));
 app.use('/api/ticket-prod',      require('./routes/ticket_prod'));
 app.use('/api/df',                require('./routes/demandes_fab'));
 app.use('/api/lots-prod',          require('./routes/lots_prod'));
