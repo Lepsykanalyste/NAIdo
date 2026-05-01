@@ -912,7 +912,7 @@ function OrdresFabrication() {
       <div style={{background:'#fff',borderRadius:14,border:'1px solid #e5e7eb',overflow:'hidden'}}>
         <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
           <thead><tr style={{background:'#f0f9ff'}}>
-            {['N° OF','Article','Client','Machine','Atelier','Qté cible','Temps prévu','Livraison','Priorité','Statut','Actions'].map(h=>(
+            {['N° OF','Article','Client','Machine','Atelier','Qté cible','Temps prévu','Livraison','Priorité','Statut','🖨','Actions'].map(h=>(
               <th key={h} style={{padding:'10px 12px',textAlign:'left',fontWeight:600,color:'#0369a1',borderBottom:'2px solid #bae6fd',whiteSpace:'nowrap'}}>{h}</th>
             ))}
           </tr></thead>
@@ -942,6 +942,23 @@ function OrdresFabrication() {
                   <span style={{background:bgStatut(of.statut),color:couleurStatut(of.statut),padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:700}}>
                     {labelStatut(of.statut)}
                   </span>
+                </td>
+                <td style={{padding:'9px 12px',textAlign:'center'}} onClick={e=>e.stopPropagation()}>
+                  <button
+                    onClick={async()=>{
+                      try {
+                        const {data} = await axios.get(`${API}/ticket-prod/of/${of.id}`);
+                        if(data && data.length>0) {
+                          window.open(`/api/ticket-prod/${data[0].id}`,'_blank');
+                        } else {
+                          toast('Aucun ticket pour cet OF');
+                        }
+                      } catch { toast.error('Erreur tickets'); }
+                    }}
+                    title="Voir tickets"
+                    style={{background:'#e0f2fe',color:'#0369a1',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>
+                    🖨
+                  </button>
                 </td>
                 <td style={{padding:'9px 12px'}} onClick={e=>e.stopPropagation()}>
                   {of.statut==='planifie' && <button onClick={()=>changerStatut(of.id,'lance')} style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>▶</button>}

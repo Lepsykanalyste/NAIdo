@@ -4,7 +4,7 @@ const db = require('../config/db');
 const { auth } = require('../middleware/auth');
 
 // GET /api/ticket-prod/:id — HTML du ticket
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', async (req, res) => {
   try {
     const { rows } = await db.query(`
       SELECT t.*,
@@ -166,7 +166,9 @@ ${t.etape_dest ? `
 ` : ''}
 
 <div class="qr-wrap">
-  <canvas id="qr"></canvas>
+  <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(qr_data)}&color=0369a1" 
+       alt="QR Code" width="100" height="100"
+       onerror="this.style.display='none'"/>
   <div class="qr-data">${qr_data}</div>
 </div>
 
@@ -175,15 +177,8 @@ ${t.etape_dest ? `
   <strong>NAIdo — SOPHOPSY pour NAI</strong>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
-  new QRCode(document.getElementById('qr'), {
-    text: "${qr_data}",
-    width: 100, height: 100,
-    colorDark: '#0369a1', colorLight: '#ffffff',
-    correctLevel: QRCode.CorrectLevel.M
-  });
-  window.onload = () => setTimeout(() => window.print(), 800);
+  window.onload = () => setTimeout(() => window.print(), 1200);
 </script>
 </body>
 </html>`;
@@ -194,7 +189,7 @@ ${t.etape_dest ? `
 });
 
 // GET /api/ticket-prod/of/:of_id — tous les tickets d'un OF
-router.get('/of/:of_id', auth, async (req, res) => {
+router.get('/of/:of_id', async (req, res) => {
   try {
     const { rows } = await db.query(`
       SELECT t.id, t.numero_ticket, t.type_ticket, t.created_at,
