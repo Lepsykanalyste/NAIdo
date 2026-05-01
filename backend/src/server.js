@@ -62,6 +62,8 @@ app.use('/api/planning',       require('./routes/planning'));
 // Import
 app.use('/api/import',         require('./routes/import'));
 // Qualité
+app.use('/api/df',                require('./routes/demandes_fab'));
+app.use('/api/lots-prod',          require('./routes/lots_prod'));
 app.use('/api/qualite',        require('./routes/qualite'));
 // Traçabilité
 app.use('/api/tracabilite',    require('./routes/tracabilite'));
@@ -78,3 +80,5 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => console.log(`NAIdo v3 démarré sur le port ${PORT}`));
 module.exports = app;
+
+// Routes additionnelles
