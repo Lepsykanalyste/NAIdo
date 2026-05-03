@@ -286,7 +286,10 @@ function GestionDevis() {
   const labelStatut = s => ({brouillon:'Brouillon',envoye:'Envoyé',accepte:'Accepté',refuse:'Refusé',expire:'Expiré',transforme:'→ BC créé'}[s]||s);
   const sel = {width:'100%',padding:'7px 10px',borderRadius:7,border:'1px solid #e5e7eb',fontSize:12};
 
-  const artPF = articles.filter(a=>a.type_article==='produit_fini');
+  const [searchArt, setSearchArt] = useState('');
+  const artPF = articles.filter(a=>a.type_article==='produit_fini'&&
+    (!searchArt||a.designation.toLowerCase().includes(searchArt.toLowerCase())||
+     a.code.toLowerCase().includes(searchArt.toLowerCase())));
 
   return (
     <div>
@@ -430,7 +433,10 @@ function GestionDevis() {
 
             {/* Catalogue articles */}
             <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',padding:14}}>
-              <div style={{fontWeight:700,fontSize:13,color:'#374151',marginBottom:10}}>📦 Articles</div>
+              <div style={{fontWeight:700,fontSize:13,color:'#374151',marginBottom:8}}>📦 Articles</div>
+              <input value={searchArt} onChange={e=>setSearchArt(e.target.value)}
+                placeholder="🔍 Rechercher un article..."
+                style={{width:'100%',padding:'7px 10px',borderRadius:7,border:'1px solid #e5e7eb',fontSize:12,marginBottom:8}}/>
               <div style={{display:'flex',flexDirection:'column',gap:6}}>
                 {artPF.map(a=>{
                   const deja = lignes.find(l=>l.article_id===a.id);
