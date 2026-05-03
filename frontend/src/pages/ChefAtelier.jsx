@@ -208,7 +208,7 @@ function MenuActionsDF({ df, isDir, user, onValider, onRefuser, onAnnuler, onMod
               ✏ Modifier
             </button>
 
-            <button onClick={()=>{if(window.confirm('Annuler cette demande ?')){onAnnuler();setOuvert(false);}}}
+            <button onClick={()=>{onAnnuler();setOuvert(false);}}
                 style={{width:'100%',padding:'9px 14px',border:'none',background:'#fee2e2',cursor:'pointer',textAlign:'left',fontSize:13,borderRadius:6,color:'#dc2626'}}>
               🗑 Annuler
             </button>
@@ -380,12 +380,13 @@ function DemandesFabrication() {
   };
 
   const annulerDF = async (id) => {
-    if (!window.confirm('Annuler cette demande ?')) return;
+    const motif = window.prompt('Motif d\'annulation (obligatoire) :');
+    if (!motif) return;
     try {
-      await axios.put(`${API}/df/${id}/refuser`, { motif_refus: 'Annulé par le commercial' });
+      await axios.put(`${API}/df/${id}/annuler`, { motif });
       toast.success('DF annulée');
       charger();
-    } catch { toast.error('Erreur'); }
+    } catch(e) { toast.error(e.response?.data?.error||'Erreur'); }
   };
 
   const refuser = async (id, motif) => {
@@ -414,11 +415,11 @@ function DemandesFabrication() {
     <div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
         <div style={{display:'flex',gap:8}}>
-          {['','en_attente','validee','refusee'].map(s=>(
+          {['','en_attente','validee','refusee','annulee'].map(s=>(
             <button key={s} onClick={()=>setFiltreStatut(s)}
               style={{padding:'6px 14px',borderRadius:8,border:'none',cursor:'pointer',fontSize:12,fontWeight:600,
                 background:filtreStatut===s?'#7c3aed':'#f3f4f6',color:filtreStatut===s?'#fff':'#374151'}}>
-              {s===''?'Toutes':labelStatut(s)}
+              {s===''?'Toutes':s==='en_attente'?'En attente':s==='validee'?'Validée → OF':s==='refusee'?'Refusée':s==='annulee'?'Annulée':s}
             </button>
           ))}
         </div>

@@ -285,3 +285,18 @@ router.put('/:id', auth, async (req, res) => {
     res.json(rows[0]);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
+
+// PUT /api/df/:id/annuler — annulation par le commercial
+router.put('/:id/annuler', auth, async (req, res) => {
+  try {
+    const { motif } = req.body;
+    if (!motif) return res.status(400).json({ error: 'Motif requis' });
+    const { rows } = await db.query(`
+      UPDATE demandes_fabrication 
+      SET statut='annulee', motif_refus=$1, validee_par=$2, validee_at=NOW(), updated_at=NOW()
+      WHERE id=$3 RETURNING *
+    `, ['[Annulé par commercial] ' + motif, req.user.id, req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: 'DF introuvable' });
+    res.json(rows[0]);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
