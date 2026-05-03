@@ -926,167 +926,109 @@ function GestionBC() {
 }
 
 function MenuActionsDF({ df, isDir, user, onValider, onRefuser, onAnnuler, onModifier }) {
-  const [ouvert, setOuvert] = React.useState(false);
-  const [pos, setPos] = React.useState({top:0,left:0});
-  const [showModif, setShowModif] = React.useState(false);
-  const [showDetail, setShowDetail] = React.useState(false);
-  const [nouvQte, setNouvQte] = React.useState(String(df.quantite_demandee||''));
-  const [nouvDesc, setNouvDesc] = React.useState(df.description||'');
-  const [nouvPriorite, setNouvPriorite] = React.useState(df.priorite||3);
-  const [nouvDate, setNouvDate] = React.useState(df.date_livraison_souhaitee ? df.date_livraison_souhaitee.slice(0,10) : "");
-  const [motifModif, setMotifModif] = React.useState('');
+  const [show, setShow] = React.useState(false);
+  const [mode, setMode] = React.useState("voir");
+  const [nouvQte, setNouvQte] = React.useState("");
+  const [nouvDesc, setNouvDesc] = React.useState("");
+  const [nouvPriorite, setNouvPriorite] = React.useState(3);
+  const [nouvDate, setNouvDate] = React.useState("");
+  const [motif, setMotif] = React.useState("");
+
+  const ouvrir = (m) => {
+    setMode(m);
+    setNouvQte(String(df.quantite_demandee||""));
+    setNouvDesc(df.description||"");
+    setNouvPriorite(df.priorite||3);
+    setNouvDate(df.date_livraison_souhaitee ? df.date_livraison_souhaitee.slice(0,10) : "");
+    setMotif("");
+    setShow(true);
+  };
+
+  const stars = (n) => "⭐".repeat(n||1);
+  const fmtDate = (d) => d ? new Date(d).toLocaleDateString("fr-FR") : "—";
 
   return (
-    <div style={{position:'relative'}}>
-      <button onClick={e=>{
-        const r=e.currentTarget.getBoundingClientRect();
-        setPos({top:r.bottom+4,left:Math.max(8,r.right-190)});
-        setOuvert(!ouvert);
-      }} style={{background:'#f3f4f6',border:'1px solid #e5e7eb',borderRadius:6,padding:'5px 12px',cursor:'pointer',fontSize:12,fontWeight:600}}>
-        Actions ▾
-      </button>
-
-      {ouvert && (
-        <>
-          <div style={{position:'fixed',inset:0,zIndex:9998}} onClick={()=>setOuvert(false)}/>
-          <div style={{position:'fixed',top:pos.top,left:pos.left,background:'#fff',border:'1px solid #e5e7eb',borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,0.15)',zIndex:9999,minWidth:190,padding:4}}>
-
-            <button onClick={()=>{setShowDetail(true);setOuvert(false);}}
-              style={{width:'100%',padding:'9px 14px',border:'none',background:'none',cursor:'pointer',textAlign:'left',fontSize:13,borderRadius:6,color:'#374151'}}>
-              👁 Voir la demande
-            </button>
-
-            <button onClick={()=>{setShowModif(true);setOuvert(false);}}
-                style={{width:'100%',padding:'9px 14px',border:'none',background:'none',cursor:'pointer',textAlign:'left',fontSize:13,borderRadius:6,color:'#374151'}}>
-              ✏ Modifier
-            </button>
-
-            <button onClick={()=>{onAnnuler();setOuvert(false);}}
-                style={{width:'100%',padding:'9px 14px',border:'none',background:'#fee2e2',cursor:'pointer',textAlign:'left',fontSize:13,borderRadius:6,color:'#dc2626'}}>
-              🗑 Annuler
-            </button>
-
-            {df.statut==='en_attente' && isDir && (
-              <button onClick={()=>{onValider();setOuvert(false);}}
-                style={{width:'100%',padding:'9px 14px',border:'none',background:'#dcfce7',cursor:'pointer',textAlign:'left',fontSize:13,borderRadius:6,color:'#15803d',fontWeight:700}}>
-                ✓ Valider → OF
-              </button>
-            )}
-
-            {df.statut==='en_attente' && isDir && (
-              <button onClick={()=>{const m=window.prompt('Motif :');if(m){onRefuser(m);setOuvert(false);}}}
-                style={{width:'100%',padding:'9px 14px',border:'none',background:'none',cursor:'pointer',textAlign:'left',fontSize:13,borderRadius:6,color:'#dc2626'}}>
-                ✗ Refuser
-              </button>
-            )}
-          </div>
-        </>
-      )}
-
-      {/* Modal Voir */}
-      {showDetail && (
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:10000,display:'flex',alignItems:'center',justifyContent:'center'}}
-          onClick={()=>setShowDetail(false)}>
-          <div style={{background:'#fff',borderRadius:14,padding:24,width:480,maxWidth:'90vw',maxHeight:'80vh',overflowY:'auto'}} onClick={e=>e.stopPropagation()}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-              <div style={{fontWeight:800,fontSize:16,color:'#7c3aed'}}>{df.numero_df}</div>
-              <button onClick={()=>setShowDetail(false)} style={{background:'none',border:'none',fontSize:20,cursor:'pointer'}}>✕</button>
+    <div style={{position:"relative",display:"inline-block"}}>
+      <button onClick={()=>ouvrir("voir")} style={{background:"#f3f4f6",border:"1px solid #e5e7eb",borderRadius:6,padding:"5px 12px",cursor:"pointer",fontSize:12,fontWeight:600}}>Actions ▾</button>
+      {show && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:10000,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setShow(false)}>
+          <div style={{background:"#fff",borderRadius:14,padding:24,width:520,maxWidth:"94vw",maxHeight:"88vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+              <div style={{fontWeight:800,fontSize:16,color:"#7c3aed"}}>{df.numero_df}</div>
+              <button onClick={()=>setShow(false)} style={{background:"none",border:"none",fontSize:20,cursor:"pointer"}}>✕</button>
             </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,fontSize:13}}>
-              {[
-                ['Article',df.article_nom+' ('+df.article_code+')'],
-                ['Client',df.client_nom||'—'],
-                ['Quantité',parseFloat(df.quantite_demandee).toFixed(0)+' kg'],
-                ['Statut',df.statut],
-                ['Livraison souhaitée',df.date_livraison_souhaitee?new Date(df.date_livraison_souhaitee).toLocaleDateString('fr-FR'):'—'],
-                ['OF généré',df.numero_of||'—'],
-                ['Demandeur',df.demandeur_nom||'—'],
-                ['Validé par',df.valideur_nom||'—'],
-              ].map(([l,v])=>(
-                <div key={l} style={{background:'#f9fafb',borderRadius:8,padding:'8px 12px'}}>
-                  <div style={{fontSize:10,color:'#6b7280',fontWeight:600}}>{l}</div>
-                  <div style={{fontWeight:600,marginTop:2}}>{v}</div>
-                </div>
+
+            {/* Tabs */}
+            <div style={{display:"flex",gap:6,marginBottom:16,borderBottom:"1px solid #e5e7eb",paddingBottom:8}}>
+              {["voir","modifier"].map(m=>(
+                <button key={m} onClick={()=>setMode(m)} style={{padding:"6px 14px",borderRadius:6,border:"none",background:mode===m?"#7c3aed":"#f3f4f6",color:mode===m?"#fff":"#374151",cursor:"pointer",fontSize:12,fontWeight:600}}>
+                  {m==="voir"?"👁 Détails":"✏ Modifier"}
+                </button>
               ))}
             </div>
-            {df.description && <div style={{marginTop:12,background:'#faf5ff',borderRadius:8,padding:12,fontSize:13}}><strong>Description :</strong> {df.description}</div>}
-            <div style={{display:'flex',gap:8,marginTop:16}}>
-              <button onClick={()=>window.open(`/api/df/${df.id}/pdf`,'_blank')} style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer',fontSize:13}}>🖨 Imprimer PDF</button>
-              <button onClick={()=>setShowDetail(false)} style={{background:'#f3f4f6',border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer'}}>Fermer</button>
-            </div>
-          </div>
-        </div>
-      )}
 
-      {/* Modal Modifier */}
-      {showModif && (
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:10000,display:'flex',alignItems:'center',justifyContent:'center'}}
-          onClick={()=>setShowModif(false)}>
-          <div style={{background:'#fff',borderRadius:14,padding:24,width:480,maxWidth:'92vw',maxHeight:'85vh',overflowY:'auto'}} onClick={e=>e.stopPropagation()}>
-            <div style={{fontWeight:700,fontSize:15,marginBottom:4,color:'#7c3aed'}}>✏ Modifier {df.numero_df}</div>
-            <div style={{fontSize:12,color:'#6b7280',marginBottom:16}}>Article : {df.article_nom} · Client : {df.client_nom}</div>
-
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+            {mode==="voir" && (
               <div>
-                <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Quantité demandée (kg)</div>
-                <input type="number" value={nouvQte} onChange={e=>setNouvQte(e.target.value)}
-                  style={{width:'100%',padding:'8px',borderRadius:6,border:'1px solid #e5e7eb',fontSize:14}}/>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,fontSize:13,marginBottom:12}}>
+                  {[["Article",df.article_nom+" ("+df.article_code+")"],["Client",df.client_nom||"—"],["Quantité",(df.quantite_demandee||0)+" kg"],["Priorité",stars(df.priorite)],["Livraison souhaitée",fmtDate(df.date_livraison_souhaitee)],["Statut",df.statut],["BC origine",df.numero_bc||"—"],["OF généré",df.numero_of||"—"],["Demandeur",df.demandeur_nom||"—"],["Validé par",df.valideur_nom||"—"]].map(([l,v])=>(
+                    <div key={l} style={{background:"#f9fafb",borderRadius:8,padding:"8px 12px"}}>
+                      <div style={{fontSize:10,color:"#6b7280",fontWeight:600}}>{l}</div>
+                      <div style={{fontWeight:600,marginTop:2}}>{v}</div>
+                    </div>
+                  ))}
+                </div>
+                {df.description && <div style={{background:"#faf5ff",borderRadius:8,padding:12,fontSize:13,marginBottom:12}}><strong>Description :</strong> {df.description}</div>}
+                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                  <button onClick={()=>window.open("/api/df/"+df.id+"/pdf","_blank")} style={{background:"#7c3aed",color:"#fff",border:"none",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:13}}>🖨 PDF</button>
+                  {df.statut==="en_attente" && isDir && <button onClick={()=>{onValider();setShow(false);}} style={{background:"#dcfce7",color:"#15803d",border:"none",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:13,fontWeight:700}}>✓ Valider → OF</button>}
+                  {df.statut==="en_attente" && isDir && <button onClick={()=>{const m=window.prompt("Motif refus :");if(m){onRefuser(m);setShow(false);}}} style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:13}}>✗ Refuser</button>}
+                  <button onClick={()=>{onAnnuler();setShow(false);}} style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:13}}>🗑 Annuler</button>
+                </div>
               </div>
+            )}
+
+            {mode==="modifier" && (
               <div>
-                <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Date livraison souhaitée</div>
-                <input type="date" value={nouvDate} onChange={e=>setNouvDate(e.target.value)}
-                  style={{width:'100%',padding:'8px',borderRadius:6,border:'1px solid #e5e7eb',fontSize:13}}/>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+                  <div>
+                    <div style={{fontSize:11,fontWeight:600,color:"#6b7280",marginBottom:4}}>Quantité (kg)</div>
+                    <input type="number" value={nouvQte} onChange={e=>setNouvQte(e.target.value)} style={{width:"100%",padding:"8px",borderRadius:6,border:"1px solid #e5e7eb",fontSize:14}}/>
+                  </div>
+                  <div>
+                    <div style={{fontSize:11,fontWeight:600,color:"#6b7280",marginBottom:4}}>Date livraison</div>
+                    <input type="date" value={nouvDate} onChange={e=>setNouvDate(e.target.value)} style={{width:"100%",padding:"8px",borderRadius:6,border:"1px solid #e5e7eb",fontSize:13}}/>
+                  </div>
+                </div>
+                <div style={{marginBottom:10}}>
+                  <div style={{fontSize:11,fontWeight:600,color:"#6b7280",marginBottom:4}}>Priorité</div>
+                  <select value={nouvPriorite} onChange={e=>setNouvPriorite(parseInt(e.target.value))} style={{width:"100%",padding:"8px",borderRadius:6,border:"1px solid #e5e7eb",fontSize:13}}>
+                    <option value={1}>⭐ Basse</option>
+                    <option value={2}>⭐⭐ Normale</option>
+                    <option value={3}>⭐⭐⭐ Haute</option>
+                    <option value={4}>⭐⭐⭐⭐ Urgente</option>
+                    <option value={5}>⭐⭐⭐⭐⭐ Critique</option>
+                  </select>
+                </div>
+                <div style={{marginBottom:10}}>
+                  <div style={{fontSize:11,fontWeight:600,color:"#6b7280",marginBottom:4}}>Description / Spécifications</div>
+                  <textarea value={nouvDesc} onChange={e=>setNouvDesc(e.target.value)} rows={3} style={{width:"100%",padding:"8px",borderRadius:6,border:"1px solid #e5e7eb",fontSize:13,resize:"vertical"}}/>
+                </div>
+                <div style={{marginBottom:14}}>
+                  <div style={{fontSize:11,fontWeight:600,color:"#dc2626",marginBottom:4}}>Motif de modification *</div>
+                  <input value={motif} onChange={e=>setMotif(e.target.value)} placeholder="Raison..." style={{width:"100%",padding:"8px",borderRadius:6,border:"1px solid #fca5a5",fontSize:13}}/>
+                </div>
+                <div style={{display:"flex",gap:8}}>
+                  <button onClick={()=>{if(!motif.trim()){alert("Motif requis");return;}onModifier({quantite_demandee:parseFloat(nouvQte),description:nouvDesc,priorite:nouvPriorite,date_livraison_souhaitee:nouvDate||null,motif});setShow(false);}} style={{flex:1,background:"#7c3aed",color:"#fff",border:"none",borderRadius:8,padding:"10px",cursor:"pointer",fontWeight:700}}>✓ Confirmer</button>
+                  <button onClick={()=>setMode("voir")} style={{background:"#f3f4f6",border:"none",borderRadius:8,padding:"10px 16px",cursor:"pointer"}}>Annuler</button>
+                </div>
               </div>
-            </div>
-
-            <div style={{marginBottom:10}}>
-              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Priorité</div>
-              <select value={nouvPriorite} onChange={e=>setNouvPriorite(parseInt(e.target.value))}
-                style={{width:'100%',padding:'8px',borderRadius:6,border:'1px solid #e5e7eb',fontSize:13}}>
-                <option value={1}>⭐ Basse</option>
-                <option value={2}>⭐⭐ Normale</option>
-                <option value={3}>⭐⭐⭐ Haute</option>
-                <option value={4}>⭐⭐⭐⭐ Urgente</option>
-                <option value={5}>⭐⭐⭐⭐⭐ Critique</option>
-              </select>
-            </div>
-
-            <div style={{marginBottom:10}}>
-              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Description / Spécifications</div>
-              <textarea value={nouvDesc} onChange={e=>setNouvDesc(e.target.value)} rows={3}
-                style={{width:'100%',padding:'8px',borderRadius:6,border:'1px solid #e5e7eb',fontSize:13,resize:'vertical'}}/>
-            </div>
-
-            <div style={{marginBottom:16}}>
-              <div style={{fontSize:11,fontWeight:600,color:'#dc2626',marginBottom:4}}>Motif de modification *</div>
-              <input value={motifModif} onChange={e=>setMotifModif(e.target.value)}
-                style={{width:'100%',padding:'8px',borderRadius:6,border:'1px solid #fca5a5',fontSize:13}}
-                placeholder="Raison de la modification..."/>
-            </div>
-
-            <div style={{display:'flex',gap:8}}>
-              <button onClick={()=>{
-                if(!motifModif.trim()){alert('Motif de modification requis');return;}
-                onModifier({
-                  quantite_demandee: parseFloat(nouvQte),
-                  description: nouvDesc,
-                  priorite: nouvPriorite,
-                  date_livraison_souhaitee: nouvDate||null,
-                  motif: motifModif
-                });
-                setShowModif(false);
-              }} style={{flex:1,background:'#7c3aed',color:'#fff',border:'none',borderRadius:8,padding:'10px',cursor:'pointer',fontWeight:700}}>
-                ✓ Confirmer la modification
-              </button>
-              <button onClick={()=>setShowModif(false)} style={{background:'#f3f4f6',border:'none',borderRadius:8,padding:'10px 16px',cursor:'pointer'}}>Annuler</button>
-            </div>
+            )}
           </div>
         </div>
       )}
     </div>
   );
 }
-
 
 function DemandesFabrication() {
   const { user } = useAuth();
