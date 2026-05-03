@@ -51,6 +51,8 @@ router.post('/:id/transformer-df', auth, async (req, res) => {
     if (!bc_rows.length) return res.status(404).json({ error: 'BC introuvable' });
     const bc = bc_rows[0];
     if (bc.df_id) return res.status(400).json({ error: 'BC déjà transformé en DF' });
+    const priorite_body = parseInt(req.body?.priorite || 3);
+    const description_body = req.body?.description || null;
 
     // Récupérer la première ligne BC pour article + quantité
     const { rows: bc_lignes } = await db.query(
@@ -63,10 +65,10 @@ router.post('/:id/transformer-df', auth, async (req, res) => {
       INSERT INTO demandes_fabrication
         (client_id, article_id, quantite_demandee, bc_id,
          date_livraison_souhaitee, description, demandeur_id, statut, priorite)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,'en_attente',3) RETURNING *
+      VALUES ($1,$2,$3,$4,$5,$6,$7,'en_attente',$8) RETURNING *
     `, [bc.client_id, article_id_df, quantite_df,
         bc.id, bc.date_livraison_souhaitee,
-        'BC N°' + bc.numero_bc + (bc.reference_client?' — Réf. client: '+bc.reference_client:''),
+        (description_body || ('BC N°' + bc.numero_bc + (bc.reference_client?' — Réf. client: '+bc.reference_client:''))),
         req.user.id]);
 
     await db.query(

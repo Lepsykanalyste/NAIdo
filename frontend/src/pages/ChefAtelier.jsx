@@ -694,11 +694,17 @@ function GestionBC() {
     } catch(e) { toast.error(e.response?.data?.error||'Erreur'); }
   };
 
-  const transformerDF = async (id) => {
-    if (!window.confirm('Transformer ce BC en Demande de Fabrication ?')) return;
+  const [dfModal, setDfModal] = useState(null); // {bcId, priorite, description}
+  const ouvrirDfModal = (bc) => setDfModal({bcId: bc.id, numeroBc: bc.numero_bc, priorite: 3, description: ''});
+  const confirmerDF = async () => {
+    if (!dfModal) return;
     try {
-      const res = await axios.post(`${API}/bc/${id}/transformer-df`);
+      const res = await axios.post(`${API}/bc/${dfModal.bcId}/transformer-df`, {
+        priorite: dfModal.priorite,
+        description: dfModal.description
+      });
       toast.success('DF '+res.data.df.numero_df+' créée → en attente validation Direction');
+      setDfModal(null);
       charger();
     } catch(e) { toast.error(e.response?.data?.error||'Erreur'); }
   };
@@ -819,7 +825,7 @@ function GestionBC() {
                   <td style={{padding:'9px 12px',display:'flex',gap:6}}>
                     <button onClick={()=>window.open(`/api/bc/${b.id}/pdf`,'_blank')} style={{background:'#e0f2fe',color:'#0369a1',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>🖨 PDF</button>
                     {b.statut==='recu' && (
-                      <button onClick={()=>transformerDF(b.id)} style={{background:'#f5f3ff',color:'#7c3aed',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11,fontWeight:700}}>→ DF</button>
+                      <button onClick={()=>ouvrirDfModal(b)} style={{background:'#f5f3ff',color:'#7c3aed',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11,fontWeight:700}}>→ DF</button>
                     )}
                   </td>
                 </tr>
