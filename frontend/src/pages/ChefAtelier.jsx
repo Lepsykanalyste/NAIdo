@@ -100,6 +100,8 @@ const ICONS = {
 const MENU = [
   { id:'dashboard',   label:'Tableau de bord',    icon:'dashboard',   color:'#14532d' },
   { id:'separator1',  label:'PRODUCTION',          separator:true },
+  { id:'devis',       label:'Devis',                   icon:'clipboard', color:'#0891b2' },
+  { id:'bc',          label:'Bons de Commande',        icon:'clipboard', color:'#0369a1' },
   { id:'df',          label:'Demandes de Fabrication', icon:'clipboard', color:'#7c3aed' },
   { id:'of',          label:'Ordres de Fabrication', icon:'clipboard', color:'#0369a1' },
   { id:'production',  label:'Suivi Production',    icon:'production',  color:'#1d4ed8' },
@@ -141,7 +143,7 @@ const MENU_PAR_ROLE = {
   directeur:     null, // tout
   chef_atelier:  ['dashboard','separator1','df','of','production','planning','rapportjour','separator2','articles','matieres','stock','cession','separator3','qhse','gmao','separator4','kpi','ia','alertes'],
   regleur:       ['dashboard','separator1','of','production','planning','alertes'],
-  commercial:    ['dashboard','separator1','df','ol','separator2b','clients','vente','alertes'],
+  commercial:    ['dashboard','separator1','devis','bc','df','ol','separator2b','clients','vente','alertes'],
   operateur:     ['dashboard','separator1','of','production','alertes'],
   operateur_ext: ['dashboard','separator1','of','production','alertes'],
   operateur_sou: ['dashboard','separator1','of','production','alertes'],
@@ -173,6 +175,409 @@ function getMenuFiltre(role) {
 // ══════════════════════════════════════════════════════════════
 // MODULE DEMANDES DE FABRICATION
 // ══════════════════════════════════════════════════════════════
+
+
+// ══════════════════════════════════════════════════════════════
+// MODULE DEVIS
+// ══════════════════════════════════════════════════════════════
+function GestionDevis() {
+  const { user } = useAuth();
+  const [devis, setDevis] = useState([]);
+  const [articles, setArticles] = useState([]);
+  const [clients, setClients] = useState([]);
+  const [showForm, setShowForm] = useState(false);
+  const [showTransfo, setShowTransfo] = useState(null);
+  const [form, setForm] = useState({
+    client_id:'', article_id:'', quantite:'', quantite_pieces:'',
+    prix_unitaire_fcfa:'', date_validite:'', conditions_livraison:'', notes:''
+  });
+  const [tfForm, setTfForm] = useState({ date_livraison_souhaitee:'', reference_client:'', adresse_livraison:'', notes:'' });
+
+  const charger = async () => {
+    try {
+      const [d,a,c] = await Promise.all([
+        axios.get(`${API}/devis`).catch(()=>({data:[]})),
+        axios.get(`${API}/articles`).catch(()=>({data:[]})),
+        axios.get(`${API}/vente/clients`).catch(()=>({data:[]})),
+      ]);
+      setDevis(Array.isArray(d.data)?d.data:[]);
+      setArticles(Array.isArray(a.data)?a.data:[]);
+      setClients(Array.isArray(c.data)?c.data:[]);
+    } catch {}
+  };
+
+  useEffect(()=>{ charger(); },[]);
+
+  const creerDevis = async () => {
+    if (!form.client_id || !form.article_id) { toast.error('Client et article requis'); return; }
+    try {
+      await axios.post(`${API}/devis`, form);
+      toast.success('Devis créé !');
+      setShowForm(false);
+      setForm({client_id:'',article_id:'',quantite:'',quantite_pieces:'',prix_unitaire_fcfa:'',date_validite:'',conditions_livraison:'',notes:''});
+      charger();
+    } catch(e) { toast.error(e.response?.data?.error||'Erreur'); }
+  };
+
+  const changerStatut = async (id, statut) => {
+    try {
+      await axios.put(`${API}/devis/${id}/statut`, { statut });
+      toast.success('Statut mis à jour');
+      charger();
+    } catch { toast.error('Erreur'); }
+  };
+
+  const transformerBC = async () => {
+    try {
+      const res = await axios.post(`${API}/devis/${showTransfo.id}/transformer-bc`, tfForm);
+      toast.success('BC '+res.data.numero_bc+' créé !');
+      setShowTransfo(null);
+      charger();
+    } catch(e) { toast.error(e.response?.data?.error||'Erreur'); }
+  };
+
+  const couleurStatut = s => ({brouillon:'#6b7280',envoye:'#0369a1',accepte:'#15803d',refuse:'#dc2626',expire:'#9ca3af',transforme:'#7c3aed'}[s]||'#6b7280');
+  const bgStatut = s => ({brouillon:'#f3f4f6',envoye:'#e0f2fe',accepte:'#dcfce7',refuse:'#fee2e2',expire:'#f3f4f6',transforme:'#f5f3ff'}[s]||'#f3f4f6');
+  const labelStatut = s => ({brouillon:'Brouillon',envoye:'Envoyé',accepte:'Accepté',refuse:'Refusé',expire:'Expiré',transforme:'→ BC créé'}[s]||s);
+  const sel = {width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid #e5e7eb',fontSize:13};
+
+  const totalDevis = devis.reduce((s,d)=>s+parseFloat(d.montant_total_fcfa||0),0);
+
+  return (
+    <div>
+      {/* KPIs */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10,marginBottom:16}}>
+        {[
+          {label:'Total devis',value:devis.length,color:'#0891b2',bg:'#e0f2fe',icon:'📋'},
+          {label:'Envoyés',value:devis.filter(d=>d.statut==='envoye').length,color:'#0369a1',bg:'#dbeafe',icon:'📤'},
+          {label:'Acceptés',value:devis.filter(d=>d.statut==='accepte').length,color:'#15803d',bg:'#dcfce7',icon:'✅'},
+          {label:'Montant total',value:totalDevis.toLocaleString('fr-FR')+' FCFA',color:'#7c3aed',bg:'#f5f3ff',icon:'💰'},
+        ].map(k=>(
+          <div key={k.label} style={{background:k.bg,borderRadius:12,padding:'12px 14px'}}>
+            <div style={{fontSize:10,color:'#6b7280',marginBottom:3}}>{k.icon} {k.label}</div>
+            <div style={{fontSize:18,fontWeight:800,color:k.color}}>{k.value}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{display:'flex',justifyContent:'flex-end',marginBottom:12}}>
+        <button onClick={()=>setShowForm(!showForm)} style={{background:'#0891b2',color:'#fff',border:'none',borderRadius:8,padding:'9px 18px',cursor:'pointer',fontWeight:700,fontSize:13}}>
+          {showForm?'✕ Annuler':'+ Nouveau devis'}
+        </button>
+      </div>
+
+      {/* Formulaire création */}
+      {showForm && (
+        <div style={{background:'#f0f9ff',borderRadius:14,padding:20,marginBottom:16,border:'1px solid #bae6fd'}}>
+          <div style={{fontWeight:700,fontSize:15,color:'#0891b2',marginBottom:14}}>📋 Nouveau Devis</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12}}>
+            <div><div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Client *</div>
+              <select value={form.client_id} onChange={e=>setForm(p=>({...p,client_id:e.target.value}))} style={sel}>
+                <option value="">-- Sélectionner --</option>
+                {clients.map(c=><option key={c.id} value={c.id}>{c.raison_sociale||c.nom}</option>)}
+              </select>
+            </div>
+            <div><div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Article *</div>
+              <select value={form.article_id} onChange={e=>setForm(p=>({...p,article_id:e.target.value}))} style={sel}>
+                <option value="">-- Sélectionner --</option>
+                {articles.filter(a=>a.type_article==='produit_fini').map(a=><option key={a.id} value={a.id}>{a.code} — {a.designation}</option>)}
+              </select>
+            </div>
+            <div><div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Qté pièces</div>
+              <input type="number" value={form.quantite_pieces} onChange={e=>{
+                const pcs=parseFloat(e.target.value||0);
+                const art=articles.find(a=>a.id===form.article_id);
+                const pw=parseFloat(art?.poids_piece_kg||0);
+                setForm(p=>({...p,quantite_pieces:e.target.value,quantite:pw>0?(pcs*pw).toFixed(3):p.quantite}));
+              }} style={sel} placeholder="ex: 10000"/>
+            </div>
+            <div><div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Qté kg</div>
+              <input type="number" value={form.quantite} onChange={e=>{
+                const kg=parseFloat(e.target.value||0);
+                const art=articles.find(a=>a.id===form.article_id);
+                const pw=parseFloat(art?.poids_piece_kg||0);
+                setForm(p=>({...p,quantite:e.target.value,quantite_pieces:pw>0?String(Math.round(kg/pw)):p.quantite_pieces}));
+              }} style={sel} placeholder="ex: 500"/>
+            </div>
+            <div><div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Prix unitaire (FCFA/kg)</div>
+              <input type="number" value={form.prix_unitaire_fcfa} onChange={e=>setForm(p=>({...p,prix_unitaire_fcfa:e.target.value}))} style={sel} placeholder="ex: 850"/>
+            </div>
+            <div><div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Validité jusqu'au</div>
+              <input type="date" value={form.date_validite} onChange={e=>setForm(p=>({...p,date_validite:e.target.value}))} style={sel}/>
+            </div>
+            <div style={{gridColumn:'1/-1'}}><div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Conditions de livraison</div>
+              <input value={form.conditions_livraison} onChange={e=>setForm(p=>({...p,conditions_livraison:e.target.value}))} style={sel} placeholder="ex: Départ usine NAI, dans 15 jours"/>
+            </div>
+            <div style={{gridColumn:'1/-1'}}><div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Notes</div>
+              <input value={form.notes} onChange={e=>setForm(p=>({...p,notes:e.target.value}))} style={sel} placeholder="Conditions particulières..."/>
+            </div>
+          </div>
+          {form.quantite && form.prix_unitaire_fcfa && (
+            <div style={{background:'#dbeafe',borderRadius:8,padding:'8px 14px',marginTop:8,fontSize:13,fontWeight:700,color:'#0369a1'}}>
+              💰 Montant total estimé : {(parseFloat(form.quantite)*parseFloat(form.prix_unitaire_fcfa)).toLocaleString('fr-FR')} FCFA
+            </div>
+          )}
+          <div style={{display:'flex',gap:10,marginTop:14}}>
+            <button onClick={creerDevis} style={{background:'#0891b2',color:'#fff',border:'none',borderRadius:8,padding:'10px 24px',cursor:'pointer',fontWeight:700}}>✓ Créer le devis</button>
+            <button onClick={()=>setShowForm(false)} style={{background:'#f3f4f6',border:'none',borderRadius:8,padding:'10px 20px',cursor:'pointer'}}>Annuler</button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal transformer en BC */}
+      {showTransfo && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <div style={{background:'#fff',borderRadius:14,padding:24,width:440,maxWidth:'90vw'}}>
+            <div style={{fontWeight:800,fontSize:15,marginBottom:14,color:'#15803d'}}>📦 Transformer en Bon de Commande</div>
+            <div style={{background:'#f0fdf4',borderRadius:8,padding:10,marginBottom:14,fontSize:13}}>
+              <strong>{showTransfo.article_nom}</strong> — {showTransfo.client_nom}<br/>
+              {showTransfo.quantite} kg · {showTransfo.montant_total_fcfa?parseFloat(showTransfo.montant_total_fcfa).toLocaleString('fr-FR')+' FCFA':''}
+            </div>
+            {[
+              ['Référence commande client','reference_client','ex: CMD-2026-123'],
+              ['Date livraison souhaitée','date_livraison_souhaitee',''],
+              ['Adresse de livraison','adresse_livraison','ex: Zone Industrielle, Abidjan'],
+              ['Notes','notes',''],
+            ].map(([l,k,ph])=>(
+              <div key={k} style={{marginBottom:10}}>
+                <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:3}}>{l}</div>
+                <input type={k==='date_livraison_souhaitee'?'date':'text'} value={tfForm[k]}
+                  onChange={e=>setTfForm(p=>({...p,[k]:e.target.value}))}
+                  style={sel} placeholder={ph}/>
+              </div>
+            ))}
+            <div style={{display:'flex',gap:10,marginTop:14}}>
+              <button onClick={transformerBC} style={{flex:1,background:'#15803d',color:'#fff',border:'none',borderRadius:8,padding:'10px',cursor:'pointer',fontWeight:700}}>✓ Créer le BC</button>
+              <button onClick={()=>setShowTransfo(null)} style={{background:'#f3f4f6',border:'none',borderRadius:8,padding:'10px 16px',cursor:'pointer'}}>Annuler</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Liste devis */}
+      <div style={{background:'#fff',borderRadius:14,border:'1px solid #e5e7eb',overflow:'hidden'}}>
+        {devis.length===0 ? (
+          <div style={{padding:40,textAlign:'center',color:'#6b7280'}}>
+            <div style={{fontSize:32,marginBottom:8}}>📋</div>
+            Aucun devis — créez le premier
+          </div>
+        ) : (
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+            <thead><tr style={{background:'#f0f9ff'}}>
+              {['N° Devis','Article','Client','Qté','Montant','Validité','Statut','Actions'].map(h=>(
+                <th key={h} style={{padding:'10px 12px',textAlign:'left',fontWeight:600,color:'#0891b2',borderBottom:'2px solid #bae6fd'}}>{h}</th>
+              ))}
+            </tr></thead>
+            <tbody>
+              {devis.map((d,i)=>(
+                <tr key={d.id} style={{borderBottom:'1px solid #f3f4f6',background:i%2===0?'#fff':'#fafafa'}}>
+                  <td style={{padding:'9px 12px',fontWeight:700,color:'#0891b2'}}>{d.numero_devis}</td>
+                  <td style={{padding:'9px 12px'}}>{d.article_nom}</td>
+                  <td style={{padding:'9px 12px',fontSize:12}}>{d.client_nom||'—'}</td>
+                  <td style={{padding:'9px 12px'}}>{d.quantite?parseFloat(d.quantite).toFixed(0)+' kg':'—'}</td>
+                  <td style={{padding:'9px 12px',fontWeight:600}}>{d.montant_total_fcfa?parseFloat(d.montant_total_fcfa).toLocaleString('fr-FR')+' FCFA':'—'}</td>
+                  <td style={{padding:'9px 12px',fontSize:12,color:d.date_validite&&new Date(d.date_validite)<new Date()?'#dc2626':'#374151'}}>
+                    {d.date_validite?new Date(d.date_validite).toLocaleDateString('fr-FR'):'—'}
+                  </td>
+                  <td style={{padding:'9px 12px'}}>
+                    <span style={{background:bgStatut(d.statut),color:couleurStatut(d.statut),padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:700}}>
+                      {labelStatut(d.statut)}
+                    </span>
+                  </td>
+                  <td style={{padding:'9px 12px',display:'flex',gap:6,flexWrap:'wrap'}}>
+                    <button onClick={()=>window.open(`/api/devis/${d.id}/pdf`,'_blank')} style={{background:'#e0f2fe',color:'#0891b2',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>🖨 PDF</button>
+                    {d.statut==='brouillon' && <button onClick={()=>changerStatut(d.id,'envoye')} style={{background:'#dbeafe',color:'#0369a1',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>📤 Envoyer</button>}
+                    {d.statut==='envoye' && <button onClick={()=>changerStatut(d.id,'accepte')} style={{background:'#dcfce7',color:'#15803d',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>✓ Accepté</button>}
+                    {d.statut==='envoye' && <button onClick={()=>changerStatut(d.id,'refuse')} style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>✗ Refusé</button>}
+                    {d.statut==='accepte' && <button onClick={()=>setShowTransfo(d)} style={{background:'#f5f3ff',color:'#7c3aed',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11,fontWeight:700}}>→ BC</button>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// MODULE BONS DE COMMANDE
+// ══════════════════════════════════════════════════════════════
+function GestionBC() {
+  const { user } = useAuth();
+  const [bcs, setBcs] = useState([]);
+  const [articles, setArticles] = useState([]);
+  const [clients, setClients] = useState([]);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({
+    client_id:'', article_id:'', quantite:'', quantite_pieces:'',
+    prix_unitaire_fcfa:'', date_livraison_souhaitee:'', adresse_livraison:'',
+    reference_client:'', notes:''
+  });
+
+  const charger = async () => {
+    try {
+      const [b,a,c] = await Promise.all([
+        axios.get(`${API}/bc`).catch(()=>({data:[]})),
+        axios.get(`${API}/articles`).catch(()=>({data:[]})),
+        axios.get(`${API}/vente/clients`).catch(()=>({data:[]})),
+      ]);
+      setBcs(Array.isArray(b.data)?b.data:[]);
+      setArticles(Array.isArray(a.data)?a.data:[]);
+      setClients(Array.isArray(c.data)?c.data:[]);
+    } catch {}
+  };
+
+  useEffect(()=>{ charger(); },[]);
+
+  const creerBC = async () => {
+    if (!form.client_id || !form.article_id) { toast.error('Client et article requis'); return; }
+    try {
+      await axios.post(`${API}/bc`, form);
+      toast.success('BC créé !');
+      setShowForm(false);
+      charger();
+    } catch(e) { toast.error(e.response?.data?.error||'Erreur'); }
+  };
+
+  const transformerDF = async (id) => {
+    if (!window.confirm('Transformer ce BC en Demande de Fabrication ?')) return;
+    try {
+      const res = await axios.post(`${API}/bc/${id}/transformer-df`);
+      toast.success('DF '+res.data.df.numero_df+' créée → en attente validation Direction');
+      charger();
+    } catch(e) { toast.error(e.response?.data?.error||'Erreur'); }
+  };
+
+  const couleurStatut = s => ({recu:'#0369a1',confirme:'#7c3aed',en_traitement:'#d97706',transforme_df:'#15803d',annule:'#dc2626'}[s]||'#6b7280');
+  const bgStatut = s => ({recu:'#e0f2fe',confirme:'#f5f3ff',en_traitement:'#fef3c7',transforme_df:'#dcfce7',annule:'#fee2e2'}[s]||'#f3f4f6');
+  const labelStatut = s => ({recu:'Reçu',confirme:'Confirmé',en_traitement:'En traitement',transforme_df:'→ DF créée',annule:'Annulé'}[s]||s);
+  const sel = {width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid #e5e7eb',fontSize:13};
+
+  return (
+    <div>
+      {/* KPIs */}
+      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10,marginBottom:16}}>
+        {[
+          {label:'BC reçus',value:bcs.length,color:'#0369a1',bg:'#e0f2fe',icon:'📦'},
+          {label:'En attente DF',value:bcs.filter(b=>b.statut==='recu').length,color:'#d97706',bg:'#fef3c7',icon:'⏳'},
+          {label:'Transformés → DF',value:bcs.filter(b=>b.statut==='transforme_df').length,color:'#15803d',bg:'#dcfce7',icon:'✅'},
+        ].map(k=>(
+          <div key={k.label} style={{background:k.bg,borderRadius:12,padding:'12px 14px'}}>
+            <div style={{fontSize:10,color:'#6b7280',marginBottom:3}}>{k.icon} {k.label}</div>
+            <div style={{fontSize:20,fontWeight:800,color:k.color}}>{k.value}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{display:'flex',justifyContent:'flex-end',marginBottom:12}}>
+        <button onClick={()=>setShowForm(!showForm)} style={{background:'#0369a1',color:'#fff',border:'none',borderRadius:8,padding:'9px 18px',cursor:'pointer',fontWeight:700,fontSize:13}}>
+          {showForm?'✕ Annuler':'+ Nouveau BC'}
+        </button>
+      </div>
+
+      {showForm && (
+        <div style={{background:'#f0f9ff',borderRadius:14,padding:20,marginBottom:16,border:'1px solid #bae6fd'}}>
+          <div style={{fontWeight:700,fontSize:15,color:'#0369a1',marginBottom:14}}>📦 Nouveau Bon de Commande</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12}}>
+            <div><div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Client *</div>
+              <select value={form.client_id} onChange={e=>setForm(p=>({...p,client_id:e.target.value}))} style={sel}>
+                <option value="">-- Sélectionner --</option>
+                {clients.map(c=><option key={c.id} value={c.id}>{c.raison_sociale||c.nom}</option>)}
+              </select>
+            </div>
+            <div><div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Article *</div>
+              <select value={form.article_id} onChange={e=>setForm(p=>({...p,article_id:e.target.value}))} style={sel}>
+                <option value="">-- Sélectionner --</option>
+                {articles.filter(a=>a.type_article==='produit_fini').map(a=><option key={a.id} value={a.id}>{a.code} — {a.designation}</option>)}
+              </select>
+            </div>
+            <div><div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Réf. commande client</div>
+              <input value={form.reference_client} onChange={e=>setForm(p=>({...p,reference_client:e.target.value}))} style={sel} placeholder="ex: CMD-2026-123"/>
+            </div>
+            <div><div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Qté pièces</div>
+              <input type="number" value={form.quantite_pieces} onChange={e=>{
+                const pcs=parseFloat(e.target.value||0);
+                const art=articles.find(a=>a.id===form.article_id);
+                const pw=parseFloat(art?.poids_piece_kg||0);
+                setForm(p=>({...p,quantite_pieces:e.target.value,quantite:pw>0?(pcs*pw).toFixed(3):p.quantite}));
+              }} style={sel} placeholder="ex: 10000"/>
+            </div>
+            <div><div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Qté kg</div>
+              <input type="number" value={form.quantite} onChange={e=>{
+                const kg=parseFloat(e.target.value||0);
+                const art=articles.find(a=>a.id===form.article_id);
+                const pw=parseFloat(art?.poids_piece_kg||0);
+                setForm(p=>({...p,quantite:e.target.value,quantite_pieces:pw>0?String(Math.round(kg/pw)):p.quantite_pieces}));
+              }} style={sel} placeholder="ex: 500"/>
+            </div>
+            <div><div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Prix unitaire (FCFA/kg)</div>
+              <input type="number" value={form.prix_unitaire_fcfa} onChange={e=>setForm(p=>({...p,prix_unitaire_fcfa:e.target.value}))} style={sel} placeholder="ex: 850"/>
+            </div>
+            <div><div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Date livraison souhaitée</div>
+              <input type="date" value={form.date_livraison_souhaitee} onChange={e=>setForm(p=>({...p,date_livraison_souhaitee:e.target.value}))} style={sel}/>
+            </div>
+            <div style={{gridColumn:'1/-1'}}><div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Adresse de livraison</div>
+              <input value={form.adresse_livraison} onChange={e=>setForm(p=>({...p,adresse_livraison:e.target.value}))} style={sel} placeholder="ex: Zone Industrielle Yopougon, Abidjan"/>
+            </div>
+          </div>
+          {form.quantite && form.prix_unitaire_fcfa && (
+            <div style={{background:'#dbeafe',borderRadius:8,padding:'8px 14px',marginTop:8,fontSize:13,fontWeight:700,color:'#0369a1'}}>
+              💰 Montant : {(parseFloat(form.quantite)*parseFloat(form.prix_unitaire_fcfa)).toLocaleString('fr-FR')} FCFA
+            </div>
+          )}
+          <div style={{display:'flex',gap:10,marginTop:14}}>
+            <button onClick={creerBC} style={{background:'#0369a1',color:'#fff',border:'none',borderRadius:8,padding:'10px 24px',cursor:'pointer',fontWeight:700}}>✓ Enregistrer le BC</button>
+            <button onClick={()=>setShowForm(false)} style={{background:'#f3f4f6',border:'none',borderRadius:8,padding:'10px 20px',cursor:'pointer'}}>Annuler</button>
+          </div>
+        </div>
+      )}
+
+      <div style={{background:'#fff',borderRadius:14,border:'1px solid #e5e7eb',overflow:'hidden'}}>
+        {bcs.length===0 ? (
+          <div style={{padding:40,textAlign:'center',color:'#6b7280'}}>
+            <div style={{fontSize:32,marginBottom:8}}>📦</div>
+            Aucun bon de commande
+          </div>
+        ) : (
+          <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+            <thead><tr style={{background:'#f0f9ff'}}>
+              {['N° BC','Article','Client','Qté','Montant','Livraison','Réf. client','Statut','DF','Actions'].map(h=>(
+                <th key={h} style={{padding:'10px 12px',textAlign:'left',fontWeight:600,color:'#0369a1',borderBottom:'2px solid #bae6fd'}}>{h}</th>
+              ))}
+            </tr></thead>
+            <tbody>
+              {bcs.map((b,i)=>(
+                <tr key={b.id} style={{borderBottom:'1px solid #f3f4f6',background:i%2===0?'#fff':'#fafafa'}}>
+                  <td style={{padding:'9px 12px',fontWeight:700,color:'#0369a1'}}>{b.numero_bc}</td>
+                  <td style={{padding:'9px 12px'}}>{b.article_nom}</td>
+                  <td style={{padding:'9px 12px',fontSize:12}}>{b.client_nom||'—'}</td>
+                  <td style={{padding:'9px 12px',fontWeight:600}}>{b.quantite?parseFloat(b.quantite).toFixed(0)+' kg':'—'}</td>
+                  <td style={{padding:'9px 12px'}}>{b.montant_total_fcfa?parseFloat(b.montant_total_fcfa).toLocaleString('fr-FR')+' FCFA':'—'}</td>
+                  <td style={{padding:'9px 12px',fontSize:12}}>{b.date_livraison_souhaitee?new Date(b.date_livraison_souhaitee).toLocaleDateString('fr-FR'):'—'}</td>
+                  <td style={{padding:'9px 12px',fontSize:12}}>{b.reference_client||'—'}</td>
+                  <td style={{padding:'9px 12px'}}>
+                    <span style={{background:bgStatut(b.statut),color:couleurStatut(b.statut),padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:700}}>
+                      {labelStatut(b.statut)}
+                    </span>
+                  </td>
+                  <td style={{padding:'9px 12px',fontWeight:600,color:'#7c3aed',fontSize:12}}>{b.numero_df||'—'}</td>
+                  <td style={{padding:'9px 12px',display:'flex',gap:6}}>
+                    <button onClick={()=>window.open(`/api/bc/${b.id}/pdf`,'_blank')} style={{background:'#e0f2fe',color:'#0369a1',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>🖨 PDF</button>
+                    {b.statut==='recu' && (
+                      <button onClick={()=>transformerDF(b.id)} style={{background:'#f5f3ff',color:'#7c3aed',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11,fontWeight:700}}>→ DF</button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function MenuActionsDF({ df, isDir, user, onValider, onRefuser, onAnnuler, onModifier }) {
   const [ouvert, setOuvert] = React.useState(false);
@@ -6161,7 +6566,9 @@ export default function ChefAtelier() {
   const MENU_ITEMS = [
     { id:'separator1',  label:'PRODUCTION',               separator:true },
     { id:'dashboard',   label:'Tableau de bord',           icon:'home',        color:'#1d4ed8' },
-    { id:'df',          label:'Demandes de Fabrication', icon:'clipboard', color:'#7c3aed' },
+    { id:'devis',       label:'Devis',                   icon:'clipboard', color:'#0891b2' },
+  { id:'bc',          label:'Bons de Commande',        icon:'clipboard', color:'#0369a1' },
+  { id:'df',          label:'Demandes de Fabrication', icon:'clipboard', color:'#7c3aed' },
   { id:'of',          label:'Ordres de Fabrication', icon:'clipboard', color:'#0369a1' },
   { id:'production',  label:'Suivi Production',          icon:'activity',    color:'#059669' },
     { id:'planning',    label:'Planning Machines',          icon:'calendar',    color:'#7c3aed' },
@@ -6209,6 +6616,8 @@ export default function ChefAtelier() {
   });
 
   const SECTIONS = {
+    devis:       <GestionDevis />,
+    bc:          <GestionBC />,
     df:          <DemandesFabrication />,
     of:          <OrdresFabrication />,
     dashboard:   <Dashboard />,
