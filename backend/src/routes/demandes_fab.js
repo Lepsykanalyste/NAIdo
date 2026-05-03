@@ -150,6 +150,29 @@ router.get('/:id/ticket', async (req, res) => {
       bc_lignes = lignes;
     }
     const qte_totale = bc_lignes.length > 0 ? bc_lignes.reduce((s,l)=>s+parseFloat(l.quantite_kg||0),0) : parseFloat(d.quantite_demandee||0);
+    const total_ttc = bc_lignes.reduce((s,l)=>s+parseFloat(l.montant_ttc||0),0);
+    let lignes_html = '';
+    if (bc_lignes.length > 0) {
+      let rows_html = '';
+      for (const l of bc_lignes) {
+        const qpcs = l.quantite_pieces ? parseFloat(l.quantite_pieces).toLocaleString('fr-FR')+' pcs' : '—';
+        const qkg = l.quantite_kg ? parseFloat(l.quantite_kg).toFixed(1)+' kg' : '—';
+        const pu = l.prix_unitaire_ht ? parseFloat(l.prix_unitaire_ht).toLocaleString('fr-FR')+' FCFA' : '—';
+        const ttc = l.montant_ttc ? parseFloat(l.montant_ttc).toLocaleString('fr-FR')+' FCFA' : '—';
+        rows_html += '<tr style="border-bottom:1px solid #e5e7eb;">';
+        rows_html += '<td style="padding:4px 8px;">'+(l.designation||'—')+'</td>';
+        rows_html += '<td style="padding:4px 8px;text-align:right;">'+qpcs+'</td>';
+        rows_html += '<td style="padding:4px 8px;text-align:right;">'+qkg+'</td>';
+        rows_html += '<td style="padding:4px 8px;text-align:right;">'+pu+'</td>';
+        rows_html += '<td style="padding:4px 8px;text-align:right;font-weight:700;">'+ttc+'</td>';
+        rows_html += '</tr>';
+      }
+      rows_html += '<tr style="background:#f0fdf4;font-weight:700;">';
+      rows_html += '<td colspan="4" style="padding:5px 8px;text-align:right;">TOTAL TTC</td>';
+      rows_html += '<td style="padding:5px 8px;text-align:right;">'+total_ttc.toLocaleString('fr-FR')+' FCFA</td>';
+      rows_html += '</tr>';
+      lignes_html = '<table style="width:100%;border-collapse:collapse;font-size:7.5pt;margin:8px 0;"><thead><tr style="background:#7c3aed;color:#fff;"><th style="padding:5px 8px;text-align:left;">Désignation</th><th style="padding:5px 8px;text-align:right;">Qté (pcs)</th><th style="padding:5px 8px;text-align:right;">Qté (kg)</th><th style="padding:5px 8px;text-align:right;">P.U. HT</th><th style="padding:5px 8px;text-align:right;">Montant TTC</th></tr></thead><tbody>'+rows_html+'</tbody></table>';
+    }
 
     const qr_text = `NAI DEMANDE FABRICATION\nN: ${d.numero_df}\nARTICLE: ${d.article_code} ${d.article_nom}\nQTE: ${d.quantite_demandee} kg\nCLIENT: ${d.client_nom||'—'}\nSTATUT: ${d.statut}\nOF: ${d.numero_of||'—'}\nDATE: ${new Date(d.created_at).toLocaleDateString('fr-FR')}`;
 
@@ -234,28 +257,7 @@ router.get('/:id/ticket', async (req, res) => {
 <div class="qte-big">${qte_totale.toFixed(1)} kg</div>
 <div class="qte-lbl">QUANTITÉ DEMANDÉE</div>
 
-${bc_lignes.length > 0 ? `
-<table style="width:100%;border-collapse:collapse;font-size:7.5pt;margin:8px 0;">
-  <thead><tr style="background:#7c3aed;color:#fff;">
-    <th style="padding:5px 8px;text-align:left;">Désignation</th>
-    <th style="padding:5px 8px;text-align:right;">Qté (pcs)</th>
-    <th style="padding:5px 8px;text-align:right;">Qté (kg)</th>
-    <th style="padding:5px 8px;text-align:right;">P.U. HT</th>
-    <th style="padding:5px 8px;text-align:right;">Montant TTC</th>
-  </tr></thead>
-  <tbody>
-    ${bc_lignes.map(l=>{
-      const cells = [
-        '<td style="padding:4px 8px;">'+( l.designation||'—')+'</td>',
-        '<td style="padding:4px 8px;text-align:right;">'+( l.quantite_pieces?parseFloat(l.quantite_pieces).toLocaleString('fr-FR')+' pcs':'—')+'</td>',
-        '<td style="padding:4px 8px;text-align:right;">'+( l.quantite_kg?parseFloat(l.quantite_kg).toFixed(1)+' kg':'—')+'</td>',
-        '<td style="padding:4px 8px;text-align:right;">'+( l.prix_unitaire_ht?parseFloat(l.prix_unitaire_ht).toLocaleString('fr-FR')+' FCFA':'—')+'</td>',
-        '<td style="padding:4px 8px;text-align:right;font-weight:700;">'+( l.montant_ttc?parseFloat(l.montant_ttc).toLocaleString('fr-FR')+' FCFA':'—')+'</td>'
-      ];
-      return '<tr style="border-bottom:1px solid #e5e7eb;">'+cells.join('')+'</tr>';
-    }).join('')}
-    </tr>
-</table>` : ''}
+${lignes_html}
 ${d.description ? `<div class="specs"><strong>Spécifications :</strong> ${d.description}</div>` : ''}
 
 ${d.numero_of ? `
