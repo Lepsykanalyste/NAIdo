@@ -380,7 +380,7 @@ function GestionDevis() {
         </button>
       </div>
 
-      <div style={{display:'grid',gridTemplateColumns:'1fr 320px',gap:16,alignItems:'start'}}>
+      <div style={{display:'grid',gridTemplateColumns:'calc(100% - 340px) 320px',gap:16,alignItems:'start',width:'100%'}}>
 
         {/* ── Centre : formulaire + lignes + notes ── */}
         <div style={{display:'flex',flexDirection:'column',gap:14}}>
