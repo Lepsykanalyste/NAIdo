@@ -223,12 +223,12 @@ function GestionDevis() {
 
   const calcLigne = (l) => {
     const pu = parseFloat(l.prix_unitaire_ht||0);
-    const qkg = parseFloat(l.quantite_kg||0);
+    const qte = parseFloat(l.quantite_pieces||0);
     const rem = parseFloat(l.remise_pct||0);
     const tva = parseFloat(l.taux_tva||18);
-    const ht = pu*qkg*(1-rem/100);
-    const tva_amt = ht*tva/100;
-    return {ht, tva:tva_amt, ttc:ht+tva_amt};
+    const ht = pu * qte * (1 - rem/100);
+    const tva_amt = ht * tva / 100;
+    return {ht, tva: tva_amt, ttc: ht + tva_amt};
   };
 
   const subtotalHT = lignes.reduce((s,l)=>s+calcLigne(l).ht,0);
@@ -241,9 +241,7 @@ function GestionDevis() {
     setLignes(prev=>[...prev,{
       article_id:art.id, designation:art.designation, article_code:art.code,
       quantite_pieces:'1',
-      quantite_kg:String(parseFloat(art.poids_piece_kg||art.poids_theorique_kg||0).toFixed(3)),
       prix_unitaire_ht:String(art.prix_vente_fcfa||''), remise_pct:'0', taux_tva:'18',
-      poids_piece_kg:parseFloat(art.poids_piece_kg||art.poids_theorique_kg||0),
     }]);
   };
 
@@ -251,10 +249,6 @@ function GestionDevis() {
     setLignes(prev=>{
       const next=[...prev];
       next[i]={...next[i],[field]:val};
-      if(field==='quantite_pieces'&&next[i].poids_piece_kg>0)
-        next[i].quantite_kg=(parseFloat(val||0)*next[i].poids_piece_kg).toFixed(3);
-      if(field==='quantite_kg'&&next[i].poids_piece_kg>0)
-        next[i].quantite_pieces=String(Math.round(parseFloat(val||0)/next[i].poids_piece_kg));
       return next;
     });
   };
@@ -435,8 +429,7 @@ function GestionDevis() {
                   <th style={{padding:'8px 10px',textAlign:'left',color:'#374151',fontWeight:600}}>Produit</th>
                   <th style={{padding:'8px 10px',textAlign:'right',color:'#374151',fontWeight:600}}>Prix unitaire HT</th>
                   <th style={{padding:'8px 10px',textAlign:'right',color:'#374151',fontWeight:600}}>Rem. %</th>
-                  <th style={{padding:'8px 10px',textAlign:'right',color:'#374151',fontWeight:600}}>Qté pcs</th>
-                  <th style={{padding:'8px 10px',textAlign:'right',color:'#374151',fontWeight:600}}>Qté kg</th>
+                  <th style={{padding:'8px 10px',textAlign:'right',color:'#374151',fontWeight:600}}>Quantité</th>
                   <th style={{padding:'8px 10px',textAlign:'right',color:'#374151',fontWeight:600}}>Total TTC</th>
                   <th style={{padding:'8px 10px'}}></th>
                 </tr>
@@ -453,7 +446,7 @@ function GestionDevis() {
                       <td style={{padding:'8px 10px'}}>
                         <div style={{fontWeight:600}}>{l.designation}</div>
                         <div style={{fontSize:10,color:'#9ca3af'}}>{l.article_code}</div>
-                        {c.ht>0&&<div style={{fontSize:10,color:'#6b7280'}}>= {c.ht.toLocaleString('fr-FR')} HT</div>}
+                        {c.ht>0&&<div style={{fontSize:10,color:'#6b7280'}}>{c.ht.toLocaleString('fr-FR')} FCFA HT</div>}
                       </td>
                       <td style={{padding:'6px 8px'}}>
                         <input type="number" value={l.prix_unitaire_ht}
@@ -468,11 +461,6 @@ function GestionDevis() {
                       <td style={{padding:'6px 8px'}}>
                         <input type="number" value={l.quantite_pieces}
                           onChange={e=>updateLigne(i,'quantite_pieces',e.target.value)}
-                          style={{width:65,padding:'4px 6px',border:'1px solid #e5e7eb',borderRadius:5,fontSize:12,textAlign:'right'}}/>
-                      </td>
-                      <td style={{padding:'6px 8px'}}>
-                        <input type="number" value={l.quantite_kg}
-                          onChange={e=>updateLigne(i,'quantite_kg',e.target.value)}
                           style={{width:65,padding:'4px 6px',border:'1px solid #e5e7eb',borderRadius:5,fontSize:12,textAlign:'right'}}/>
                       </td>
                       <td style={{padding:'8px 10px',textAlign:'right',fontWeight:700,color:'#0369a1',whiteSpace:'nowrap'}}>
