@@ -264,3 +264,24 @@ ${d.numero_of ? `
     res.send(html);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
+
+// PUT /api/df/:id — modifier une DF
+router.put('/:id', auth, async (req, res) => {
+  try {
+    const { quantite_demandee, description, specifications, date_livraison_souhaitee, priorite } = req.body;
+    const { rows } = await db.query(`
+      UPDATE demandes_fabrication SET
+        quantite_demandee = COALESCE($1, quantite_demandee),
+        description = COALESCE($2, description),
+        specifications = COALESCE($3, specifications),
+        date_livraison_souhaitee = COALESCE($4, date_livraison_souhaitee),
+        priorite = COALESCE($5, priorite),
+        updated_at = NOW()
+      WHERE id=$6 AND statut='en_attente'
+      RETURNING *
+    `, [quantite_demandee||null, description||null, specifications||null,
+        date_livraison_souhaitee||null, priorite||null, req.params.id]);
+    if (!rows.length) return res.status(400).json({ error: 'DF introuvable ou déjà validée' });
+    res.json(rows[0]);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});

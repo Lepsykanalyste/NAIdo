@@ -173,6 +173,107 @@ function getMenuFiltre(role) {
 // ══════════════════════════════════════════════════════════════
 // MODULE DEMANDES DE FABRICATION
 // ══════════════════════════════════════════════════════════════
+
+function MenuActionsDF({ df, isDir, user, onValider, onRefuser, onAnnuler, onModifier }) {
+  const [ouvert, setOuvert] = React.useState(false);
+  const [showModif, setShowModif] = React.useState(false);
+  const [motifModif, setMotifModif] = React.useState('');
+  const [nouvQte, setNouvQte] = React.useState(df.quantite_demandee||'');
+  const [nouvDesc, setNouvDesc] = React.useState(df.description||'');
+
+  return (
+    <div style={{position:'relative'}}>
+      <button onClick={()=>setOuvert(!ouvert)}
+        style={{background:'#f3f4f6',border:'1px solid #e5e7eb',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:12,fontWeight:600}}>
+        Actions ▾
+      </button>
+      {ouvert && (
+        <div style={{position:'absolute',right:0,top:'100%',background:'#fff',border:'1px solid #e5e7eb',borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,0.12)',zIndex:100,minWidth:160,padding:4}}>
+          {/* Voir PDF */}
+          <button onClick={()=>{window.open(`/api/df/${df.id}/pdf`,'_blank');setOuvert(false);}}
+            style={{width:'100%',padding:'8px 12px',border:'none',background:'none',cursor:'pointer',textAlign:'left',fontSize:12,borderRadius:6,display:'flex',gap:8,alignItems:'center'}}>
+            👁 Voir PDF
+          </button>
+
+          {/* Modifier - seulement si en attente */}
+          {df.statut==='en_attente' && (
+            <button onClick={()=>{setShowModif(true);setOuvert(false);}}
+              style={{width:'100%',padding:'8px 12px',border:'none',background:'none',cursor:'pointer',textAlign:'left',fontSize:12,borderRadius:6,display:'flex',gap:8,alignItems:'center'}}>
+              ✏ Modifier
+            </button>
+          )}
+
+          {/* Valider - direction seulement */}
+          {df.statut==='en_attente' && isDir && (
+            <button onClick={()=>{onValider();setOuvert(false);}}
+              style={{width:'100%',padding:'8px 12px',border:'none',background:'#dcfce7',cursor:'pointer',textAlign:'left',fontSize:12,borderRadius:6,color:'#15803d',fontWeight:700,display:'flex',gap:8,alignItems:'center'}}>
+              ✓ Valider → OF
+            </button>
+          )}
+
+          {/* Refuser - direction seulement */}
+          {df.statut==='en_attente' && isDir && (
+            <button onClick={()=>{
+              const m=window.prompt('Motif du refus :');
+              if(m){onRefuser(m);setOuvert(false);}
+            }} style={{width:'100%',padding:'8px 12px',border:'none',background:'none',cursor:'pointer',textAlign:'left',fontSize:12,borderRadius:6,color:'#dc2626',display:'flex',gap:8,alignItems:'center'}}>
+              ✗ Refuser
+            </button>
+          )}
+
+          {/* Annuler - commercial si en attente */}
+          {df.statut==='en_attente' && (user?.role==='commercial'||isDir) && (
+            <button onClick={()=>{
+              if(window.confirm('Annuler cette demande ?')){onAnnuler();setOuvert(false);}
+            }} style={{width:'100%',padding:'8px 12px',border:'none',background:'#fee2e2',cursor:'pointer',textAlign:'left',fontSize:12,borderRadius:6,color:'#dc2626',display:'flex',gap:8,alignItems:'center'}}>
+              🗑 Annuler
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Modal modification */}
+      {showModif && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:999,display:'flex',alignItems:'center',justifyContent:'center'}}
+          onClick={()=>setShowModif(false)}>
+          <div style={{background:'#fff',borderRadius:14,padding:24,width:400,maxWidth:'90vw'}} onClick={e=>e.stopPropagation()}>
+            <div style={{fontWeight:700,fontSize:15,marginBottom:16}}>✏ Modifier la DF {df.numero_df}</div>
+            <div style={{marginBottom:10}}>
+              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Nouvelle quantité (kg)</div>
+              <input type="number" value={nouvQte} onChange={e=>setNouvQte(e.target.value)}
+                style={{width:'100%',padding:'8px',borderRadius:6,border:'1px solid #e5e7eb',fontSize:14}}/>
+            </div>
+            <div style={{marginBottom:10}}>
+              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Description / Spécifications</div>
+              <textarea value={nouvDesc} onChange={e=>setNouvDesc(e.target.value)} rows={3}
+                style={{width:'100%',padding:'8px',borderRadius:6,border:'1px solid #e5e7eb',fontSize:13,resize:'none'}}/>
+            </div>
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Motif de la modification *</div>
+              <input value={motifModif} onChange={e=>setMotifModif(e.target.value)}
+                style={{width:'100%',padding:'8px',borderRadius:6,border:'1px solid #e5e7eb',fontSize:13}}
+                placeholder="Raison de la modification..."/>
+            </div>
+            <div style={{display:'flex',gap:8}}>
+              <button onClick={()=>{
+                if(!motifModif){alert('Motif requis');return;}
+                onModifier({quantite_demandee:parseFloat(nouvQte),description:nouvDesc+' [Modif: '+motifModif+']'});
+                setShowModif(false);
+              }} style={{flex:1,background:'#7c3aed',color:'#fff',border:'none',borderRadius:8,padding:'10px',cursor:'pointer',fontWeight:700}}>
+                ✓ Confirmer
+              </button>
+              <button onClick={()=>setShowModif(false)}
+                style={{background:'#f3f4f6',border:'none',borderRadius:8,padding:'10px 16px',cursor:'pointer'}}>
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DemandesFabrication() {
   const { user } = useAuth();
   const [dfs, setDfs] = useState([]);
@@ -237,6 +338,14 @@ function DemandesFabrication() {
       setDetail(null);
       charger();
     } catch(e) { toast.error(e.response?.data?.error||'Erreur validation'); }
+  };
+
+  const modifierDF = async (id, data) => {
+    try {
+      await axios.put(`${API}/df/${id}`, data);
+      toast.success('DF modifiée');
+      charger();
+    } catch { toast.error('Erreur modification'); }
   };
 
   const annulerDF = async (id) => {
@@ -411,30 +520,19 @@ function DemandesFabrication() {
                   </td>
                   <td style={{padding:'9px 12px',fontSize:12,color:'#0369a1',fontWeight:600}}>{df.numero_of||'—'}</td>
                   <td style={{padding:'9px 12px',textAlign:'center'}}>
-                    <button
-                      onClick={()=>window.open(`/api/df/${df.id}/pdf`,'_blank')}
-                      title="Imprimer document DF"
-                      style={{background:'#f5f3ff',color:'#7c3aed',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>
-                      🖨
+                    <button onClick={()=>window.open(`/api/df/${df.id}/pdf`,'_blank')}
+                      title="Imprimer PDF"
+                      style={{background:'#f5f3ff',color:'#7c3aed',border:'none',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:12}}>
+                      🖨 PDF
                     </button>
                   </td>
-                  <td style={{padding:'9px 12px',display:'flex',gap:6}}>
-                    {df.statut==='en_attente' && isDir && (
-                      <button onClick={()=>{setShowValider(df);chargerMachines('AT3');}}
-                        style={{background:'#dcfce7',color:'#15803d',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11,fontWeight:700}}>
-                        ✓ Valider
-                      </button>
-                    )}
-                    {df.statut==='en_attente' && isDir && (
-                      <button onClick={()=>{const m=window.prompt('Motif du refus:');if(m)refuser(df.id,m);}}
-                        style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>
-                        ✗ Refuser
-                      </button>
-                    )}
-                    {df.statut==='en_attente' && user?.role==='commercial' && (
-                      <button onClick={()=>annulerDF&&annulerDF(df.id)} style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>✕ Annuler</button>
-                    )}
-                    <button onClick={()=>window.open(`/api/df/${df.id}/pdf`,'_blank')} style={{background:'#f5f3ff',color:'#7c3aed',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>🖨 PDF</button>
+                  <td style={{padding:'9px 12px'}}>
+                    <MenuActionsDF df={df} isDir={isDir} user={user}
+                      onValider={()=>{setShowValider(df);chargerMachines('AT3');}}
+                      onRefuser={(motif)=>refuser(df.id,motif)}
+                      onAnnuler={()=>annulerDF(df.id)}
+                      onModifier={(data)=>modifierDF(df.id,data)}
+                    />
                   </td>
                 </tr>
               ))}
