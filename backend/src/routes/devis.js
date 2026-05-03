@@ -284,3 +284,99 @@ ${d.notes?`<div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius
 });
 
 module.exports = router;
+
+// POST /api/devis/:id/envoyer-email
+router.post('/:id/envoyer-email', auth, async (req, res) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT d.*, c.raison_sociale AS client_nom, c.email AS client_email,
+             u.nom||' '||u.prenom AS commercial_nom, u.email AS commercial_email
+      FROM devis d
+      LEFT JOIN clients_complet c ON c.id=d.client_id
+      LEFT JOIN utilisateurs u ON u.id=d.commercial_id
+      WHERE d.id=$1
+    `, [req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: 'Devis introuvable' });
+    const d = rows[0];
+    if (!d.client_email) return res.status(400).json({ error: 'Le client n\'a pas d\'email renseigné' });
+
+    const nodemailer = require('nodemailer');
+    const emailConfig = req.body.email_config || {};
+
+    const transporter = nodemailer.createTransport({
+      host: emailConfig.host || process.env.SMTP_HOST || 'smtp.gmail.com',
+      port: parseInt(emailConfig.port || process.env.SMTP_PORT || 587),
+      secure: false,
+      auth: {
+        user: emailConfig.user || process.env.SMTP_USER || d.commercial_email,
+        pass: emailConfig.pass || process.env.SMTP_PASS || '',
+      },
+    });
+
+    const validationUrl = `http://100.85.252.109:8095/api/devis/valider/${d.token_validation}`;
+    const pdfUrl = `http://100.85.252.109:8095/api/devis/${d.id}/pdf`;
+
+    await transporter.sendMail({
+      from: `"NAI - ${d.commercial_nom}" <${emailConfig.user || d.commercial_email}>`,
+      to: d.client_email,
+      subject: `Devis ${d.numero_devis} — NAI`,
+      html: `
+        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+          <div style="background:#0369a1;padding:20px;border-radius:8px 8px 0 0;">
+            <h1 style="color:#fff;margin:0;font-size:20px;">NAI — Devis ${d.numero_devis}</h1>
+          </div>
+          <div style="padding:24px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
+            <p>Bonjour <strong>${d.client_nom}</strong>,</p>
+            <p>Veuillez trouver ci-joint notre devis <strong>${d.numero_devis}</strong> pour votre commande.</p>
+            <p style="font-size:14px;color:#6b7280;">Montant TTC : <strong style="color:#0369a1;font-size:18px;">${parseFloat(d.montant_total_fcfa||0).toLocaleString('fr-FR')} FCFA</strong></p>
+            <div style="margin:24px 0;text-align:center;">
+              <a href="${pdfUrl}" style="background:#0369a1;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;margin-right:10px;">
+                📄 Voir le devis PDF
+              </a>
+            </div>
+            <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:16px;margin:20px 0;text-align:center;">
+              <p style="margin:0 0 12px;font-weight:600;">✅ Ce devis vous convient ?</p>
+              <a href="${validationUrl}" style="background:#15803d;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:bold;font-size:15px;">
+                ✓ Valider ce devis
+              </a>
+              <p style="margin:10px 0 0;font-size:11px;color:#6b7280;">En cliquant, vous acceptez les conditions du devis et nous donnez votre accord.</p>
+            </div>
+            <p style="font-size:13px;color:#6b7280;">Devis valable jusqu'au : <strong>${d.date_validite ? new Date(d.date_validite).toLocaleDateString('fr-FR') : '—'}</strong></p>
+            <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0;"/>
+            <p style="font-size:12px;color:#9ca3af;">NAI — Atelier 3 Production | NAIdo by SOPHOPSY</p>
+          </div>
+        </div>
+      `,
+    });
+
+    await db.query(
+      "UPDATE devis SET statut='envoye', email_envoye_at=NOW() WHERE id=$1",
+      [d.id]
+    );
+    res.json({ ok: true, message: `Devis envoyé à ${d.client_email}` });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/devis/valider/:token — validation par le client (lien email)
+router.get('/valider/:token', async (req, res) => {
+  try {
+    const { rows } = await db.query(
+      "UPDATE devis SET statut='accepte', validee_par_client_at=NOW() WHERE token_validation=$1 AND statut='envoye' RETURNING numero_devis, client_id",
+      [req.params.token]
+    );
+    if (!rows.length) {
+      return res.send(`<!DOCTYPE html><html><body style="font-family:Arial;text-align:center;padding:60px;">
+        <h2 style="color:#dc2626;">❌ Lien invalide ou devis déjà traité</h2>
+        <p>Ce lien de validation n'est plus actif.</p>
+      </body></html>`);
+    }
+    res.send(`<!DOCTYPE html><html><body style="font-family:Arial;text-align:center;padding:60px;background:#f0fdf4;">
+      <div style="max-width:500px;margin:0 auto;background:#fff;border-radius:16px;padding:40px;border:2px solid #86efac;">
+        <div style="font-size:64px;margin-bottom:16px;">✅</div>
+        <h2 style="color:#15803d;">Devis ${rows[0].numero_devis} validé !</h2>
+        <p style="color:#374151;">Merci pour votre confirmation. Notre équipe commerciale vous contactera très prochainement pour finaliser votre commande.</p>
+        <p style="color:#6b7280;font-size:13px;margin-top:24px;">NAI — Atelier 3 Production</p>
+      </div>
+    </body></html>`);
+  } catch(e) { res.status(500).send('Erreur: '+e.message); }
+});

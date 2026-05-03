@@ -189,6 +189,9 @@ function GestionDevis() {
   const [searchArt, setSearchArt] = useState('');
   const [pageProd, setPageProd] = useState(1);
   const [showTransfo, setShowTransfo] = useState(null);
+  const [showEmail, setShowEmail] = useState(null);
+  const [emailConfig, setEmailConfig] = useState({host:'smtp.gmail.com',port:'587',user:'',pass:''});
+  const [sendingEmail, setSendingEmail] = useState(false);
   const [lignes, setLignes] = useState([]);
   const [clientInfo, setClientInfo] = useState(null);
   const [form, setForm] = useState({
@@ -273,6 +276,17 @@ function GestionDevis() {
     try{await axios.put(`${API}/devis/${id}/statut`,{statut});toast.success('Statut mis à jour');charger();}
     catch{toast.error('Erreur');}
   };
+  const envoyerEmail = async () => {
+    setSendingEmail(true);
+    try {
+      const res = await axios.post(`${API}/devis/${showEmail.id}/envoyer-email`, {email_config: emailConfig});
+      toast.success(res.data.message);
+      setShowEmail(null);
+      charger();
+    } catch(e) { toast.error(e.response?.data?.error||'Erreur envoi email'); }
+    finally { setSendingEmail(false); }
+  };
+
   const transformerBC = async () => {
     try{
       await axios.post(`${API}/devis/${showTransfo.id}/transformer-bc`,tfForm);
@@ -332,6 +346,7 @@ function GestionDevis() {
                   </td>
                   <td style={{padding:'9px 12px',display:'flex',gap:5}}>
                     <button onClick={()=>window.open(`/api/devis/${d.id}/pdf`,'_blank')} style={{background:'#e0f2fe',color:'#0891b2',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>🖨</button>
+                    {(d.statut==='brouillon'||d.statut==='envoye')&&<button onClick={()=>setShowEmail(d)} style={{background:'#fef3c7',color:'#d97706',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>✉ Email</button>}
                     {d.statut==='brouillon'&&<button onClick={()=>changerStatut(d.id,'envoye')} style={{background:'#dbeafe',color:'#0369a1',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>📤</button>}
                     {d.statut==='envoye'&&<button onClick={()=>changerStatut(d.id,'accepte')} style={{background:'#dcfce7',color:'#15803d',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>✓</button>}
                     {d.statut==='envoye'&&<button onClick={()=>changerStatut(d.id,'refuse')} style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>✗</button>}
@@ -343,6 +358,42 @@ function GestionDevis() {
           </table>
         )}
       </div>
+      {showEmail&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <div style={{background:'#fff',borderRadius:14,padding:24,width:480,maxWidth:'90vw'}}>
+            <div style={{fontWeight:800,fontSize:15,marginBottom:4,color:'#d97706'}}>✉ Envoyer le devis par email</div>
+            <div style={{fontSize:13,color:'#6b7280',marginBottom:16}}>Devis {showEmail?.numero_devis} → {showEmail?.client_nom}</div>
+            <div style={{background:'#fef3c7',borderRadius:8,padding:10,marginBottom:14,fontSize:12,color:'#92400e'}}>
+              ⚠ Configurez votre compte email pour l'envoi. Le client recevra un lien pour valider directement.
+            </div>
+            {[
+              ['Serveur SMTP','host','smtp.gmail.com'],
+              ['Port','port','587'],
+              ['Email expéditeur (commercial)','user','votre@email.com'],
+              ['Mot de passe app','pass',''],
+            ].map(([l,k,ph])=>(
+              <div key={k} style={{marginBottom:8}}>
+                <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:3}}>{l}</div>
+                <input type={k==='pass'?'password':'text'} value={emailConfig[k]}
+                  onChange={e=>setEmailConfig(p=>({...p,[k]:e.target.value}))}
+                  style={{width:'100%',padding:'7px 10px',border:'1px solid #e5e7eb',borderRadius:6,fontSize:13}}
+                  placeholder={ph}/>
+              </div>
+            ))}
+            <div style={{background:'#f0fdf4',borderRadius:8,padding:10,marginBottom:14,fontSize:12,color:'#374151'}}>
+              📧 Le client recevra un bouton <strong>"✓ Valider ce devis"</strong> — en cliquant, son accord est enregistré automatiquement ici.
+            </div>
+            <div style={{display:'flex',gap:8}}>
+              <button onClick={envoyerEmail} disabled={sendingEmail||!emailConfig.user||!emailConfig.pass}
+                style={{flex:1,background:sendingEmail||!emailConfig.user||!emailConfig.pass?'#d1d5db':'#d97706',color:'#fff',border:'none',borderRadius:8,padding:'10px',cursor:sendingEmail?'not-allowed':'pointer',fontWeight:700}}>
+                {sendingEmail?'Envoi...' :'✉ Envoyer'}
+              </button>
+              <button onClick={()=>setShowEmail(null)} style={{background:'#f3f4f6',border:'none',borderRadius:8,padding:'10px 16px',cursor:'pointer'}}>Annuler</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showTransfo&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
           <div style={{background:'#fff',borderRadius:14,padding:24,width:440}}>
@@ -429,7 +480,8 @@ function GestionDevis() {
                 <thead style={{background:'#f9fafb'}}>
                   <tr>
                     <th style={{padding:'8px 10px',textAlign:'left',color:'#374151',fontWeight:600,borderBottom:'1px solid #e5e7eb'}}>Produit</th>
-                    <th style={{padding:'8px 10px',textAlign:'right',color:'#374151',fontWeight:600,borderBottom:'1px solid #e5e7eb'}}>Prix unitaire TTC</th>
+                    <th style={{padding:'8px 10px',textAlign:'right',color:'#374151',fontWeight:600,borderBottom:'1px solid #e5e7eb'}}>P.U. HT</th>
+                    <th style={{padding:'8px 10px',textAlign:'right',color:'#374151',fontWeight:600,borderBottom:'1px solid #e5e7eb'}}>TVA%</th>
                     <th style={{padding:'8px 10px',textAlign:'right',color:'#374151',fontWeight:600,borderBottom:'1px solid #e5e7eb'}}>Rem. %</th>
                     <th style={{padding:'8px 10px',textAlign:'right',color:'#374151',fontWeight:600,borderBottom:'1px solid #e5e7eb'}}>Quantité</th>
                     <th style={{padding:'8px 10px',textAlign:'right',color:'#374151',fontWeight:600,borderBottom:'1px solid #e5e7eb'}}>Total TTC</th>
@@ -456,6 +508,13 @@ function GestionDevis() {
                             style={{width:90,padding:'4px 6px',border:'1px solid #e5e7eb',borderRadius:5,fontSize:12,textAlign:'right'}}/>
                         </td>
                         <td style={{padding:'6px 8px',textAlign:'right'}}>
+                          <select value={l.taux_tva} onChange={e=>updateLigne(i,'taux_tva',e.target.value)}
+                            style={{width:55,padding:'4px 5px',border:'1px solid #e5e7eb',borderRadius:5,fontSize:11}}>
+                            <option value="0">0%</option>
+                            <option value="18">18%</option>
+                          </select>
+                        </td>
+                        <td style={{padding:'6px 8px',textAlign:'right'}}>
                           <input type="number" min="0" max="100" value={l.remise_pct}
                             onChange={e=>updateLigne(i,'remise_pct',e.target.value)}
                             style={{width:45,padding:'4px 6px',border:'1px solid #e5e7eb',borderRadius:5,fontSize:12,textAlign:'right'}}/>
@@ -465,8 +524,9 @@ function GestionDevis() {
                             onChange={e=>updateLigne(i,'quantite_pieces',e.target.value)}
                             style={{width:70,padding:'4px 6px',border:'1px solid #e5e7eb',borderRadius:5,fontSize:12,textAlign:'right'}}/>
                         </td>
-                        <td style={{padding:'8px 10px',textAlign:'right',fontWeight:700,color:'#374151',whiteSpace:'nowrap'}}>
-                          {c.ttc.toLocaleString('fr-FR')} FCFA
+                        <td style={{padding:'8px 10px',textAlign:'right',whiteSpace:'nowrap'}}>
+                          <div style={{fontWeight:700,color:'#374151'}}>{c.ttc.toLocaleString('fr-FR')} FCFA</div>
+                          <div style={{fontSize:10,color:'#9ca3af'}}>= {c.ht.toLocaleString('fr-FR')} HT</div>
                         </td>
                         <td style={{padding:'6px 8px',textAlign:'center'}}>
                           <button onClick={()=>setLignes(prev=>prev.filter((_,j)=>j!==i))}
