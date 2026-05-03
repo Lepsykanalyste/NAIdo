@@ -196,24 +196,33 @@ function MenuActionsDF({ df, isDir, user, onValider, onRefuser, onAnnuler, onMod
         <>
         <div style={{position:'fixed',inset:0,zIndex:9998}} onClick={()=>setOuvert(false)}/>
         <div style={{position:'fixed',top:pos.top,left:pos.left,background:'#fff',border:'1px solid #e5e7eb',borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,0.15)',zIndex:9999,minWidth:180,padding:4}}>
-          {/* Voir PDF */}
-          <button onClick={()=>{window.open(`/api/df/${df.id}/pdf`,'_blank');setOuvert(false);}}
-            style={{width:'100%',padding:'8px 12px',border:'none',background:'none',cursor:'pointer',textAlign:'left',fontSize:12,borderRadius:6,display:'flex',gap:8,alignItems:'center'}}>
-            👁 Voir PDF
+          {/* Voir détail DF */}
+          <button onClick={()=>{setShowDetail&&setShowDetail(true);setOuvert(false);}}
+            style={{width:'100%',padding:'9px 14px',border:'none',background:'none',cursor:'pointer',textAlign:'left',fontSize:13,borderRadius:6}}>
+            👁 Voir
           </button>
 
-          {/* Modifier - seulement si en attente */}
+          {/* Modifier */}
           {df.statut==='en_attente' && (
             <button onClick={()=>{setShowModif(true);setOuvert(false);}}
-              style={{width:'100%',padding:'8px 12px',border:'none',background:'none',cursor:'pointer',textAlign:'left',fontSize:12,borderRadius:6,display:'flex',gap:8,alignItems:'center'}}>
+              style={{width:'100%',padding:'9px 14px',border:'none',background:'none',cursor:'pointer',textAlign:'left',fontSize:13,borderRadius:6}}>
               ✏ Modifier
+            </button>
+          )}
+
+          {/* Annuler */}
+          {df.statut==='en_attente' && (
+            <button onClick={()=>{
+              if(window.confirm('Annuler cette demande ?')){onAnnuler();setOuvert(false);}
+            }} style={{width:'100%',padding:'9px 14px',border:'none',background:'#fee2e2',cursor:'pointer',textAlign:'left',fontSize:13,borderRadius:6,color:'#dc2626'}}>
+              🗑 Annuler
             </button>
           )}
 
           {/* Valider - direction seulement */}
           {df.statut==='en_attente' && isDir && (
             <button onClick={()=>{onValider();setOuvert(false);}}
-              style={{width:'100%',padding:'8px 12px',border:'none',background:'#dcfce7',cursor:'pointer',textAlign:'left',fontSize:12,borderRadius:6,color:'#15803d',fontWeight:700,display:'flex',gap:8,alignItems:'center'}}>
+              style={{width:'100%',padding:'9px 14px',border:'none',background:'#dcfce7',cursor:'pointer',textAlign:'left',fontSize:13,borderRadius:6,color:'#15803d',fontWeight:700}}>
               ✓ Valider → OF
             </button>
           )}
@@ -223,17 +232,8 @@ function MenuActionsDF({ df, isDir, user, onValider, onRefuser, onAnnuler, onMod
             <button onClick={()=>{
               const m=window.prompt('Motif du refus :');
               if(m){onRefuser(m);setOuvert(false);}
-            }} style={{width:'100%',padding:'8px 12px',border:'none',background:'none',cursor:'pointer',textAlign:'left',fontSize:12,borderRadius:6,color:'#dc2626',display:'flex',gap:8,alignItems:'center'}}>
+            }} style={{width:'100%',padding:'9px 14px',border:'none',background:'none',cursor:'pointer',textAlign:'left',fontSize:13,borderRadius:6,color:'#dc2626'}}>
               ✗ Refuser
-            </button>
-          )}
-
-          {/* Annuler - commercial si en attente */}
-          {df.statut==='en_attente' && (user?.role==='commercial'||isDir) && (
-            <button onClick={()=>{
-              if(window.confirm('Annuler cette demande ?')){onAnnuler();setOuvert(false);}
-            }} style={{width:'100%',padding:'8px 12px',border:'none',background:'#fee2e2',cursor:'pointer',textAlign:'left',fontSize:12,borderRadius:6,color:'#dc2626',display:'flex',gap:8,alignItems:'center'}}>
-              🗑 Annuler
             </button>
           )}
         </div>
