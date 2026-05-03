@@ -82,12 +82,10 @@ router.get('/:id/pdf', async (req, res) => {
   try {
     const { rows } = await db.query(`
       SELECT bc.*, c.raison_sociale AS client_nom, c.telephone, c.email, c.adresse,
-             a.designation AS article_nom, a.code AS article_code,
              dv.numero_devis, df.numero_df,
              u.nom||' '||u.prenom AS commercial_nom
       FROM bons_commande bc
       LEFT JOIN clients_complet c ON c.id=bc.client_id
-      LEFT JOIN articles a ON a.id=bc.article_id
       LEFT JOIN devis dv ON dv.id=bc.devis_id
       LEFT JOIN demandes_fabrication df ON df.id=bc.df_id
       LEFT JOIN utilisateurs u ON u.id=bc.commercial_id
@@ -95,6 +93,13 @@ router.get('/:id/pdf', async (req, res) => {
     `, [req.params.id]);
     if (!rows.length) return res.status(404).json({ error: 'BC introuvable' });
     const d = rows[0];
+    // Récupérer les lignes avec article
+    const { rows: lignes } = await db.query(`
+      SELECT bl.*, a.code AS article_code
+      FROM bc_lignes bl
+      LEFT JOIN articles a ON a.id = bl.article_id
+      WHERE bl.bc_id = $1 ORDER BY bl.ordre
+    `, [req.params.id]);
     const date_str = new Date(d.created_at).toLocaleDateString('fr-FR');
     const livr_str = d.date_livraison_souhaitee ? new Date(d.date_livraison_souhaitee).toLocaleDateString('fr-FR') : '—';
     const statut_label = {recu:'Reçu',confirme:'Confirmé',en_traitement:'En traitement',transforme_df:'→ DF créée',annule:'Annulé'}[d.statut]||d.statut;
@@ -158,16 +163,17 @@ router.get('/:id/pdf', async (req, res) => {
 <table>
   <thead><tr><th>Désignation</th><th>Référence</th><th>Qté (kg)</th><th>Qté (pcs)</th><th>P.U. (FCFA)</th><th>Montant TTC</th></tr></thead>
   <tbody>
+    ${lignes.map(l => `
     <tr>
-      <td>${d.article_nom||'—'}</td>
-      <td>${d.article_code||'—'}</td>
-      <td>${d.quantite?parseFloat(d.quantite).toFixed(1)+' kg':'—'}</td>
-      <td>${d.quantite_pieces?parseFloat(d.quantite_pieces).toLocaleString('fr-FR')+' pcs':'—'}</td>
-      <td>${d.prix_unitaire_fcfa?parseFloat(d.prix_unitaire_fcfa).toLocaleString('fr-FR')+' FCFA':'—'}</td>
-      <td style="font-weight:700;">${d.montant_total_fcfa?parseFloat(d.montant_total_fcfa).toLocaleString('fr-FR')+' FCFA':'—'}</td>
-    </tr>
+      <td>${l.designation||'—'}</td>
+      <td>${l.article_code||'—'}</td>
+      <td>${l.quantite_kg?parseFloat(l.quantite_kg).toFixed(1)+' kg':'—'}</td>
+      <td>${l.quantite_pieces?parseFloat(l.quantite_pieces).toLocaleString('fr-FR')+' pcs':'—'}</td>
+      <td>${l.prix_unitaire_ht?parseFloat(l.prix_unitaire_ht).toLocaleString('fr-FR')+' FCFA':'—'}</td>
+      <td style="font-weight:700;">${l.montant_ttc?parseFloat(l.montant_ttc).toLocaleString('fr-FR')+' FCFA':'—'}</td>
+    </tr>`).join('')}
     <tr class="total-row">
-      <td colspan="5" style="text-align:right;">TOTAL</td>
+      <td colspan="5" style="text-align:right;">TOTAL TTC</td>
       <td>${d.montant_total_fcfa?parseFloat(d.montant_total_fcfa).toLocaleString('fr-FR')+' FCFA':'—'}</td>
     </tr>
   </tbody>
