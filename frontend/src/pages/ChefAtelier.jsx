@@ -203,19 +203,15 @@ function MenuActionsDF({ df, isDir, user, onValider, onRefuser, onAnnuler, onMod
               👁 Voir la demande
             </button>
 
-            {df.statut==='en_attente' && (
-              <button onClick={()=>{setShowModif(true);setOuvert(false);}}
+            <button onClick={()=>{setShowModif(true);setOuvert(false);}}
                 style={{width:'100%',padding:'9px 14px',border:'none',background:'none',cursor:'pointer',textAlign:'left',fontSize:13,borderRadius:6,color:'#374151'}}>
-                ✏ Modifier
-              </button>
-            )}
+              ✏ Modifier
+            </button>
 
-            {df.statut==='en_attente' && (
-              <button onClick={()=>{if(window.confirm('Annuler cette demande ?')){onAnnuler();setOuvert(false);}}}
+            <button onClick={()=>{if(window.confirm('Annuler cette demande ?')){onAnnuler();setOuvert(false);}}}
                 style={{width:'100%',padding:'9px 14px',border:'none',background:'#fee2e2',cursor:'pointer',textAlign:'left',fontSize:13,borderRadius:6,color:'#dc2626'}}>
-                🗑 Annuler
-              </button>
-            )}
+              🗑 Annuler
+            </button>
 
             {df.statut==='en_attente' && isDir && (
               <button onClick={()=>{onValider();setOuvert(false);}}
@@ -319,7 +315,7 @@ function DemandesFabrication() {
   const [showValider, setShowValider] = useState(null);
   const [filtreStatut, setFiltreStatut] = useState('');
   const [form, setForm] = useState({
-    article_id:'', client_id:'', quantite_demandee:'',
+    article_id:'', client_id:'', quantite_demandee:'', quantite_pieces:'',
     description:'', specifications:'', date_livraison_souhaitee:'',
     priorite:'3', notes:''
   });
@@ -454,10 +450,33 @@ function DemandesFabrication() {
               </select>
             </div>
             <div style={{marginBottom:12}}>
+              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Quantité (pièces)</div>
+              <input type="number" min="0" value={form.quantite_pieces||''}
+                onChange={e=>{
+                  const pieces = parseFloat(e.target.value||0);
+                  const art = articles.find(a=>a.id===form.article_id);
+                  const poids_unit = art?.poids_unitaire_kg || art?.poids_theorique_kg || 0;
+                  const kg = poids_unit>0 ? (pieces*poids_unit).toFixed(3) : form.quantite_demandee;
+                  setForm(prev=>({...prev,quantite_pieces:e.target.value,quantite_demandee:poids_unit>0?kg:prev.quantite_demandee}));
+                }}
+                style={sel} placeholder="ex: 10000 sacs"/>
+            </div>
+            <div style={{marginBottom:12}}>
               <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Quantité demandée (kg) *</div>
               <input type="number" min="0" value={form.quantite_demandee}
-                onChange={e=>setForm(prev=>({...prev,quantite_demandee:e.target.value}))}
-                style={sel} placeholder="ex: 1000"/>
+                onChange={e=>{
+                  const kg = parseFloat(e.target.value||0);
+                  const art = articles.find(a=>a.id===form.article_id);
+                  const poids_unit = art?.poids_unitaire_kg || art?.poids_theorique_kg || 0;
+                  const pieces = poids_unit>0 ? Math.round(kg/poids_unit) : form.quantite_pieces;
+                  setForm(prev=>({...prev,quantite_demandee:e.target.value,quantite_pieces:poids_unit>0?String(pieces):prev.quantite_pieces}));
+                }}
+                style={sel} placeholder="ex: 500 kg"/>
+              {form.quantite_pieces && form.quantite_demandee && (
+                <div style={{fontSize:11,color:'#15803d',marginTop:3}}>
+                  ≈ {parseFloat(form.quantite_pieces).toLocaleString('fr-FR')} pcs × {form.quantite_demandee&&form.quantite_pieces?(parseFloat(form.quantite_demandee)/parseFloat(form.quantite_pieces)).toFixed(4):0} kg/pce
+                </div>
+              )}
             </div>
             <div style={{marginBottom:12}}>
               <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Date livraison souhaitée</div>
