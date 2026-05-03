@@ -127,7 +127,7 @@ router.get('/:id/pdf', async (req, res) => {
              u1.nom||' '||u1.prenom AS demandeur_nom,
              u2.nom||' '||u2.prenom AS valideur_nom,
              o.numero_of,
-             bc.numero_bc,
+             bc.numero_bc, bc.reference_client, bc.adresse_livraison, bc.date_livraison_souhaitee,
              COALESCE((SELECT SUM(quantite_kg) FROM bc_lignes WHERE bc_id=df.bc_id), df.quantite_demandee) AS quantite_totale_kg
       FROM demandes_fabrication df
       LEFT JOIN clients_complet c ON c.id=df.client_id
@@ -240,8 +240,11 @@ router.get('/:id/pdf', async (req, res) => {
   <div class="sec">
     <div class="sec-h">Commande</div>
     <div class="sec-b">
-      <div class="row"><span class="lbl">BC origine</span><span class="val">${d.numero_bc||'—'}</span></div>
-      <div class="row"><span class="lbl">Nb articles</span><span class="val">${bc_lignes.length > 0 ? bc_lignes.length+' article(s)' : d.article_nom||'—'}</span></div>
+      <div class="row"><span class="lbl">BC NAI</span><span class="val">${d.numero_bc||'—'}</span></div>
+      <div class="row"><span class="lbl">Réf. client</span><span class="val">${d.reference_client||'—'}</span></div>
+      <div class="row"><span class="lbl">Nb articles</span><span class="val">${bc_lignes.length > 0 ? bc_lignes.length+' article(s)' : '1 article'}</span></div>
+      <div class="row"><span class="lbl">Livraison</span><span class="val">${d.date_livraison_souhaitee ? new Date(d.date_livraison_souhaitee).toLocaleDateString('fr-FR') : '—'}</span></div>
+      <div class="row"><span class="lbl">Adresse</span><span class="val">${d.adresse_livraison||'—'}</span></div>
       <div class="row"><span class="lbl">Total TTC</span><span class="val">${total_ttc.toLocaleString('fr-FR')} FCFA</span></div>
     </div>
   </div>
