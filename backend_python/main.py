@@ -507,6 +507,31 @@ async def get_clients(search: Optional[str] = None, user=Depends(get_current_use
         rows = await conn.fetch(q, *params)
         return [dict(r) for r in rows]
 
+@app.put("/api/vente/clients/{client_id}")
+async def update_client(client_id: str, request: Request, user=Depends(get_current_user)):
+    data = await request.json()
+    global pool
+    async with pool.acquire() as conn:
+        fields = []
+        vals = []
+        i = 1
+        for k in ['code','raison_sociale','type','contact_nom','telephone','telephone2',
+                  'email','adresse','ville','pays','nif','rc','credit_limite','notes']:
+            if k in data:
+                fields.append(f"{k}=${i}")
+                vals.append(data[k])
+                i += 1
+        if not fields:
+            raise HTTPException(status_code=400, detail="Aucun champ à modifier")
+        vals.append(client_id)
+        row = await conn.fetchrow(
+            f"UPDATE clients_complet SET {', '.join(fields)}, updated_at=NOW() WHERE id=${i} RETURNING *",
+            *vals
+        )
+        if not row:
+            raise HTTPException(status_code=404, detail="Client introuvable")
+        return dict(row)
+
 @app.post("/api/vente/clients")
 async def create_client(payload: dict, user=Depends(get_current_user)):
     async with pool.acquire() as conn:
