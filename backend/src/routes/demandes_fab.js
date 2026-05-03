@@ -244,7 +244,7 @@ ${bc_lignes.length > 0 ? `
     <th style="padding:5px 8px;text-align:right;">Montant TTC</th>
   </tr></thead>
   <tbody>
-    ${bc_lignes.map(l=>`<tr style="border-bottom:1px solid #e5e7eb;">
+    ${bc_lignes.map(l=>`<tr style="border-bottom:1px solid #e5e7eb;">`)}
       <td style="padding:4px 8px;">${l.designation||'—'}</td>
       <td style="padding:4px 8px;text-align:right;">${l.quantite_pieces?parseFloat(l.quantite_pieces).toLocaleString('fr-FR')+' pcs':'—'}</td>
       <td style="padding:4px 8px;text-align:right;">${l.quantite_kg?parseFloat(l.quantite_kg).toFixed(1)+' kg':'—'}</td>
