@@ -70,7 +70,7 @@ router.post('/', auth, async (req, res) => {
           montant_ht, montant_tva, montant_ttc, ordre)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
       `, [dv[0].id, l.article_id||null, l.designation||'', parseInt(l.quantite_pieces||0),
-          qte_kg, pu_ht, rem, tva, ht, tva_amt, ttc, i]);
+          qte, pu_ht, rem, tva, ht, tva_amt, ttc, i]);
     }
 
     // Mise à jour totaux
