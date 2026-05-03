@@ -525,7 +525,7 @@ async def update_client(client_id: str, request: Request, user=Depends(get_curre
             raise HTTPException(status_code=400, detail="Aucun champ à modifier")
         vals.append(client_id)
         row = await conn.fetchrow(
-            f"UPDATE clients_complet SET {', '.join(fields)}, updated_at=NOW() WHERE id=${i} RETURNING *",
+            f"UPDATE clients_complet SET {', '.join(fields)} WHERE id=${i} RETURNING *",
             *vals
         )
         if not row:
