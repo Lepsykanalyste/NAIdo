@@ -933,7 +933,7 @@ function MenuActionsDF({ df, isDir, user, onValider, onRefuser, onAnnuler, onMod
   const [nouvQte, setNouvQte] = React.useState(String(df.quantite_demandee||''));
   const [nouvDesc, setNouvDesc] = React.useState(df.description||'');
   const [nouvPriorite, setNouvPriorite] = React.useState(df.priorite||3);
-  const [nouvDate, setNouvDate] = React.useState(df.date_livraison_souhaitee?df.date_livraison_souhaitee.slice(0,10):'');
+  const [nouvDate, setNouvDate] = React.useState(df.date_livraison_souhaitee?df.date_livraison_souhaitee.slice(0,10):"");
   const [motifModif, setMotifModif] = React.useState('');
 
   return (
