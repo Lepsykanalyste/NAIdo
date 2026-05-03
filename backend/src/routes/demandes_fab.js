@@ -144,7 +144,7 @@ router.get('/:id/ticket', async (req, res) => {
     let bc_lignes = [];
     if (d.bc_id) {
       const { rows: lignes } = await db.query(
-        'SELECT bl.*, a.code AS article_code FROM bc_lignes bl LEFT JOIN articles a ON a.id=bl.article_id WHERE bl.bc_id=$1 ORDER BY bl.ordre',
+        'SELECT bl.*, a.code AS article_code, a.designation AS article_designation FROM bc_lignes bl LEFT JOIN articles a ON a.id=bl.article_id WHERE bl.bc_id=$1 ORDER BY bl.ordre',
         [d.bc_id]
       );
       bc_lignes = lignes;
