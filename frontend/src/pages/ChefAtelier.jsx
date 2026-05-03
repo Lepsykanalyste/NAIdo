@@ -239,6 +239,15 @@ function DemandesFabrication() {
     } catch(e) { toast.error(e.response?.data?.error||'Erreur validation'); }
   };
 
+  const annulerDF = async (id) => {
+    if (!window.confirm('Annuler cette demande ?')) return;
+    try {
+      await axios.put(`${API}/df/${id}/refuser`, { motif_refus: 'Annulé par le commercial' });
+      toast.success('DF annulée');
+      charger();
+    } catch { toast.error('Erreur'); }
+  };
+
   const refuser = async (id, motif) => {
     try {
       await axios.put(`${API}/df/${id}/refuser`, { motif_refus: motif });
@@ -422,9 +431,10 @@ function DemandesFabrication() {
                         ✗ Refuser
                       </button>
                     )}
-                    {df.description && (
-                      <span title={df.description} style={{cursor:'help',fontSize:14}}>ℹ️</span>
+                    {df.statut==='en_attente' && user?.role==='commercial' && (
+                      <button onClick={()=>annulerDF&&annulerDF(df.id)} style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>✕ Annuler</button>
                     )}
+                    <button onClick={()=>window.open(`/api/df/${df.id}/pdf`,'_blank')} style={{background:'#f5f3ff',color:'#7c3aed',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>🖨 PDF</button>
                   </td>
                 </tr>
               ))}
