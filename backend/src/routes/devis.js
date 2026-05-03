@@ -56,10 +56,10 @@ router.post('/', auth, async (req, res) => {
     for (let i=0; i<(lignes||[]).length; i++) {
       const l = lignes[i];
       const pu_ht = parseFloat(l.prix_unitaire_ht||0);
-      const qte_kg = parseFloat(l.quantite_kg||0);
+      const qte = parseFloat(l.quantite_pieces||l.quantite_kg||0);
       const rem = parseFloat(l.remise_pct||0);
       const tva = parseFloat(l.taux_tva||18);
-      const ht = pu_ht * qte_kg * (1 - rem/100);
+      const ht = pu_ht * qte * (1 - rem/100);
       const tva_amt = ht * tva / 100;
       const ttc = ht + tva_amt;
       total_ht += ht; total_tva += tva_amt; total_ttc += ttc;
