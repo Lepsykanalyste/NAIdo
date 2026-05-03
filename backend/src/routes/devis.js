@@ -169,17 +169,38 @@ router.get('/:id/pdf', async (req, res) => {
     const statut_label = {brouillon:'Brouillon',envoye:'Envoyé',accepte:'Accepté',refuse:'Refusé',expire:'Expiré',transforme:'→ BC créé'}[d.statut]||d.statut;
     const couleur = {brouillon:'#6b7280',envoye:'#0369a1',accepte:'#15803d',refuse:'#dc2626',expire:'#9ca3af',transforme:'#7c3aed'}[d.statut]||'#6b7280';
 
-    const lignes_html = lignes.map((l,i) => `
+    // Recalculer totaux depuis lignes
+    let total_ht_calc = 0, total_tva_calc = 0;
+    lignes.forEach(l => {
+      const q = parseFloat(l.quantite_pieces||0);
+      const p = parseFloat(l.prix_unitaire_ht||0);
+      const r = parseFloat(l.remise_pct||0);
+      const t = parseFloat(l.taux_tva||18);
+      const ht = p * q * (1 - r/100);
+      total_ht_calc += ht;
+      total_tva_calc += ht * t / 100;
+    });
+    const total_ttc_calc = total_ht_calc + total_tva_calc;
+
+    const lignes_html = lignes.map((l,i) => {
+      const qte = parseFloat(l.quantite_pieces||0);
+      const pu = parseFloat(l.prix_unitaire_ht||0);
+      const rem = parseFloat(l.remise_pct||0);
+      const tva = parseFloat(l.taux_tva||18);
+      const ht = pu * qte * (1 - rem/100);
+      const tva_amt = ht * tva / 100;
+      const ttc = ht + tva_amt;
+      return `
       <tr style="background:${i%2===0?'#fff':'#f9fafb'};">
         <td style="padding:8px 10px;">${i+1}</td>
         <td style="padding:8px 10px;font-weight:600;">${l.designation||l.article_code||'—'}</td>
-        <td style="padding:8px 10px;text-align:right;">${l.quantite_pieces?parseInt(l.quantite_pieces).toLocaleString('fr-FR')+' pcs':'—'}</td>
-        <td style="padding:8px 10px;text-align:right;">${parseFloat(l.quantite_kg||0).toFixed(1)} kg</td>
-        <td style="padding:8px 10px;text-align:right;">${parseFloat(l.prix_unitaire_ht||0).toLocaleString('fr-FR')}</td>
-        <td style="padding:8px 10px;text-align:right;">${parseFloat(l.remise_pct||0).toFixed(0)}%</td>
-        <td style="padding:8px 10px;text-align:right;">${parseFloat(l.taux_tva||18).toFixed(0)}%</td>
-        <td style="padding:8px 10px;text-align:right;font-weight:700;">${parseFloat(l.montant_ttc||0).toLocaleString('fr-FR')}</td>
-      </tr>`).join('');
+        <td style="padding:8px 10px;text-align:right;">${qte.toLocaleString('fr-FR')} pcs</td>
+        <td style="padding:8px 10px;text-align:right;">${pu.toLocaleString('fr-FR')} FCFA</td>
+        <td style="padding:8px 10px;text-align:right;">${rem.toFixed(0)}%</td>
+        <td style="padding:8px 10px;text-align:right;">${tva.toFixed(0)}%</td>
+        <td style="padding:8px 10px;text-align:right;font-weight:700;">${ttc.toLocaleString('fr-FR')}</td>
+      </tr>`;
+    }).join('');
 
     const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
 <style>
@@ -250,8 +271,7 @@ router.get('/:id/pdf', async (req, res) => {
   <thead><tr>
     <th style="width:30px;">#</th>
     <th>Désignation</th>
-    <th class="r">Qté (pcs)</th>
-    <th class="r">Qté (kg)</th>
+    <th class="r">Quantité</th>
     <th class="r">P.U. HT</th>
     <th class="r">Rem.</th>
     <th class="r">TVA</th>
@@ -262,10 +282,10 @@ router.get('/:id/pdf', async (req, res) => {
 <div class="totaux">
   <div class="totaux-box">
     <table>
-      <tr><td style="color:#6b7280;">Sous-total HT</td><td style="text-align:right;font-weight:600;">${parseFloat(d.montant_ht||0).toLocaleString('fr-FR')} FCFA</td></tr>
+      <tr><td style="color:#6b7280;">Sous-total HT</td><td style="text-align:right;font-weight:600;">${total_ht_calc.toLocaleString('fr-FR')} FCFA</td></tr>
       ${parseFloat(d.remise_pct||0)>0?`<tr><td style="color:#dc2626;">Remise (${d.remise_pct}%)</td><td style="text-align:right;color:#dc2626;">-${(parseFloat(d.montant_ht||0)*parseFloat(d.remise_pct||0)/100).toLocaleString('fr-FR')} FCFA</td></tr>`:''}
-      <tr><td style="color:#6b7280;">TVA (${d.taux_tva||18}%)</td><td style="text-align:right;">${parseFloat(d.montant_tva||0).toLocaleString('fr-FR')} FCFA</td></tr>
-      <tr class="ttc"><td>TOTAL TTC</td><td style="text-align:right;">${parseFloat(d.montant_total_fcfa||0).toLocaleString('fr-FR')} FCFA</td></tr>
+      <tr><td style="color:#6b7280;">TVA (${d.taux_tva||18}%)</td><td style="text-align:right;">${total_tva_calc.toLocaleString('fr-FR')} FCFA</td></tr>
+      <tr class="ttc"><td>TOTAL TTC</td><td style="text-align:right;">${total_ttc_calc.toLocaleString('fr-FR')} FCFA</td></tr>
     </table>
   </div>
 </div>
@@ -328,7 +348,7 @@ router.post('/:id/envoyer-email', auth, async (req, res) => {
           <div style="padding:24px;border:1px solid #e5e7eb;border-top:none;border-radius:0 0 8px 8px;">
             <p>Bonjour <strong>${d.client_nom}</strong>,</p>
             <p>Veuillez trouver ci-joint notre devis <strong>${d.numero_devis}</strong> pour votre commande.</p>
-            <p style="font-size:14px;color:#6b7280;">Montant TTC : <strong style="color:#0369a1;font-size:18px;">${parseFloat(d.montant_total_fcfa||0).toLocaleString('fr-FR')} FCFA</strong></p>
+            <p style="font-size:14px;color:#6b7280;">Montant TTC : <strong style="color:#0369a1;font-size:18px;">${total_ttc_calc.toLocaleString('fr-FR')} FCFA</strong></p>
             <div style="margin:24px 0;text-align:center;">
               <a href="${pdfUrl}" style="background:#0369a1;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:bold;margin-right:10px;">
                 📄 Voir le devis PDF
