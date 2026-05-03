@@ -839,6 +839,87 @@ function GestionBC() {
             </tbody>
           </table>
         )}
+
+        {/* Modale détail BC */}
+        {bcDetail && (
+          <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <div style={{background:'#fff',borderRadius:12,padding:28,width:620,maxWidth:'96vw',maxHeight:'85vh',overflowY:'auto',boxShadow:'0 8px 32px rgba(0,0,0,0.18)'}}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+                <div>
+                  <div style={{fontWeight:700,fontSize:16,color:'#1f2937'}}>{bcDetail.numero_bc}</div>
+                  <div style={{fontSize:12,color:'#6b7280'}}>Client : {bcDetail.client_nom} {bcDetail.reference_client?'· Réf. '+bcDetail.reference_client:''}</div>
+                </div>
+                <button onClick={()=>setBcDetail(null)} style={{background:'none',border:'none',fontSize:20,cursor:'pointer',color:'#6b7280'}}>✕</button>
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:16,fontSize:13}}>
+                <div><span style={{color:'#6b7280'}}>Livraison : </span><strong>{bcDetail.date_livraison_souhaitee?new Date(bcDetail.date_livraison_souhaitee).toLocaleDateString('fr-FR'):'—'}</strong></div>
+                <div><span style={{color:'#6b7280'}}>Statut : </span><strong>{labelStatut(bcDetail.statut)}</strong></div>
+                <div><span style={{color:'#6b7280'}}>Montant TTC : </span><strong>{bcDetail.montant_total_fcfa?parseFloat(bcDetail.montant_total_fcfa).toLocaleString('fr-FR')+' FCFA':'—'}</strong></div>
+                <div><span style={{color:'#6b7280'}}>DF : </span><strong>{bcDetail.numero_df||'—'}</strong></div>
+              </div>
+              <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+                <thead><tr style={{background:'#f3f4f6'}}>
+                  {['Désignation','Qté (pcs)','Qté (kg)','P.U. HT','Montant TTC'].map(h=>(
+                    <th key={h} style={{padding:'8px 10px',textAlign:'left',fontWeight:600,fontSize:12}}>{h}</th>
+                  ))}
+                </tr></thead>
+                <tbody>
+                  {bcDetailLignes.map((l,i)=>(
+                    <tr key={i} style={{borderBottom:'1px solid #f3f4f6'}}>
+                      <td style={{padding:'8px 10px'}}>{l.designation||'—'}</td>
+                      <td style={{padding:'8px 10px'}}>{l.quantite_pieces?parseFloat(l.quantite_pieces).toLocaleString('fr-FR')+' pcs':'—'}</td>
+                      <td style={{padding:'8px 10px'}}>{l.quantite_kg&&parseFloat(l.quantite_kg)>0?parseFloat(l.quantite_kg).toFixed(1)+' kg':'—'}</td>
+                      <td style={{padding:'8px 10px'}}>{l.prix_unitaire_ht?parseFloat(l.prix_unitaire_ht).toLocaleString('fr-FR')+' FCFA':'—'}</td>
+                      <td style={{padding:'8px 10px',fontWeight:700}}>{l.montant_ttc?parseFloat(l.montant_ttc).toLocaleString('fr-FR')+' FCFA':'—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div style={{textAlign:'right',marginTop:12,fontWeight:700,fontSize:14}}>
+                Total TTC : {bcDetail.montant_total_fcfa?parseFloat(bcDetail.montant_total_fcfa).toLocaleString('fr-FR')+' FCFA':'—'}
+              </div>
+              <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:16}}>
+                <button onClick={()=>window.open(`/api/bc/${bcDetail.id}/pdf`,'_blank')}
+                  style={{padding:'8px 16px',borderRadius:8,border:'none',background:'#0369a1',color:'#fff',cursor:'pointer',fontSize:13}}>🖨 PDF</button>
+                <button onClick={()=>setBcDetail(null)}
+                  style={{padding:'8px 16px',borderRadius:8,border:'1px solid #e5e7eb',background:'#f9fafb',cursor:'pointer',fontSize:13}}>Fermer</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modale BC → DF */}
+        {dfModal && (
+          <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.45)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <div style={{background:'#fff',borderRadius:12,padding:28,width:440,maxWidth:'95vw',boxShadow:'0 8px 32px rgba(0,0,0,0.18)'}}>
+              <div style={{fontWeight:700,fontSize:16,marginBottom:4,color:'#1f2937'}}>Transformer en Demande de Fabrication</div>
+              <div style={{fontSize:13,color:'#6b7280',marginBottom:18}}>BC : <strong>{dfModal.numeroBc}</strong></div>
+              <div style={{marginBottom:14}}>
+                <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:5}}>Priorité</label>
+                <select value={dfModal.priorite} onChange={e=>setDfModal({...dfModal,priorite:parseInt(e.target.value)})}
+                  style={{width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid #e5e7eb',fontSize:13}}>
+                  <option value={1}>⭐ Basse</option>
+                  <option value={2}>⭐⭐ Normale</option>
+                  <option value={3}>⭐⭐⭐ Haute</option>
+                  <option value={4}>⭐⭐⭐⭐ Urgente</option>
+                  <option value={5}>⭐⭐⭐⭐⭐ Critique</option>
+                </select>
+              </div>
+              <div style={{marginBottom:20}}>
+                <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:5}}>Description / Spécifications</label>
+                <textarea value={dfModal.description} onChange={e=>setDfModal({...dfModal,description:e.target.value})}
+                  placeholder="Spécifications techniques, couleur, dimensions, instructions particulières..."
+                  style={{width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid #e5e7eb',fontSize:13,minHeight:90,resize:'vertical'}}/>
+              </div>
+              <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
+                <button onClick={()=>setDfModal(null)}
+                  style={{padding:'8px 18px',borderRadius:8,border:'1px solid #e5e7eb',background:'#f9fafb',cursor:'pointer',fontSize:13}}>Annuler</button>
+                <button onClick={confirmerDF}
+                  style={{padding:'8px 18px',borderRadius:8,border:'none',background:'#7c3aed',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>Créer la DF →</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
