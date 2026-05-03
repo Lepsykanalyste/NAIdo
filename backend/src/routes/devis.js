@@ -124,7 +124,10 @@ router.post('/:id/transformer-bc', auth, async (req, res) => {
 
     // Copier les lignes
     const { rows: lignes } = await client.query(
-      'SELECT * FROM devis_lignes WHERE devis_id=$1 ORDER BY ordre', [d.id]
+      `SELECT dl.*, a.poids_piece_kg
+       FROM devis_lignes dl
+       LEFT JOIN articles a ON a.id = dl.article_id
+       WHERE dl.devis_id=$1 ORDER BY dl.ordre`, [d.id]
     );
     for (const l of lignes) {
       await client.query(`
