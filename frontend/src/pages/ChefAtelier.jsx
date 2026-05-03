@@ -456,9 +456,12 @@ function DemandesFabrication() {
                 onChange={e=>{
                   const pieces = parseFloat(e.target.value||0);
                   const art = articles.find(a=>a.id===form.article_id);
-                  const poids_unit = art?.poids_unitaire_kg || art?.poids_theorique_kg || 0;
-                  const kg = poids_unit>0 ? (pieces*poids_unit).toFixed(3) : form.quantite_demandee;
-                  setForm(prev=>({...prev,quantite_pieces:e.target.value,quantite_demandee:poids_unit>0?kg:prev.quantite_demandee}));
+                  const poids_unit = parseFloat(art?.poids_piece_kg||art?.poids_theorique_kg||0);
+                  setForm(prev=>({
+                    ...prev,
+                    quantite_pieces:e.target.value,
+                    quantite_demandee: poids_unit>0 && pieces>0 ? (pieces*poids_unit).toFixed(3) : prev.quantite_demandee
+                  }));
                 }}
                 style={sel} placeholder="ex: 10000 sacs"/>
             </div>
@@ -468,9 +471,12 @@ function DemandesFabrication() {
                 onChange={e=>{
                   const kg = parseFloat(e.target.value||0);
                   const art = articles.find(a=>a.id===form.article_id);
-                  const poids_unit = art?.poids_unitaire_kg || art?.poids_theorique_kg || 0;
-                  const pieces = poids_unit>0 ? Math.round(kg/poids_unit) : form.quantite_pieces;
-                  setForm(prev=>({...prev,quantite_demandee:e.target.value,quantite_pieces:poids_unit>0?String(pieces):prev.quantite_pieces}));
+                  const poids_unit = parseFloat(art?.poids_piece_kg||art?.poids_theorique_kg||0);
+                  setForm(prev=>({
+                    ...prev,
+                    quantite_demandee:e.target.value,
+                    quantite_pieces: poids_unit>0 && kg>0 ? String(Math.round(kg/poids_unit)) : prev.quantite_pieces
+                  }));
                 }}
                 style={sel} placeholder="ex: 500 kg"/>
               {form.quantite_pieces && form.quantite_demandee && (
