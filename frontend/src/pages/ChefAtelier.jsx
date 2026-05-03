@@ -699,7 +699,7 @@ function GestionBC() {
   const [bcDetailLignes, setBcDetailLignes] = useState([]);
   React.useEffect(()=>{
     if (!bcDetail) return;
-    axios.get(`${API}/bc/${bcDetail.id}/lignes`).then(r=>setBcDetailLignes(r.data)).catch(()=>setBcDetailLignes([]));
+    axios.get(`${API}/bc/${bcDetail.id}/lignes`).then(r=>setBcDetailLignes(Array.isArray(r.data)?r.data:[])).catch(()=>setBcDetailLignes([]));
   },[bcDetail]);
   const ouvrirDfModal = (bc) => setDfModal({bcId: bc.id, numeroBc: bc.numero_bc, priorite: 3, description: ''});
   const confirmerDF = async () => {
