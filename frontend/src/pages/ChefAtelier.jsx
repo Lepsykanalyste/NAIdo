@@ -938,7 +938,7 @@ function MenuActionsDF({ df, isDir, user, onValider, onRefuser, onAnnuler, onMod
     setMode(m);
     setNouvQte(String(df.quantite_demandee||""));
     setNouvDesc(df.description||"");
-    setNouvPriorite(df.priorite||3);
+    setNouvDate(df.date_livraison_souhaitee ? df.date_livraison_souhaitee.slice(0,10) : "");
     setNouvDate(df.date_livraison_souhaitee ? df.date_livraison_souhaitee.slice(0,10) : "");
     setMotif("");
     setShow(true);
