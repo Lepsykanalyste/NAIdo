@@ -237,11 +237,11 @@ router.get('/:id/pdf', async (req, res) => {
 
 <div class="grid">
   <div class="sec">
-    <div class="sec-h">Article à fabriquer</div>
+    <div class="sec-h">Commande</div>
     <div class="sec-b">
-      <div class="row"><span class="lbl">Code</span><span class="val">${d.article_code||'—'}</span></div>
-      <div class="row"><span class="lbl">Désignation</span><span class="val" style="font-size:7.5pt;">${d.article_nom||'—'}</span></div>
-      ${d.longueur_mm ? `<div class="row"><span class="lbl">Dimensions</span><span class="val">${d.longueur_mm}×${d.largeur_mm||'?'} mm</span></div>` : ''}
+      <div class="row"><span class="lbl">BC origine</span><span class="val">${d.numero_bc||'—'}</span></div>
+      <div class="row"><span class="lbl">Nb articles</span><span class="val">${bc_lignes.length > 0 ? bc_lignes.length+' article(s)' : d.article_nom||'—'}</span></div>
+      <div class="row"><span class="lbl">Total TTC</span><span class="val">${total_ttc.toLocaleString('fr-FR')} FCFA</span></div>
     </div>
   </div>
   <div class="sec">
