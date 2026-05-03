@@ -79,6 +79,19 @@ router.post('/:id/transformer-df', auth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// GET /api/bc/:id/lignes
+router.get('/:id/lignes', auth, async (req, res) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT bl.*, a.designation AS article_nom, a.code AS article_code
+      FROM bc_lignes bl
+      LEFT JOIN articles a ON a.id = bl.article_id
+      WHERE bl.bc_id = $1 ORDER BY bl.ordre
+    `, [req.params.id]);
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // GET /api/bc/:id/pdf
 router.get('/:id/pdf', async (req, res) => {
   try {

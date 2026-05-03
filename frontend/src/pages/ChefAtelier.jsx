@@ -695,6 +695,12 @@ function GestionBC() {
   };
 
   const [dfModal, setDfModal] = useState(null); // {bcId, priorite, description}
+  const [bcDetail, setBcDetail] = useState(null);
+  const [bcDetailLignes, setBcDetailLignes] = useState([]);
+  React.useEffect(()=>{
+    if (!bcDetail) return;
+    axios.get(`${API}/bc/${bcDetail.id}/lignes`).then(r=>setBcDetailLignes(r.data)).catch(()=>setBcDetailLignes([]));
+  },[bcDetail]);
   const ouvrirDfModal = (bc) => setDfModal({bcId: bc.id, numeroBc: bc.numero_bc, priorite: 3, description: ''});
   const confirmerDF = async () => {
     if (!dfModal) return;
@@ -802,18 +808,18 @@ function GestionBC() {
         ) : (
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
             <thead><tr style={{background:'#f0f9ff'}}>
-              {['N° BC','Article','Client','Qté','Montant','Livraison','Réf. client','Statut','DF','Actions'].map(h=>(
+              {['N° BC','Lignes','Client','Montant TTC','Livraison','Réf. client','Statut','DF','Actions'].map(h=>(
                 <th key={h} style={{padding:'10px 12px',textAlign:'left',fontWeight:600,color:'#0369a1',borderBottom:'2px solid #bae6fd'}}>{h}</th>
               ))}
             </tr></thead>
             <tbody>
               {bcs.map((b,i)=>(
                 <tr key={b.id} style={{borderBottom:'1px solid #f3f4f6',background:i%2===0?'#fff':'#fafafa'}}>
-                  <td style={{padding:'9px 12px',fontWeight:700,color:'#0369a1'}}>{b.numero_bc}</td>
-                  <td style={{padding:'9px 12px'}}>{b.article_nom}</td>
+                  <td style={{padding:'9px 12px',fontWeight:700,color:'#0369a1',cursor:'pointer',textDecoration:'underline'}}
+                    onClick={()=>setBcDetail(b)}>{b.numero_bc}</td>
+                  <td style={{padding:'9px 12px',color:'#6b7280',fontSize:12}}>{b.nb_lignes||'—'} article{b.nb_lignes>1?'s':''}</td>
                   <td style={{padding:'9px 12px',fontSize:12}}>{b.client_nom||'—'}</td>
-                  <td style={{padding:'9px 12px',fontWeight:600}}>{b.quantite?parseFloat(b.quantite).toFixed(0)+' kg':'—'}</td>
-                  <td style={{padding:'9px 12px'}}>{b.montant_total_fcfa?parseFloat(b.montant_total_fcfa).toLocaleString('fr-FR')+' FCFA':'—'}</td>
+                  <td style={{padding:'9px 12px',fontWeight:600}}>{b.montant_total_fcfa?parseFloat(b.montant_total_fcfa).toLocaleString('fr-FR')+' FCFA':'—'}</td>
                   <td style={{padding:'9px 12px',fontSize:12}}>{b.date_livraison_souhaitee?new Date(b.date_livraison_souhaitee).toLocaleDateString('fr-FR'):'—'}</td>
                   <td style={{padding:'9px 12px',fontSize:12}}>{b.reference_client||'—'}</td>
                   <td style={{padding:'9px 12px'}}>
