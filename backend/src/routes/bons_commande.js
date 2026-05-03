@@ -30,8 +30,9 @@ router.post('/', auth, async (req, res) => {
   try {
     const { client_id, article_id, quantite, quantite_pieces, prix_unitaire_fcfa,
             date_livraison_souhaitee, adresse_livraison, reference_client, notes } = req.body;
-    const montant = quantite && prix_unitaire_fcfa ?
-      parseFloat(quantite) * parseFloat(prix_unitaire_fcfa) : null;
+    const montant = quantite_pieces && prix_unitaire_fcfa ?
+      parseFloat(quantite_pieces) * parseFloat(prix_unitaire_fcfa) : 
+      (quantite && prix_unitaire_fcfa ? parseFloat(quantite) * parseFloat(prix_unitaire_fcfa) : null);
     const { rows } = await db.query(`
       INSERT INTO bons_commande (client_id, article_id, quantite, quantite_pieces,
         prix_unitaire_fcfa, montant_total_fcfa, date_livraison_souhaitee,

@@ -876,7 +876,7 @@ function GestionBC() {
                 </tbody>
               </table>
               <div style={{textAlign:'right',marginTop:12,fontWeight:700,fontSize:14}}>
-                Total TTC : {bcDetail.montant_total_fcfa?parseFloat(bcDetail.montant_total_fcfa).toLocaleString('fr-FR')+' FCFA':'—'}
+                Total TTC : {bcDetailLignes.reduce((s,l)=>s+parseFloat(l.montant_ttc||0),0).toLocaleString('fr-FR')} FCFA
               </div>
               <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:16}}>
                 <button onClick={()=>window.open(`/api/bc/${bcDetail.id}/pdf`,'_blank')}
