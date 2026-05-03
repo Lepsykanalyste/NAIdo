@@ -135,6 +135,7 @@ router.get('/:id/pdf', async (req, res) => {
       LEFT JOIN utilisateurs u1 ON u1.id=df.demandeur_id
       LEFT JOIN utilisateurs u2 ON u2.id=df.validee_par
       LEFT JOIN ordres_fabrication o ON o.id=df.of_id
+      LEFT JOIN bons_commande bc ON bc.id=df.bc_id
       WHERE df.id=$1
     `, [req.params.id]);
 
