@@ -1045,7 +1045,20 @@ function DemandesFabrication() {
   const [dfPriorite, setDfPriorite] = React.useState(3);
   const [dfDate, setDfDate] = React.useState('');
   const [dfMotif, setDfMotif] = React.useState('');
-  const ouvrirDF = (df) => { setDfSelectionne(df); setDfMode('voir'); setDfQte(String(df.quantite_demandee||'')); setDfDesc(df.description||''); setDfPriorite(df.priorite||3); setDfDate(df.date_livraison_souhaitee ? df.date_livraison_souhaitee.slice(0,10) : ''); setDfMotif(''); };
+  const [dfLignes, setDfLignes] = React.useState([]);
+  const ouvrirDF = (df) => {
+    setDfSelectionne(df);
+    setDfMode('voir');
+    setDfQte(String(df.quantite_demandee||''));
+    setDfDesc(df.description||'');
+    setDfPriorite(df.priorite||3);
+    setDfDate(df.date_livraison_souhaitee ? df.date_livraison_souhaitee.slice(0,10) : '');
+    setDfMotif('');
+    setDfLignes([]);
+    if (df.bc_id) {
+      axios.get(API+'/bc/'+df.bc_id+'/lignes').then(r=>setDfLignes(Array.isArray(r.data)?r.data:[])).catch(()=>setDfLignes([]));
+    }
+  };
   const [filtreStatut, setFiltreStatut] = useState('');
   const [form, setForm] = useState({
     article_id:'', client_id:'', quantite_demandee:'', quantite_pieces:'',
@@ -1294,7 +1307,7 @@ function DemandesFabrication() {
         ) : (
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
             <thead><tr style={{background:'#faf5ff'}}>
-              {['N° DF','Article','Client','Quantité','Livraison souhaitée','Priorité','Statut','OF créé','🖨','Actions'].map(h=>(
+              {['N° DF','Client','Quantité','Livraison souhaitée','Priorité','Statut','OF créé','🖨','Actions'].map(h=>(
                 <th key={h} style={{padding:'10px 12px',textAlign:'left',fontWeight:600,color:'#7c3aed',borderBottom:'2px solid #e9d5ff',whiteSpace:'nowrap'}}>{h}</th>
               ))}
             </tr></thead>
@@ -1302,7 +1315,7 @@ function DemandesFabrication() {
               {dfs.map((df,i)=>(
                 <tr key={df.id} style={{borderBottom:'1px solid #f3f4f6',background:i%2===0?'#fff':'#fafafa'}}>
                   <td style={{padding:'9px 12px',fontWeight:700,color:'#7c3aed',cursor:'pointer',textDecoration:'underline'}} onClick={()=>ouvrirDF(df)}>{df.numero_df}</td>
-                  <td style={{padding:'9px 12px'}}>{df.article_nom}<br/><span style={{fontSize:10,color:'#6b7280'}}>{df.article_code}</span></td>
+                  
                   <td style={{padding:'9px 12px',fontSize:12}}>{df.client_nom||'—'}</td>
                   <td style={{padding:'9px 12px',fontWeight:600}}>{parseFloat(df.quantite_demandee).toFixed(0)} kg</td>
                   <td style={{padding:'9px 12px',fontSize:12}}>{df.date_livraison_souhaitee?new Date(df.date_livraison_souhaitee).toLocaleDateString('fr-FR'):'—'}</td>
@@ -1353,6 +1366,29 @@ function DemandesFabrication() {
                       </div>
                     ))}
                   </div>
+                  {dfLignes.length > 0 && (
+                    <div style={{marginBottom:12}}>
+                      <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:6}}>ARTICLES DU BON DE COMMANDE</div>
+                      <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+                        <thead><tr style={{background:'#f3f4f6'}}>
+                          {['Désignation','Qté (pcs)','Qté (kg)','P.U. HT','Montant TTC'].map(h=>(
+                            <th key={h} style={{padding:'6px 8px',textAlign:'left',fontWeight:600}}>{h}</th>
+                          ))}
+                        </tr></thead>
+                        <tbody>
+                          {dfLignes.map((l,i)=>(
+                            <tr key={i} style={{borderBottom:'1px solid #f3f4f6'}}>
+                              <td style={{padding:'6px 8px'}}>{l.designation||'—'}</td>
+                              <td style={{padding:'6px 8px'}}>{l.quantite_pieces?parseFloat(l.quantite_pieces).toLocaleString('fr-FR')+' pcs':'—'}</td>
+                              <td style={{padding:'6px 8px'}}>{l.quantite_kg&&parseFloat(l.quantite_kg)>0?parseFloat(l.quantite_kg).toFixed(1)+' kg':'—'}</td>
+                              <td style={{padding:'6px 8px'}}>{l.prix_unitaire_ht?parseFloat(l.prix_unitaire_ht).toLocaleString('fr-FR')+' FCFA':'—'}</td>
+                              <td style={{padding:'6px 8px',fontWeight:600}}>{l.montant_ttc?parseFloat(l.montant_ttc).toLocaleString('fr-FR')+' FCFA':'—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                   {dfSelectionne.description && <div style={{background:'#faf5ff',borderRadius:8,padding:12,fontSize:13,marginBottom:12}}><strong>Description :</strong> {dfSelectionne.description}</div>}
                   <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
                     <button onClick={()=>window.open('/api/df/'+dfSelectionne.id+'/pdf','_blank')} style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:8,padding:'8px 14px',cursor:'pointer',fontSize:13}}>🖨 PDF</button>
