@@ -182,7 +182,7 @@ function getMenuFiltre(role) {
 // ══════════════════════════════════════════════════════════════
 function GestionDevis() {
   const { user } = useAuth();
-  const [vue, setVue] = useState('liste'); // liste | nouveau
+  const [vue, setVue] = useState('liste');
   const [devis, setDevis] = useState([]);
   const [articles, setArticles] = useState([]);
   const [clients, setClients] = useState([]);
@@ -193,12 +193,12 @@ function GestionDevis() {
   const [clientInfo, setClientInfo] = useState(null);
   const [form, setForm] = useState({
     client_id:'', date_validite:'', conditions_livraison:'',
-    notes:'', remise_pct:'0', remise_amt:'0', taux_tva:'18'
+    notes:'', remise_pct:'0', remise_amt:'', taux_tva:'18'
   });
   const [tfForm, setTfForm] = useState({
     date_livraison_souhaitee:'', reference_client:'', adresse_livraison:'', notes:''
   });
-  const PER_PAGE = 8;
+  const PER_PAGE = 10;
 
   const charger = async () => {
     try {
@@ -222,21 +222,26 @@ function GestionDevis() {
   const totalPages = Math.ceil(artPF.length/PER_PAGE);
 
   const calcLigne = (l) => {
-    const ht = parseFloat(l.prix_unitaire_ht||0)*parseFloat(l.quantite_kg||0)*(1-parseFloat(l.remise_pct||0)/100);
-    const tva = ht*parseFloat(l.taux_tva||18)/100;
-    return {ht, tva, ttc:ht+tva};
+    const pu = parseFloat(l.prix_unitaire_ht||0);
+    const qkg = parseFloat(l.quantite_kg||0);
+    const rem = parseFloat(l.remise_pct||0);
+    const tva = parseFloat(l.taux_tva||18);
+    const ht = pu*qkg*(1-rem/100);
+    const tva_amt = ht*tva/100;
+    return {ht, tva:tva_amt, ttc:ht+tva_amt};
   };
 
   const subtotalHT = lignes.reduce((s,l)=>s+calcLigne(l).ht,0);
   const totalTVA = lignes.reduce((s,l)=>s+calcLigne(l).tva,0);
-  const discAmt = parseFloat(form.remise_amt||0)||subtotalHT*parseFloat(form.remise_pct||0)/100;
+  const discAmt = parseFloat(form.remise_amt)||subtotalHT*parseFloat(form.remise_pct||0)/100;
   const totalTTC = subtotalHT+totalTVA-discAmt;
 
   const addLigne = (art) => {
-    if (lignes.find(l=>l.article_id===art.id)) return;
+    if(lignes.find(l=>l.article_id===art.id)) return;
     setLignes(prev=>[...prev,{
       article_id:art.id, designation:art.designation, article_code:art.code,
-      quantite_pieces:'1', quantite_kg:String(art.poids_piece_kg||art.poids_theorique_kg||''),
+      quantite_pieces:'1',
+      quantite_kg:String(parseFloat(art.poids_piece_kg||art.poids_theorique_kg||0).toFixed(3)),
       prix_unitaire_ht:String(art.prix_vente_fcfa||''), remise_pct:'0', taux_tva:'18',
       poids_piece_kg:parseFloat(art.poids_piece_kg||art.poids_theorique_kg||0),
     }]);
@@ -256,10 +261,8 @@ function GestionDevis() {
 
   const reset = () => {
     setLignes([]);
-    setForm({client_id:'',date_validite:'',conditions_livraison:'',notes:'',remise_pct:'0',remise_amt:'0',taux_tva:'18'});
-    setClientInfo(null);
-    setSearchArt('');
-    toast('Formulaire réinitialisé','info');
+    setForm({client_id:'',date_validite:'',conditions_livraison:'',notes:'',remise_pct:'0',remise_amt:'',taux_tva:'18'});
+    setClientInfo(null); setSearchArt('');
   };
 
   const sauver = async (statut) => {
@@ -267,10 +270,8 @@ function GestionDevis() {
     if(lignes.length===0){toast.error('Ajoutez au moins un article');return;}
     try {
       await axios.post(`${API}/devis`,{...form,lignes,statut_initial:statut});
-      toast.success(statut==='brouillon'?'Brouillon sauvegardé !':'Devis créé et envoyé !');
-      setVue('liste');
-      setLignes([]);
-      charger();
+      toast.success(statut==='brouillon'?'Brouillon sauvegardé !':'Devis créé !');
+      setVue('liste'); reset(); charger();
     } catch(e){toast.error(e.response?.data?.error||'Erreur');}
   };
 
@@ -278,7 +279,6 @@ function GestionDevis() {
     try{await axios.put(`${API}/devis/${id}/statut`,{statut});toast.success('Statut mis à jour');charger();}
     catch{toast.error('Erreur');}
   };
-
   const transformerBC = async () => {
     try{
       await axios.post(`${API}/devis/${showTransfo.id}/transformer-bc`,tfForm);
@@ -289,34 +289,32 @@ function GestionDevis() {
   const couleurStatut = s=>({brouillon:'#6b7280',envoye:'#0369a1',accepte:'#15803d',refuse:'#dc2626',expire:'#9ca3af',transforme:'#7c3aed'}[s]||'#6b7280');
   const bgStatut = s=>({brouillon:'#f3f4f6',envoye:'#e0f2fe',accepte:'#dcfce7',refuse:'#fee2e2',expire:'#f3f4f6',transforme:'#f5f3ff'}[s]||'#f3f4f6');
   const labelStatut = s=>({brouillon:'Brouillon',envoye:'Envoyé',accepte:'Accepté',refuse:'Refusé',expire:'Expiré',transforme:'→ BC créé'}[s]||s);
-  const inp = {width:'100%',padding:'8px 10px',borderRadius:7,border:'1px solid #d1d5db',fontSize:13};
+  const inp = (extra={})=>({width:'100%',padding:'8px 10px',borderRadius:7,border:'1px solid #d1d5db',fontSize:13,...extra});
 
+  // ── LISTE ──
   if(vue==='liste') return (
     <div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-        <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10,flex:1,marginRight:16}}>
+        <div style={{display:'flex',gap:10}}>
           {[
             {label:'Total',value:devis.length,color:'#0891b2',bg:'#e0f2fe',icon:'📋'},
             {label:'Envoyés',value:devis.filter(d=>d.statut==='envoye').length,color:'#0369a1',bg:'#dbeafe',icon:'📤'},
             {label:'Acceptés',value:devis.filter(d=>d.statut==='accepte').length,color:'#15803d',bg:'#dcfce7',icon:'✅'},
-            {label:'Refusés',value:devis.filter(d=>d.statut==='refuse').length,color:'#dc2626',bg:'#fee2e2',icon:'❌'},
           ].map(k=>(
-            <div key={k.label} style={{background:k.bg,borderRadius:10,padding:'10px 12px'}}>
+            <div key={k.label} style={{background:k.bg,borderRadius:10,padding:'10px 16px'}}>
               <div style={{fontSize:10,color:'#6b7280',marginBottom:2}}>{k.icon} {k.label}</div>
               <div style={{fontSize:18,fontWeight:800,color:k.color}}>{k.value}</div>
             </div>
           ))}
         </div>
-        <button onClick={()=>setVue('nouveau')} style={{background:'#0891b2',color:'#fff',border:'none',borderRadius:8,padding:'10px 20px',cursor:'pointer',fontWeight:700,fontSize:13,whiteSpace:'nowrap'}}>
+        <button onClick={()=>setVue('nouveau')} style={{background:'#0891b2',color:'#fff',border:'none',borderRadius:8,padding:'10px 20px',cursor:'pointer',fontWeight:700,fontSize:13}}>
           + Nouveau devis
         </button>
       </div>
-
       <div style={{background:'#fff',borderRadius:14,border:'1px solid #e5e7eb',overflow:'hidden'}}>
         {devis.length===0?(
           <div style={{padding:40,textAlign:'center',color:'#6b7280'}}>
-            <div style={{fontSize:32,marginBottom:8}}>📋</div>
-            Aucun devis — créez le premier
+            <div style={{fontSize:32,marginBottom:8}}>📋</div>Aucun devis
           </div>
         ):(
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
@@ -336,15 +334,13 @@ function GestionDevis() {
                     {d.date_validite?new Date(d.date_validite).toLocaleDateString('fr-FR'):'—'}
                   </td>
                   <td style={{padding:'9px 12px'}}>
-                    <span style={{background:bgStatut(d.statut),color:couleurStatut(d.statut),padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:700}}>
-                      {labelStatut(d.statut)}
-                    </span>
+                    <span style={{background:bgStatut(d.statut),color:couleurStatut(d.statut),padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:700}}>{labelStatut(d.statut)}</span>
                   </td>
                   <td style={{padding:'9px 12px',display:'flex',gap:5}}>
-                    <button onClick={()=>window.open(`/api/devis/${d.id}/pdf`,'_blank')} style={{background:'#e0f2fe',color:'#0891b2',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>🖨 PDF</button>
-                    {d.statut==='brouillon'&&<button onClick={()=>changerStatut(d.id,'envoye')} style={{background:'#dbeafe',color:'#0369a1',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>📤 Envoyer</button>}
-                    {d.statut==='envoye'&&<button onClick={()=>changerStatut(d.id,'accepte')} style={{background:'#dcfce7',color:'#15803d',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>✓ Accepté</button>}
-                    {d.statut==='envoye'&&<button onClick={()=>changerStatut(d.id,'refuse')} style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>✗ Refusé</button>}
+                    <button onClick={()=>window.open(`/api/devis/${d.id}/pdf`,'_blank')} style={{background:'#e0f2fe',color:'#0891b2',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>🖨</button>
+                    {d.statut==='brouillon'&&<button onClick={()=>changerStatut(d.id,'envoye')} style={{background:'#dbeafe',color:'#0369a1',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>📤</button>}
+                    {d.statut==='envoye'&&<button onClick={()=>changerStatut(d.id,'accepte')} style={{background:'#dcfce7',color:'#15803d',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>✓</button>}
+                    {d.statut==='envoye'&&<button onClick={()=>changerStatut(d.id,'refuse')} style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>✗</button>}
                     {d.statut==='accepte'&&<button onClick={()=>setShowTransfo(d)} style={{background:'#f5f3ff',color:'#7c3aed',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11,fontWeight:700}}>→ BC</button>}
                   </td>
                 </tr>
@@ -353,18 +349,18 @@ function GestionDevis() {
           </table>
         )}
       </div>
-
       {showTransfo&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
-          <div style={{background:'#fff',borderRadius:14,padding:24,width:440,maxWidth:'90vw'}}>
+          <div style={{background:'#fff',borderRadius:14,padding:24,width:440}}>
             <div style={{fontWeight:800,fontSize:15,marginBottom:14,color:'#15803d'}}>📦 Transformer en Bon de Commande</div>
             {[['Réf. commande client','reference_client','text','ex: CMD-2026-123'],
               ['Date livraison souhaitée','date_livraison_souhaitee','date',''],
-              ['Adresse de livraison','adresse_livraison','text','Zone Industrielle, Abidjan']
+              ['Adresse de livraison','adresse_livraison','text','Zone Industrielle, Abidjan'],
             ].map(([l,k,t,ph])=>(
               <div key={k} style={{marginBottom:10}}>
                 <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:3}}>{l}</div>
-                <input type={t} value={tfForm[k]} onChange={e=>setTfForm(p=>({...p,[k]:e.target.value}))} style={{...inp}} placeholder={ph}/>
+                <input type={t} value={tfForm[k]} onChange={e=>setTfForm(p=>({...p,[k]:e.target.value}))}
+                  style={inp()} placeholder={ph}/>
               </div>
             ))}
             <div style={{display:'flex',gap:8,marginTop:14}}>
@@ -377,13 +373,12 @@ function GestionDevis() {
     </div>
   );
 
-  // ── VUE NOUVEAU DEVIS (style Leinad) ──
+  // ── NOUVEAU DEVIS (layout Leinad : centre=form+lignes, droite=catalogue+résumé) ──
   return (
     <div>
-      {/* Header */}
-      <div style={{marginBottom:20,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+      <div style={{marginBottom:16,display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
         <div>
-          <div style={{fontWeight:800,fontSize:18,color:'#1f2937'}}>Nouveau Devis</div>
+          <div style={{fontWeight:800,fontSize:18}}>Nouveau Devis</div>
           <div style={{fontSize:13,color:'#6b7280'}}>Créer un devis pour un client NAI</div>
         </div>
         <button onClick={()=>{setVue('liste');reset();}} style={{fontSize:13,color:'#6b7280',background:'none',border:'1px solid #e5e7eb',borderRadius:8,padding:'7px 14px',cursor:'pointer'}}>
@@ -391,41 +386,39 @@ function GestionDevis() {
         </button>
       </div>
 
-      <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:16}}>
+      <div style={{display:'grid',gridTemplateColumns:'1fr 320px',gap:16,alignItems:'start'}}>
 
-        {/* ── Colonne gauche ── */}
+        {/* ── Centre : formulaire + lignes + notes ── */}
         <div style={{display:'flex',flexDirection:'column',gap:14}}>
 
-          {/* Infos commande */}
+          {/* Infos */}
           <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',padding:20}}>
-            <div style={{fontWeight:700,fontSize:15,color:'#1f2937',marginBottom:14}}>Informations du devis</div>
+            <div style={{fontWeight:700,fontSize:14,marginBottom:14}}>Informations de la commande</div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
               <div style={{gridColumn:'1/-1'}}>
                 <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>Client *</label>
                 <select value={form.client_id} onChange={e=>{
                   setForm(p=>({...p,client_id:e.target.value}));
-                  const c=clients.find(x=>x.id===e.target.value);
-                  setClientInfo(c||null);
-                }} style={inp}>
+                  setClientInfo(clients.find(x=>x.id===e.target.value)||null);
+                }} style={inp()}>
                   <option value="">Sélectionner le client…</option>
                   {clients.map(c=><option key={c.id} value={c.id}>{c.raison_sociale||c.nom}{c.telephone?' — '+c.telephone:''}</option>)}
                 </select>
                 {clientInfo&&(
-                  <div style={{marginTop:8,background:'#f9fafb',border:'1px solid #e5e7eb',borderRadius:7,padding:'8px 12px',fontSize:12,color:'#374151'}}>
+                  <div style={{marginTop:6,background:'#f9fafb',border:'1px solid #e5e7eb',borderRadius:7,padding:'8px 12px',fontSize:12}}>
                     <strong>{clientInfo.raison_sociale||clientInfo.nom}</strong>
-                    {clientInfo.telephone&&<div>📞 {clientInfo.telephone}</div>}
-                    {clientInfo.email&&<div>✉ {clientInfo.email}</div>}
-                    {clientInfo.adresse&&<div>📍 {clientInfo.adresse}</div>}
+                    {clientInfo.telephone&&<div>{clientInfo.telephone}</div>}
+                    {clientInfo.email&&<div>{clientInfo.email}</div>}
                   </div>
                 )}
               </div>
               <div>
                 <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>Date du devis *</label>
-                <input type="date" value={new Date().toISOString().split('T')[0]} readOnly style={{...inp,background:'#f9fafb'}}/>
+                <input type="date" value={new Date().toISOString().split('T')[0]} readOnly style={inp({background:'#f9fafb'})}/>
               </div>
               <div>
                 <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>Validité jusqu'au</label>
-                <input type="date" value={form.date_validite} onChange={e=>setForm(p=>({...p,date_validite:e.target.value}))} style={inp}/>
+                <input type="date" value={form.date_validite} onChange={e=>setForm(p=>({...p,date_validite:e.target.value}))} style={inp()}/>
               </div>
             </div>
           </div>
@@ -433,179 +426,172 @@ function GestionDevis() {
           {/* Lignes */}
           <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',padding:20}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-              <div style={{fontWeight:700,fontSize:15,color:'#1f2937'}}>Lignes de commande</div>
+              <div style={{fontWeight:700,fontSize:14}}>Lignes de commande</div>
               <span style={{fontSize:13,color:'#6b7280'}}>{lignes.length} article(s)</span>
             </div>
-            <div style={{overflowX:'auto'}}>
-              <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
-                <thead style={{background:'#f9fafb'}}>
-                  <tr>
-                    <th style={{padding:'8px 10px',textAlign:'left',fontWeight:600,color:'#374151'}}>Produit</th>
-                    <th style={{padding:'8px 10px',textAlign:'right',fontWeight:600,color:'#374151'}}>Prix HT/kg</th>
-                    <th style={{padding:'8px 10px',textAlign:'right',fontWeight:600,color:'#374151'}}>Rem. %</th>
-                    <th style={{padding:'8px 10px',textAlign:'right',fontWeight:600,color:'#374151'}}>Qté pcs</th>
-                    <th style={{padding:'8px 10px',textAlign:'right',fontWeight:600,color:'#374151'}}>Qté kg</th>
-                    <th style={{padding:'8px 10px',textAlign:'right',fontWeight:600,color:'#374151'}}>Total TTC</th>
-                    <th style={{padding:'8px 10px'}}></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lignes.length===0?(
-                    <tr><td colSpan={7} style={{padding:'20px',textAlign:'center',color:'#9ca3af',fontStyle:'italic'}}>
-                      Aucun produit ajouté pour le moment
-                    </td></tr>
-                  ):lignes.map((l,i)=>{
-                    const c=calcLigne(l);
-                    return (
-                      <tr key={i} style={{borderBottom:'1px solid #f3f4f6'}}>
-                        <td style={{padding:'8px 10px'}}>
-                          <div style={{fontWeight:600}}>{l.designation}</div>
-                          <div style={{fontSize:10,color:'#9ca3af'}}>{l.article_code}</div>
-                        </td>
-                        <td style={{padding:'6px 8px'}}>
-                          <input type="number" value={l.prix_unitaire_ht}
-                            onChange={e=>updateLigne(i,'prix_unitaire_ht',e.target.value)}
-                            style={{width:80,padding:'4px 6px',border:'1px solid #e5e7eb',borderRadius:5,fontSize:12,textAlign:'right'}}/>
-                        </td>
-                        <td style={{padding:'6px 8px'}}>
-                          <input type="number" min="0" max="100" value={l.remise_pct}
-                            onChange={e=>updateLigne(i,'remise_pct',e.target.value)}
-                            style={{width:50,padding:'4px 6px',border:'1px solid #e5e7eb',borderRadius:5,fontSize:12,textAlign:'right'}}/>
-                        </td>
-                        <td style={{padding:'6px 8px'}}>
-                          <input type="number" value={l.quantite_pieces}
-                            onChange={e=>updateLigne(i,'quantite_pieces',e.target.value)}
-                            style={{width:70,padding:'4px 6px',border:'1px solid #e5e7eb',borderRadius:5,fontSize:12,textAlign:'right'}}/>
-                        </td>
-                        <td style={{padding:'6px 8px'}}>
-                          <input type="number" value={l.quantite_kg}
-                            onChange={e=>updateLigne(i,'quantite_kg',e.target.value)}
-                            style={{width:70,padding:'4px 6px',border:'1px solid #e5e7eb',borderRadius:5,fontSize:12,textAlign:'right'}}/>
-                        </td>
-                        <td style={{padding:'8px 10px',textAlign:'right',fontWeight:700,color:'#0369a1'}}>
-                          {c.ttc.toLocaleString('fr-FR')} FCFA
-                        </td>
-                        <td style={{padding:'6px 8px'}}>
-                          <button onClick={()=>setLignes(prev=>prev.filter((_,j)=>j!==i))}
-                            style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:5,padding:'4px 7px',cursor:'pointer',fontSize:11}}>✕</button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+              <thead style={{background:'#f9fafb'}}>
+                <tr>
+                  <th style={{padding:'8px 10px',textAlign:'left',color:'#374151',fontWeight:600}}>Produit</th>
+                  <th style={{padding:'8px 10px',textAlign:'right',color:'#374151',fontWeight:600}}>Prix unitaire HT</th>
+                  <th style={{padding:'8px 10px',textAlign:'right',color:'#374151',fontWeight:600}}>Rem. %</th>
+                  <th style={{padding:'8px 10px',textAlign:'right',color:'#374151',fontWeight:600}}>Qté pcs</th>
+                  <th style={{padding:'8px 10px',textAlign:'right',color:'#374151',fontWeight:600}}>Qté kg</th>
+                  <th style={{padding:'8px 10px',textAlign:'right',color:'#374151',fontWeight:600}}>Total TTC</th>
+                  <th style={{padding:'8px 10px'}}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {lignes.length===0?(
+                  <tr><td colSpan={7} style={{padding:'24px',textAlign:'center',color:'#9ca3af',fontStyle:'italic'}}>
+                    Aucun produit ajouté pour le moment
+                  </td></tr>
+                ):lignes.map((l,i)=>{
+                  const c=calcLigne(l);
+                  return(
+                    <tr key={i} style={{borderBottom:'1px solid #f3f4f6'}}>
+                      <td style={{padding:'8px 10px'}}>
+                        <div style={{fontWeight:600}}>{l.designation}</div>
+                        <div style={{fontSize:10,color:'#9ca3af'}}>{l.article_code}</div>
+                        {c.ht>0&&<div style={{fontSize:10,color:'#6b7280'}}>= {c.ht.toLocaleString('fr-FR')} HT</div>}
+                      </td>
+                      <td style={{padding:'6px 8px'}}>
+                        <input type="number" value={l.prix_unitaire_ht}
+                          onChange={e=>updateLigne(i,'prix_unitaire_ht',e.target.value)}
+                          style={{width:85,padding:'4px 6px',border:'1px solid #e5e7eb',borderRadius:5,fontSize:12,textAlign:'right'}}/>
+                      </td>
+                      <td style={{padding:'6px 8px'}}>
+                        <input type="number" min="0" max="100" value={l.remise_pct}
+                          onChange={e=>updateLigne(i,'remise_pct',e.target.value)}
+                          style={{width:45,padding:'4px 6px',border:'1px solid #e5e7eb',borderRadius:5,fontSize:12,textAlign:'right'}}/>
+                      </td>
+                      <td style={{padding:'6px 8px'}}>
+                        <input type="number" value={l.quantite_pieces}
+                          onChange={e=>updateLigne(i,'quantite_pieces',e.target.value)}
+                          style={{width:65,padding:'4px 6px',border:'1px solid #e5e7eb',borderRadius:5,fontSize:12,textAlign:'right'}}/>
+                      </td>
+                      <td style={{padding:'6px 8px'}}>
+                        <input type="number" value={l.quantite_kg}
+                          onChange={e=>updateLigne(i,'quantite_kg',e.target.value)}
+                          style={{width:65,padding:'4px 6px',border:'1px solid #e5e7eb',borderRadius:5,fontSize:12,textAlign:'right'}}/>
+                      </td>
+                      <td style={{padding:'8px 10px',textAlign:'right',fontWeight:700,color:'#0369a1',whiteSpace:'nowrap'}}>
+                        {c.ttc.toLocaleString('fr-FR')} FCFA
+                      </td>
+                      <td style={{padding:'6px 8px'}}>
+                        <button onClick={()=>setLignes(prev=>prev.filter((_,j)=>j!==i))}
+                          style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:5,padding:'4px 7px',cursor:'pointer'}}>✕</button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {lignes.length>0&&(
+              <button onClick={()=>setLignes([])} style={{marginTop:8,background:'none',border:'none',color:'#dc2626',cursor:'pointer',fontSize:12}}>
+                Effacer toutes les lignes
+              </button>
+            )}
           </div>
 
           {/* Notes */}
           <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',padding:20}}>
             <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:6}}>Notes</label>
             <textarea value={form.notes} onChange={e=>setForm(p=>({...p,notes:e.target.value}))}
-              rows={3} placeholder="Notes internes, conditions de livraison..."
+              rows={3} placeholder="Notes internes, instructions de livraison…"
               style={{width:'100%',padding:'9px 12px',border:'1px solid #d1d5db',borderRadius:8,fontSize:13,resize:'none'}}/>
           </div>
         </div>
 
-        {/* ── Colonne droite ── */}
+        {/* ── Droite : catalogue + résumé ── */}
         <div style={{display:'flex',flexDirection:'column',gap:14}}>
 
-          {/* Catalogue produits */}
-          <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',padding:16}}>
-            <div style={{fontWeight:700,fontSize:14,color:'#1f2937',marginBottom:10}}>Produits</div>
-            <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:10}}>
+          {/* Catalogue */}
+          <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',padding:14}}>
+            <div style={{fontWeight:700,fontSize:14,marginBottom:8}}>Produits</div>
+            <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:8}}>
               <span style={{fontSize:11,background:'#f0fdf4',color:'#15803d',border:'1px solid #bbf7d0',borderRadius:20,padding:'3px 10px',fontWeight:600}}>
                 ● Scanner prêt
               </span>
             </div>
             <input value={searchArt} onChange={e=>{setSearchArt(e.target.value);setPageProd(1);}}
-              placeholder="Rechercher par nom ou référence…"
-              style={{width:'100%',padding:'8px 10px',border:'1px solid #d1d5db',borderRadius:7,fontSize:12,marginBottom:10}}/>
+              placeholder="Rechercher par nom, référence…"
+              style={{width:'100%',padding:'7px 10px',border:'1px solid #d1d5db',borderRadius:7,fontSize:12,marginBottom:10}}/>
 
-            <div style={{display:'flex',flexDirection:'column',gap:6,minHeight:200}}>
+            <div style={{display:'flex',flexDirection:'column',gap:6}}>
               {artPage.map(a=>{
                 const deja=lignes.find(l=>l.article_id===a.id);
-                return (
-                  <div key={a.id} style={{
-                    border:'1px solid',borderRadius:8,padding:'10px 12px',
-                    borderColor:deja?'#22c55e':'#e5e7eb',
-                    background:deja?'#f0fdf4':'#fff',
-                    position:'relative'
-                  }}>
-                    {deja&&<span style={{position:'absolute',top:8,right:8,color:'#22c55e',fontWeight:700,fontSize:13}}>✓</span>}
+                const stock = a.stock_disponible||0;
+                return(
+                  <div key={a.id} style={{border:'1px solid',borderRadius:8,padding:'10px 12px',borderColor:deja?'#22c55e':'#e5e7eb',background:deja?'#f0fdf4':'#fff'}}>
+                    <div style={{fontSize:11,color:'#9ca3af',marginBottom:2}}>{a.code}</div>
                     <div style={{fontWeight:600,fontSize:12,color:'#1f2937'}}>{a.designation}</div>
-                    <div style={{fontSize:11,color:'#9ca3af'}}>{a.code}</div>
-                    {a.prix_vente_fcfa&&<div style={{fontSize:11,color:'#374151',marginTop:2}}>{parseFloat(a.prix_vente_fcfa).toLocaleString('fr-FR')} FCFA/kg HT</div>}
-                    {!deja&&(
-                      <button onClick={()=>addLigne(a)} style={{
-                        marginTop:6,background:'#0891b2',color:'#fff',border:'none',
-                        borderRadius:6,padding:'4px 12px',cursor:'pointer',fontSize:11,fontWeight:600,width:'100%'
-                      }}>Ajouter</button>
+                    {a.prix_vente_fcfa&&<div style={{fontSize:11,color:'#374151',margin:'2px 0'}}>{parseFloat(a.prix_vente_fcfa).toLocaleString('fr-FR')} FCFA HT/kg</div>}
+                    <div style={{fontSize:11,color:stock<0?'#dc2626':'#6b7280'}}>Stock : {stock}</div>
+                    {deja?(
+                      <div style={{marginTop:6,fontSize:11,color:'#15803d',fontWeight:700}}>Dans la commande ✓</div>
+                    ):(
+                      <button onClick={()=>addLigne(a)} style={{marginTop:6,width:'100%',background:'#0891b2',color:'#fff',border:'none',borderRadius:6,padding:'5px',cursor:'pointer',fontSize:12,fontWeight:600}}>
+                        Ajouter
+                      </button>
                     )}
                   </div>
                 );
               })}
             </div>
 
-            {/* Pagination */}
             {totalPages>1&&(
               <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:10,fontSize:12,color:'#6b7280'}}>
                 <span>Page {pageProd} sur {totalPages}</span>
-                <div style={{display:'flex',gap:6}}>
-                  <button onClick={()=>setPageProd(p=>Math.max(1,p-1))} disabled={pageProd===1}
-                    style={{padding:'4px 10px',border:'1px solid #e5e7eb',borderRadius:6,cursor:'pointer',background:pageProd===1?'#f9fafb':'#fff'}}>‹ Préc</button>
-                  <button onClick={()=>setPageProd(p=>Math.min(totalPages,p+1))} disabled={pageProd===totalPages}
-                    style={{padding:'4px 10px',border:'1px solid #e5e7eb',borderRadius:6,cursor:'pointer',background:pageProd===totalPages?'#f9fafb':'#fff'}}>Suiv ›</button>
+                <div style={{display:'flex',gap:4}}>
+                  {pageProd>1&&<button onClick={()=>setPageProd(p=>p-1)} style={{padding:'3px 8px',border:'1px solid #e5e7eb',borderRadius:6,cursor:'pointer',fontSize:12}}>‹ Préc</button>}
+                  {pageProd<totalPages&&<button onClick={()=>setPageProd(p=>p+1)} style={{padding:'3px 8px',border:'1px solid #e5e7eb',borderRadius:6,cursor:'pointer',fontSize:12}}>Suiv ›</button>}
                 </div>
               </div>
             )}
           </div>
 
           {/* Résumé */}
-          <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',padding:16}}>
-            <div style={{fontWeight:700,fontSize:14,color:'#1f2937',marginBottom:12}}>Résumé</div>
-            <div style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid #f3f4f6',fontSize:13}}>
-              <span style={{color:'#6b7280'}}>Sous-total HT :</span>
-              <span style={{fontWeight:600}}>{subtotalHT.toLocaleString('fr-FR')} FCFA</span>
-            </div>
-            <div style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid #f3f4f6',fontSize:13}}>
-              <span style={{color:'#6b7280'}}>TVA :</span>
-              <span style={{fontWeight:600}}>{totalTVA.toLocaleString('fr-FR')} FCFA</span>
-            </div>
-            <div style={{padding:'6px 0',borderBottom:'1px solid #f3f4f6'}}>
-              <div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:6}}>
+          <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',padding:14}}>
+            <div style={{fontWeight:700,fontSize:14,marginBottom:10}}>Résumé</div>
+            {[
+              ['Sous-total HT :', subtotalHT.toLocaleString('fr-FR')+' FCFA'],
+              ['TVA ('+form.taux_tva+'%) :', totalTVA.toLocaleString('fr-FR')+' FCFA'],
+            ].map(([l,v])=>(
+              <div key={l} style={{display:'flex',justifyContent:'space-between',padding:'5px 0',fontSize:13,borderBottom:'1px solid #f3f4f6'}}>
+                <span style={{color:'#6b7280'}}>{l}</span><span style={{fontWeight:600}}>{v}</span>
+              </div>
+            ))}
+            {/* Remise */}
+            <div style={{padding:'8px 0',borderBottom:'1px solid #f3f4f6'}}>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:5}}>
                 <span style={{color:'#6b7280'}}>Remise globale :</span>
-                <span style={{fontWeight:600,color:'#dc2626'}}>{discAmt>0?'-'+discAmt.toLocaleString('fr-FR')+' FCFA':'0 FCFA'}</span>
+                <span style={{fontWeight:600,color:discAmt>0?'#dc2626':'#374151'}}>{discAmt>0?'-'+discAmt.toLocaleString('fr-FR')+' FCFA':'0 FCFA'}</span>
               </div>
-              <div style={{display:'flex',gap:6}}>
-                <div style={{flex:1}}>
-                  <input type="number" min="0" max="100" value={form.remise_pct}
-                    onChange={e=>{setForm(p=>({...p,remise_pct:e.target.value,remise_amt:'0'}));}}
-                    placeholder="%" style={{width:'100%',padding:'5px 8px',border:'1px solid #e5e7eb',borderRadius:6,fontSize:12,textAlign:'right'}}/>
-                </div>
-                <div style={{flex:2}}>
-                  <input type="number" min="0" value={form.remise_amt}
-                    onChange={e=>{setForm(p=>({...p,remise_amt:e.target.value,remise_pct:'0'}));}}
-                    placeholder="FCFA" style={{width:'100%',padding:'5px 8px',border:'1px solid #e5e7eb',borderRadius:6,fontSize:12,textAlign:'right'}}/>
-                </div>
+              <div style={{display:'flex',gap:5}}>
+                <input type="number" min="0" max="100" value={form.remise_pct}
+                  onChange={e=>setForm(p=>({...p,remise_pct:e.target.value,remise_amt:''}))}
+                  placeholder="%" style={{flex:1,padding:'5px 7px',border:'1px solid #e5e7eb',borderRadius:6,fontSize:12,textAlign:'right'}}/>
+                <input type="number" min="0" value={form.remise_amt}
+                  onChange={e=>setForm(p=>({...p,remise_amt:e.target.value,remise_pct:'0'}))}
+                  placeholder="FCFA" style={{flex:2,padding:'5px 7px',border:'1px solid #e5e7eb',borderRadius:6,fontSize:12,textAlign:'right'}}/>
               </div>
             </div>
-            <div style={{display:'flex',justifyContent:'space-between',padding:'10px 0',fontSize:15,fontWeight:800,color:'#0369a1'}}>
-              <span>Total TTC :</span>
-              <span>{totalTTC.toLocaleString('fr-FR')} FCFA</span>
+            <div style={{display:'flex',justifyContent:'space-between',padding:'10px 0',fontSize:16,fontWeight:800,color:'#0369a1'}}>
+              <span>Total TTC :</span><span>{totalTTC.toLocaleString('fr-FR')} FCFA</span>
             </div>
 
-            {/* Boutons */}
-            <div style={{display:'flex',flexDirection:'column',gap:8,marginTop:8}}>
-              <button onClick={()=>sauver('brouillon')} style={{background:'#f3f4f6',color:'#374151',border:'1px solid #e5e7eb',borderRadius:8,padding:'10px',cursor:'pointer',fontWeight:600,fontSize:13}}>
+            <div style={{display:'flex',flexDirection:'column',gap:7}}>
+              <button onClick={()=>sauver('brouillon')} style={{background:'#f3f4f6',color:'#374151',border:'1px solid #e5e7eb',borderRadius:8,padding:'9px',cursor:'pointer',fontWeight:600,fontSize:13}}>
                 💾 Enregistrer comme brouillon
               </button>
-              <button onClick={()=>sauver('envoye')} style={{background:'#0891b2',color:'#fff',border:'none',borderRadius:8,padding:'10px',cursor:'pointer',fontWeight:700,fontSize:13}}>
-                ✓ Confirmer et envoyer
+              <button onClick={()=>sauver('envoye')} style={{background:'#0891b2',color:'#fff',border:'none',borderRadius:8,padding:'9px',cursor:'pointer',fontWeight:700,fontSize:13}}>
+                ✓ Confirmer la commande
               </button>
-              <button onClick={reset} style={{background:'#fff',color:'#dc2626',border:'1px solid #fca5a5',borderRadius:8,padding:'10px',cursor:'pointer',fontWeight:600,fontSize:13}}>
+              <button onClick={reset} style={{background:'#fff',color:'#dc2626',border:'1px solid #fca5a5',borderRadius:8,padding:'9px',cursor:'pointer',fontWeight:600,fontSize:13}}>
                 🔄 Réinitialiser
               </button>
-              <button onClick={()=>{setVue('liste');reset();}} style={{background:'#fff',color:'#6b7280',border:'1px solid #e5e7eb',borderRadius:8,padding:'10px',cursor:'pointer',fontSize:13}}>
+              <button onClick={()=>{setVue('liste');reset();}} style={{background:'#fff',color:'#6b7280',border:'1px solid #e5e7eb',borderRadius:8,padding:'9px',cursor:'pointer',fontSize:13}}>
                 ✕ Annuler
               </button>
             </div>
