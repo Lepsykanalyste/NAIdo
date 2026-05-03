@@ -1045,7 +1045,7 @@ function DemandesFabrication() {
   const [dfPriorite, setDfPriorite] = React.useState(3);
   const [dfDate, setDfDate] = React.useState('');
   const [dfMotif, setDfMotif] = React.useState('');
-  const ouvrirDF = (df) => { setDfSelectionne(df); setDfMode('voir'); setDfQte(String(df.quantite_demandee||'')); setDfDesc(df.description||''); setDfPriorite(df.priorite||3); setDfDate(df.date_livraison_souhaitee?df.date_livraison_souhaitee.slice(0,10):''); setDfMotif(''); };
+  const ouvrirDF = (df) => { setDfSelectionne(df); setDfMode('voir'); setDfQte(String(df.quantite_demandee||'')); setDfDesc(df.description||''); setDfPriorite(df.priorite||3); setDfDate(df.date_livraison_souhaitee ? df.date_livraison_souhaitee.slice(0,10) : ''); setDfMotif(''); };
   const [filtreStatut, setFiltreStatut] = useState('');
   const [form, setForm] = useState({
     article_id:'', client_id:'', quantite_demandee:'', quantite_pieces:'',
