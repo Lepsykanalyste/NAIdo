@@ -278,45 +278,96 @@ function GestionDevis() {
               </select>
             </div>
             <div><div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Article *</div>
-              <select value={form.article_id} onChange={e=>setForm(p=>({...p,article_id:e.target.value}))} style={sel}>
+              <select value={form.article_id} onChange={e=>{
+                const art=articles.find(a=>a.id===e.target.value);
+                setForm(p=>({...p,article_id:e.target.value,
+                  prix_unitaire_fcfa:art?.prix_vente_fcfa||p.prix_unitaire_fcfa}));
+              }} style={sel}>
                 <option value="">-- Sélectionner --</option>
                 {articles.filter(a=>a.type_article==='produit_fini').map(a=><option key={a.id} value={a.id}>{a.code} — {a.designation}</option>)}
               </select>
             </div>
-            <div><div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Qté pièces</div>
-              <input type="number" value={form.quantite_pieces} onChange={e=>{
-                const pcs=parseFloat(e.target.value||0);
-                const art=articles.find(a=>a.id===form.article_id);
-                const pw=parseFloat(art?.poids_piece_kg||0);
-                setForm(p=>({...p,quantite_pieces:e.target.value,quantite:pw>0?(pcs*pw).toFixed(3):p.quantite}));
-              }} style={sel} placeholder="ex: 10000"/>
-            </div>
-            <div><div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Qté kg</div>
-              <input type="number" value={form.quantite} onChange={e=>{
-                const kg=parseFloat(e.target.value||0);
-                const art=articles.find(a=>a.id===form.article_id);
-                const pw=parseFloat(art?.poids_piece_kg||0);
-                setForm(p=>({...p,quantite:e.target.value,quantite_pieces:pw>0?String(Math.round(kg/pw)):p.quantite_pieces}));
-              }} style={sel} placeholder="ex: 500"/>
-            </div>
-            <div><div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Prix unitaire (FCFA/kg)</div>
-              <input type="number" value={form.prix_unitaire_fcfa} onChange={e=>setForm(p=>({...p,prix_unitaire_fcfa:e.target.value}))} style={sel} placeholder="ex: 850"/>
-            </div>
             <div><div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Validité jusqu'au</div>
               <input type="date" value={form.date_validite} onChange={e=>setForm(p=>({...p,date_validite:e.target.value}))} style={sel}/>
             </div>
-            <div style={{gridColumn:'1/-1'}}><div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Conditions de livraison</div>
-              <input value={form.conditions_livraison} onChange={e=>setForm(p=>({...p,conditions_livraison:e.target.value}))} style={sel} placeholder="ex: Départ usine NAI, dans 15 jours"/>
+
+            {/* Quantités auto */}
+            <div>
+              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Qté (pièces)</div>
+              <input type="number" value={form.quantite_pieces}
+                onChange={e=>{
+                  const pcs=parseFloat(e.target.value||0);
+                  const art=articles.find(a=>a.id===form.article_id);
+                  const pw=parseFloat(art?.poids_piece_kg||0);
+                  setForm(p=>({...p,quantite_pieces:e.target.value,
+                    quantite:pw>0&&pcs>0?(pcs*pw).toFixed(3):p.quantite}));
+                }}
+                style={sel} placeholder="ex: 10 000 sacs"/>
             </div>
-            <div style={{gridColumn:'1/-1'}}><div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Notes</div>
-              <input value={form.notes} onChange={e=>setForm(p=>({...p,notes:e.target.value}))} style={sel} placeholder="Conditions particulières..."/>
+            <div>
+              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Qté (kg) — auto si poids/pce connu</div>
+              <input type="number" value={form.quantite}
+                onChange={e=>{
+                  const kg=parseFloat(e.target.value||0);
+                  const art=articles.find(a=>a.id===form.article_id);
+                  const pw=parseFloat(art?.poids_piece_kg||0);
+                  setForm(p=>({...p,quantite:e.target.value,
+                    quantite_pieces:pw>0&&kg>0?String(Math.round(kg/pw)):p.quantite_pieces}));
+                }}
+                style={sel} placeholder="ex: 500 kg"/>
+              {form.article_id && articles.find(a=>a.id===form.article_id)?.poids_piece_kg && (
+                <div style={{fontSize:10,color:'#15803d',marginTop:2}}>
+                  Poids/pce : {articles.find(a=>a.id===form.article_id)?.poids_piece_kg} kg
+                </div>
+              )}
+            </div>
+            <div>
+              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Prix unitaire HT (FCFA/kg)</div>
+              <input type="number" value={form.prix_unitaire_fcfa}
+                onChange={e=>setForm(p=>({...p,prix_unitaire_fcfa:e.target.value}))}
+                style={sel} placeholder="ex: 850"/>
+            </div>
+            <div>
+              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Remise (%)</div>
+              <input type="number" min="0" max="100" value={form.remise_pct||''}
+                onChange={e=>setForm(p=>({...p,remise_pct:e.target.value}))}
+                style={sel} placeholder="0"/>
+            </div>
+            <div>
+              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>TVA (%)</div>
+              <select value={form.taux_tva||'18'} onChange={e=>setForm(p=>({...p,taux_tva:e.target.value}))} style={sel}>
+                <option value="0">0% — Exonéré</option>
+                <option value="18">18% — TVA standard</option>
+              </select>
+            </div>
+            <div style={{gridColumn:'1/-1'}}>
+              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Conditions de livraison</div>
+              <input value={form.conditions_livraison} onChange={e=>setForm(p=>({...p,conditions_livraison:e.target.value}))}
+                style={sel} placeholder="ex: Départ usine NAI, livraison sous 15 jours"/>
+            </div>
+            <div style={{gridColumn:'1/-1'}}>
+              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Notes</div>
+              <input value={form.notes} onChange={e=>setForm(p=>({...p,notes:e.target.value}))}
+                style={sel} placeholder="Conditions particulières..."/>
             </div>
           </div>
-          {form.quantite && form.prix_unitaire_fcfa && (
-            <div style={{background:'#dbeafe',borderRadius:8,padding:'8px 14px',marginTop:8,fontSize:13,fontWeight:700,color:'#0369a1'}}>
-              💰 Montant total estimé : {(parseFloat(form.quantite)*parseFloat(form.prix_unitaire_fcfa)).toLocaleString('fr-FR')} FCFA
-            </div>
-          )}
+
+          {/* Calcul HT/TTC automatique */}
+          {form.quantite && form.prix_unitaire_fcfa && (() => {
+            const ht = parseFloat(form.quantite) * parseFloat(form.prix_unitaire_fcfa);
+            const remise = ht * parseFloat(form.remise_pct||0) / 100;
+            const ht_net = ht - remise;
+            const tva = ht_net * parseFloat(form.taux_tva||18) / 100;
+            const ttc = ht_net + tva;
+            return (
+              <div style={{background:'#f0f9ff',borderRadius:8,padding:12,marginTop:8,display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:8}}>
+                <div style={{textAlign:'center'}}><div style={{fontSize:10,color:'#6b7280'}}>Montant HT</div><div style={{fontWeight:700,color:'#0369a1'}}>{ht.toLocaleString('fr-FR')} FCFA</div></div>
+                {parseFloat(form.remise_pct||0)>0 && <div style={{textAlign:'center'}}><div style={{fontSize:10,color:'#6b7280'}}>Remise ({form.remise_pct}%)</div><div style={{fontWeight:700,color:'#dc2626'}}>-{remise.toLocaleString('fr-FR')} FCFA</div></div>}
+                <div style={{textAlign:'center'}}><div style={{fontSize:10,color:'#6b7280'}}>TVA ({form.taux_tva||18}%)</div><div style={{fontWeight:700,color:'#6b7280'}}>{tva.toLocaleString('fr-FR')} FCFA</div></div>
+                <div style={{textAlign:'center',background:'#0369a1',borderRadius:6,padding:'4px 8px'}}><div style={{fontSize:10,color:'#bae6fd'}}>TOTAL TTC</div><div style={{fontWeight:800,color:'#fff',fontSize:15}}>{ttc.toLocaleString('fr-FR')} FCFA</div></div>
+              </div>
+            );
+          })()}
           <div style={{display:'flex',gap:10,marginTop:14}}>
             <button onClick={creerDevis} style={{background:'#0891b2',color:'#fff',border:'none',borderRadius:8,padding:'10px 24px',cursor:'pointer',fontWeight:700}}>✓ Créer le devis</button>
             <button onClick={()=>setShowForm(false)} style={{background:'#f3f4f6',border:'none',borderRadius:8,padding:'10px 20px',cursor:'pointer'}}>Annuler</button>

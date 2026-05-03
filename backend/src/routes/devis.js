@@ -26,15 +26,23 @@ router.post('/', auth, async (req, res) => {
   try {
     const { client_id, article_id, quantite, quantite_pieces, prix_unitaire_fcfa,
             date_validite, conditions_livraison, notes } = req.body;
-    const montant = quantite && prix_unitaire_fcfa ? 
-      parseFloat(quantite) * parseFloat(prix_unitaire_fcfa) : null;
+    const pu = parseFloat(prix_unitaire_fcfa||0);
+    const qte = parseFloat(quantite||0);
+    const remise = parseFloat(req.body.remise_pct||0);
+    const tva = parseFloat(req.body.taux_tva||18);
+    const ht = pu * qte;
+    const ht_net = ht * (1 - remise/100);
+    const montant_tva = ht_net * tva / 100;
+    const ttc = ht_net + montant_tva;
     const { rows } = await db.query(`
       INSERT INTO devis (client_id, article_id, quantite, quantite_pieces, prix_unitaire_fcfa,
-        montant_total_fcfa, date_validite, conditions_livraison, notes, commercial_id, statut)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'brouillon') RETURNING *
+        montant_ht, montant_tva, montant_total_fcfa, taux_tva, remise_pct,
+        date_validite, conditions_livraison, notes, commercial_id, statut)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'brouillon') RETURNING *
     `, [client_id||null, article_id||null, quantite||null, quantite_pieces||null,
-        prix_unitaire_fcfa||null, montant, date_validite||null,
-        conditions_livraison||null, notes||null, req.user.id]);
+        prix_unitaire_fcfa||null, ht_net||null, montant_tva||null, ttc||null,
+        tva, remise,
+        date_validite||null, conditions_livraison||null, notes||null, req.user.id]);
     res.status(201).json(rows[0]);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
