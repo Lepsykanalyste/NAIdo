@@ -140,6 +140,16 @@ router.get('/:id/ticket', async (req, res) => {
 
     if (!rows.length) return res.status(404).json({ error: 'DF introuvable' });
     const d = rows[0];
+    // Charger les lignes BC si disponible
+    let bc_lignes = [];
+    if (d.bc_id) {
+      const { rows: lignes } = await db.query(
+        'SELECT bl.*, a.code AS article_code FROM bc_lignes bl LEFT JOIN articles a ON a.id=bl.article_id WHERE bl.bc_id=$1 ORDER BY bl.ordre',
+        [d.bc_id]
+      );
+      bc_lignes = lignes;
+    }
+    const qte_totale = bc_lignes.length > 0 ? bc_lignes.reduce((s,l)=>s+parseFloat(l.quantite_kg||0),0) : parseFloat(d.quantite_demandee||0);
 
     const qr_text = `NAI DEMANDE FABRICATION\nN: ${d.numero_df}\nARTICLE: ${d.article_code} ${d.article_nom}\nQTE: ${d.quantite_demandee} kg\nCLIENT: ${d.client_nom||'—'}\nSTATUT: ${d.statut}\nOF: ${d.numero_of||'—'}\nDATE: ${new Date(d.created_at).toLocaleDateString('fr-FR')}`;
 
@@ -221,9 +231,32 @@ router.get('/:id/ticket', async (req, res) => {
   </div>
 </div>
 
-<div class="qte-big">${parseFloat(d.quantite_demandee).toFixed(0)} kg</div>
+<div class="qte-big">${qte_totale.toFixed(1)} kg</div>
 <div class="qte-lbl">QUANTITÉ DEMANDÉE</div>
 
+${bc_lignes.length > 0 ? `
+<table style="width:100%;border-collapse:collapse;font-size:7.5pt;margin:8px 0;">
+  <thead><tr style="background:#7c3aed;color:#fff;">
+    <th style="padding:5px 8px;text-align:left;">Désignation</th>
+    <th style="padding:5px 8px;text-align:right;">Qté (pcs)</th>
+    <th style="padding:5px 8px;text-align:right;">Qté (kg)</th>
+    <th style="padding:5px 8px;text-align:right;">P.U. HT</th>
+    <th style="padding:5px 8px;text-align:right;">Montant TTC</th>
+  </tr></thead>
+  <tbody>
+    ${bc_lignes.map(l=>`<tr style="border-bottom:1px solid #e5e7eb;">
+      <td style="padding:4px 8px;">${l.designation||'—'}</td>
+      <td style="padding:4px 8px;text-align:right;">${l.quantite_pieces?parseFloat(l.quantite_pieces).toLocaleString('fr-FR')+' pcs':'—'}</td>
+      <td style="padding:4px 8px;text-align:right;">${l.quantite_kg?parseFloat(l.quantite_kg).toFixed(1)+' kg':'—'}</td>
+      <td style="padding:4px 8px;text-align:right;">${l.prix_unitaire_ht?parseFloat(l.prix_unitaire_ht).toLocaleString('fr-FR')+' FCFA':'—'}</td>
+      <td style="padding:4px 8px;text-align:right;font-weight:700;">${l.montant_ttc?parseFloat(l.montant_ttc).toLocaleString('fr-FR')+' FCFA':'—'}</td>
+    </tr>`).join('')}
+    <tr style="background:#f0fdf4;font-weight:700;">
+      <td colspan="4" style="padding:5px 8px;text-align:right;">TOTAL TTC</td>
+      <td style="padding:5px 8px;text-align:right;">${bc_lignes.reduce((s,l)=>s+parseFloat(l.montant_ttc||0),0).toLocaleString('fr-FR')} FCFA</td>
+    </tr>
+  </tbody>
+</table>` : ''}
 ${d.description ? `<div class="specs"><strong>Spécifications :</strong> ${d.description}</div>` : ''}
 
 ${d.numero_of ? `
