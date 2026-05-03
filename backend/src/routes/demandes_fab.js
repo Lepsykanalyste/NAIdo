@@ -300,3 +300,31 @@ router.put('/:id/annuler', auth, async (req, res) => {
     res.json(rows[0]);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
+
+// PUT /api/df/:id/demander-annulation
+router.put('/:id/demander-annulation', auth, async (req, res) => {
+  try {
+    const { motif } = req.body;
+    if (!motif) return res.status(400).json({ error: 'Motif requis' });
+    const { rows } = await db.query(`
+      UPDATE demandes_fabrication 
+      SET statut='annulation_demandee', motif_refus=$1, updated_at=NOW()
+      WHERE id=$2 RETURNING *
+    `, ['[Annulation demandée] ' + motif, req.params.id]);
+    res.json(rows[0]);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /api/df/:id/valider-annulation — Direction approuve/refuse l'annulation
+router.put('/:id/valider-annulation', auth, async (req, res) => {
+  try {
+    const { accepter } = req.body;
+    const nouveau_statut = accepter ? 'annulee' : 'en_attente';
+    const { rows } = await db.query(`
+      UPDATE demandes_fabrication 
+      SET statut=$1, validee_par=$2, validee_at=NOW(), updated_at=NOW()
+      WHERE id=$3 RETURNING *
+    `, [nouveau_statut, req.user.id, req.params.id]);
+    res.json(rows[0]);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});

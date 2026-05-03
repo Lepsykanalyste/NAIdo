@@ -380,11 +380,11 @@ function DemandesFabrication() {
   };
 
   const annulerDF = async (id) => {
-    const motif = window.prompt('Motif d\'annulation (obligatoire) :');
+    const motif = window.prompt('Motif de la demande d\'annulation (obligatoire) :');
     if (!motif) return;
     try {
-      await axios.put(`${API}/df/${id}/annuler`, { motif });
-      toast.success('DF annulée');
+      await axios.put(`${API}/df/${id}/demander-annulation`, { motif });
+      toast.success('Demande d\'annulation envoyée à la Direction');
       charger();
     } catch(e) { toast.error(e.response?.data?.error||'Erreur'); }
   };
@@ -399,13 +399,13 @@ function DemandesFabrication() {
   };
 
   const couleurStatut = s => ({
-    en_attente:'#d97706', validee:'#15803d', refusee:'#dc2626', annulee:'#6b7280'
+    en_attente:'#d97706', validee:'#15803d', refusee:'#dc2626', annulee:'#6b7280', annulation_demandee:'#dc2626'
   }[s]||'#6b7280');
   const bgStatut = s => ({
-    en_attente:'#fef3c7', validee:'#dcfce7', refusee:'#fee2e2', annulee:'#f3f4f6'
+    en_attente:'#fef3c7', validee:'#dcfce7', refusee:'#fee2e2', annulee:'#f3f4f6', annulation_demandee:'#fee2e2'
   }[s]||'#f3f4f6');
   const labelStatut = s => ({
-    en_attente:'En attente', validee:'Validée → OF', refusee:'Refusée', annulee:'Annulée'
+    en_attente:'En attente', validee:'Validée → OF', refusee:'Refusée', annulee:'Annulée', annulation_demandee:'⚠ Annulation en attente'
   }[s]||s);
 
   const isDir = user?.role==='super_admin'||user?.role==='directeur'||user?.role==='chef_atelier';
@@ -415,11 +415,11 @@ function DemandesFabrication() {
     <div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
         <div style={{display:'flex',gap:8}}>
-          {['','en_attente','validee','refusee','annulee'].map(s=>(
+          {['','en_attente','validee','refusee','annulee','annulation_demandee'].map(s=>(
             <button key={s} onClick={()=>setFiltreStatut(s)}
               style={{padding:'6px 14px',borderRadius:8,border:'none',cursor:'pointer',fontSize:12,fontWeight:600,
                 background:filtreStatut===s?'#7c3aed':'#f3f4f6',color:filtreStatut===s?'#fff':'#374151'}}>
-              {s===''?'Toutes':s==='en_attente'?'En attente':s==='validee'?'Validée → OF':s==='refusee'?'Refusée':s==='annulee'?'Annulée':s}
+              {s===''?'Toutes':s==='en_attente'?'En attente':s==='validee'?'Validée → OF':s==='refusee'?'Refusée':s==='annulee'?'Annulée':s==='annulation_demandee'?'⚠ Annulation':s}
             </button>
           ))}
         </div>
