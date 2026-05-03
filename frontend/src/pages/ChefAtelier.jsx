@@ -1328,6 +1328,79 @@ function DemandesFabrication() {
             </tbody>
           </table>
         )}
+        {/* Modale DF */}
+        {dfSelectionne && (
+          <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:10000,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={()=>setDfSelectionne(null)}>
+            <div style={{background:'#fff',borderRadius:14,padding:24,width:540,maxWidth:'95vw',maxHeight:'88vh',overflowY:'auto'}} onClick={e=>e.stopPropagation()}>
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                <div style={{fontWeight:800,fontSize:16,color:'#7c3aed'}}>{dfSelectionne.numero_df}</div>
+                <button onClick={()=>setDfSelectionne(null)} style={{background:'none',border:'none',fontSize:20,cursor:'pointer'}}>✕</button>
+              </div>
+              <div style={{display:'flex',gap:6,marginBottom:14,borderBottom:'1px solid #e5e7eb',paddingBottom:8}}>
+                {['voir','modifier'].map(m=>(
+                  <button key={m} onClick={()=>setDfMode(m)} style={{padding:'6px 14px',borderRadius:6,border:'none',background:dfMode===m?'#7c3aed':'#f3f4f6',color:dfMode===m?'#fff':'#374151',cursor:'pointer',fontSize:12,fontWeight:600}}>
+                    {m==='voir'?'👁 Détails':'✏ Modifier'}
+                  </button>
+                ))}
+              </div>
+              {dfMode==='voir' && (
+                <div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,fontSize:13,marginBottom:12}}>
+                    {[['Article',dfSelectionne.article_nom+' ('+dfSelectionne.article_code+')'],['Client',dfSelectionne.client_nom||'—'],['Quantité',(dfSelectionne.quantite_demandee||0)+' kg'],['Priorité','⭐'.repeat(dfSelectionne.priorite||1)],['Livraison',dfSelectionne.date_livraison_souhaitee?new Date(dfSelectionne.date_livraison_souhaitee).toLocaleDateString('fr-FR'):'—'],['Statut',dfSelectionne.statut],['BC origine',dfSelectionne.numero_bc||'—'],['OF généré',dfSelectionne.numero_of||'—'],['Demandeur',dfSelectionne.demandeur_nom||'—'],['Validé par',dfSelectionne.valideur_nom||'—']].map(([l,v])=>(
+                      <div key={l} style={{background:'#f9fafb',borderRadius:8,padding:'8px 12px'}}>
+                        <div style={{fontSize:10,color:'#6b7280',fontWeight:600}}>{l}</div>
+                        <div style={{fontWeight:600,marginTop:2}}>{v}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {dfSelectionne.description && <div style={{background:'#faf5ff',borderRadius:8,padding:12,fontSize:13,marginBottom:12}}><strong>Description :</strong> {dfSelectionne.description}</div>}
+                  <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                    <button onClick={()=>window.open('/api/df/'+dfSelectionne.id+'/pdf','_blank')} style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:8,padding:'8px 14px',cursor:'pointer',fontSize:13}}>🖨 PDF</button>
+                    {dfSelectionne.statut==='en_attente' && isDir && <button onClick={()=>{setShowValider(dfSelectionne);chargerMachines('AT3');setDfSelectionne(null);}} style={{background:'#dcfce7',color:'#15803d',border:'none',borderRadius:8,padding:'8px 14px',cursor:'pointer',fontSize:13,fontWeight:700}}>✓ Valider</button>}
+                    {dfSelectionne.statut==='en_attente' && isDir && <button onClick={()=>{const m=window.prompt('Motif refus :');if(m){refuser(dfSelectionne.id,m);setDfSelectionne(null);}}} style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:8,padding:'8px 14px',cursor:'pointer',fontSize:13}}>✗ Refuser</button>}
+                    <button onClick={()=>{annulerDF(dfSelectionne.id);setDfSelectionne(null);}} style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:8,padding:'8px 14px',cursor:'pointer',fontSize:13}}>🗑 Annuler</button>
+                  </div>
+                </div>
+              )}
+              {dfMode==='modifier' && (
+                <div>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+                    <div>
+                      <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Quantité (kg)</div>
+                      <input type="number" value={dfQte} onChange={e=>setDfQte(e.target.value)} style={{width:'100%',padding:'8px',borderRadius:6,border:'1px solid #e5e7eb',fontSize:14}}/>
+                    </div>
+                    <div>
+                      <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Date livraison</div>
+                      <input type="date" value={dfDate} onChange={e=>setDfDate(e.target.value)} style={{width:'100%',padding:'8px',borderRadius:6,border:'1px solid #e5e7eb',fontSize:13}}/>
+                    </div>
+                  </div>
+                  <div style={{marginBottom:10}}>
+                    <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Priorité</div>
+                    <select value={dfPriorite} onChange={e=>setDfPriorite(parseInt(e.target.value))} style={{width:'100%',padding:'8px',borderRadius:6,border:'1px solid #e5e7eb',fontSize:13}}>
+                      <option value={1}>⭐ Basse</option>
+                      <option value={2}>⭐⭐ Normale</option>
+                      <option value={3}>⭐⭐⭐ Haute</option>
+                      <option value={4}>⭐⭐⭐⭐ Urgente</option>
+                      <option value={5}>⭐⭐⭐⭐⭐ Critique</option>
+                    </select>
+                  </div>
+                  <div style={{marginBottom:10}}>
+                    <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Description / Spécifications</div>
+                    <textarea value={dfDesc} onChange={e=>setDfDesc(e.target.value)} rows={3} style={{width:'100%',padding:'8px',borderRadius:6,border:'1px solid #e5e7eb',fontSize:13,resize:'vertical'}}/>
+                  </div>
+                  <div style={{marginBottom:14}}>
+                    <div style={{fontSize:11,fontWeight:600,color:'#dc2626',marginBottom:4}}>Motif de modification *</div>
+                    <input value={dfMotif} onChange={e=>setDfMotif(e.target.value)} placeholder="Raison..." style={{width:'100%',padding:'8px',borderRadius:6,border:'1px solid #fca5a5',fontSize:13}}/>
+                  </div>
+                  <div style={{display:'flex',gap:8}}>
+                    <button onClick={()=>{if(!dfMotif.trim()){alert('Motif requis');return;}modifierDF(dfSelectionne.id,{quantite_demandee:parseFloat(dfQte),description:dfDesc,priorite:dfPriorite,date_livraison_souhaitee:dfDate||null,motif:dfMotif});setDfSelectionne(null);}} style={{flex:1,background:'#7c3aed',color:'#fff',border:'none',borderRadius:8,padding:'10px',cursor:'pointer',fontWeight:700}}>✓ Confirmer</button>
+                    <button onClick={()=>setDfMode('voir')} style={{background:'#f3f4f6',border:'none',borderRadius:8,padding:'10px 16px',cursor:'pointer'}}>Annuler</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -1616,79 +1689,6 @@ function DetailOF({ detail, machines, onClose, onRefresh, onStatut }) {
         {detail.statut==='en_cours' && <button onClick={()=>{onStatut(detail.id,'termine');onClose();}} style={{background:'#15803d',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer',fontSize:13,fontWeight:700}}>✓ Terminer</button>}
         {!['annule','termine'].includes(detail.statut) && <button onClick={()=>{onStatut(detail.id,'annule');onClose();}} style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer',fontSize:13}}>✕ Annuler</button>}
 
-        {/* Modale DF */}
-        {dfSelectionne && (
-          <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:10000,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={()=>setDfSelectionne(null)}>
-            <div style={{background:'#fff',borderRadius:14,padding:24,width:540,maxWidth:'95vw',maxHeight:'88vh',overflowY:'auto'}} onClick={e=>e.stopPropagation()}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
-                <div style={{fontWeight:800,fontSize:16,color:'#7c3aed'}}>{dfSelectionne.numero_df}</div>
-                <button onClick={()=>setDfSelectionne(null)} style={{background:'none',border:'none',fontSize:20,cursor:'pointer'}}>✕</button>
-              </div>
-              <div style={{display:'flex',gap:6,marginBottom:14,borderBottom:'1px solid #e5e7eb',paddingBottom:8}}>
-                {['voir','modifier'].map(m=>(
-                  <button key={m} onClick={()=>setDfMode(m)} style={{padding:'6px 14px',borderRadius:6,border:'none',background:dfMode===m?'#7c3aed':'#f3f4f6',color:dfMode===m?'#fff':'#374151',cursor:'pointer',fontSize:12,fontWeight:600}}>
-                    {m==='voir'?'👁 Détails':'✏ Modifier'}
-                  </button>
-                ))}
-              </div>
-              {dfMode==='voir' && (
-                <div>
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,fontSize:13,marginBottom:12}}>
-                    {[['Article',dfSelectionne.article_nom+' ('+dfSelectionne.article_code+')'],['Client',dfSelectionne.client_nom||'—'],['Quantité',(dfSelectionne.quantite_demandee||0)+' kg'],['Priorité','⭐'.repeat(dfSelectionne.priorite||1)],['Livraison',dfSelectionne.date_livraison_souhaitee?new Date(dfSelectionne.date_livraison_souhaitee).toLocaleDateString('fr-FR'):'—'],['Statut',dfSelectionne.statut],['BC origine',dfSelectionne.numero_bc||'—'],['OF généré',dfSelectionne.numero_of||'—'],['Demandeur',dfSelectionne.demandeur_nom||'—'],['Validé par',dfSelectionne.valideur_nom||'—']].map(([l,v])=>(
-                      <div key={l} style={{background:'#f9fafb',borderRadius:8,padding:'8px 12px'}}>
-                        <div style={{fontSize:10,color:'#6b7280',fontWeight:600}}>{l}</div>
-                        <div style={{fontWeight:600,marginTop:2}}>{v}</div>
-                      </div>
-                    ))}
-                  </div>
-                  {dfSelectionne.description && <div style={{background:'#faf5ff',borderRadius:8,padding:12,fontSize:13,marginBottom:12}}><strong>Description :</strong> {dfSelectionne.description}</div>}
-                  <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-                    <button onClick={()=>window.open('/api/df/'+dfSelectionne.id+'/pdf','_blank')} style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:8,padding:'8px 14px',cursor:'pointer',fontSize:13}}>🖨 PDF</button>
-                    {dfSelectionne.statut==='en_attente' && isDir && <button onClick={()=>{setShowValider(dfSelectionne);chargerMachines('AT3');setDfSelectionne(null);}} style={{background:'#dcfce7',color:'#15803d',border:'none',borderRadius:8,padding:'8px 14px',cursor:'pointer',fontSize:13,fontWeight:700}}>✓ Valider</button>}
-                    {dfSelectionne.statut==='en_attente' && isDir && <button onClick={()=>{const m=window.prompt('Motif refus :');if(m){refuser(dfSelectionne.id,m);setDfSelectionne(null);}}} style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:8,padding:'8px 14px',cursor:'pointer',fontSize:13}}>✗ Refuser</button>}
-                    <button onClick={()=>{annulerDF(dfSelectionne.id);setDfSelectionne(null);}} style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:8,padding:'8px 14px',cursor:'pointer',fontSize:13}}>🗑 Annuler</button>
-                  </div>
-                </div>
-              )}
-              {dfMode==='modifier' && (
-                <div>
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
-                    <div>
-                      <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Quantité (kg)</div>
-                      <input type="number" value={dfQte} onChange={e=>setDfQte(e.target.value)} style={{width:'100%',padding:'8px',borderRadius:6,border:'1px solid #e5e7eb',fontSize:14}}/>
-                    </div>
-                    <div>
-                      <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Date livraison</div>
-                      <input type="date" value={dfDate} onChange={e=>setDfDate(e.target.value)} style={{width:'100%',padding:'8px',borderRadius:6,border:'1px solid #e5e7eb',fontSize:13}}/>
-                    </div>
-                  </div>
-                  <div style={{marginBottom:10}}>
-                    <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Priorité</div>
-                    <select value={dfPriorite} onChange={e=>setDfPriorite(parseInt(e.target.value))} style={{width:'100%',padding:'8px',borderRadius:6,border:'1px solid #e5e7eb',fontSize:13}}>
-                      <option value={1}>⭐ Basse</option>
-                      <option value={2}>⭐⭐ Normale</option>
-                      <option value={3}>⭐⭐⭐ Haute</option>
-                      <option value={4}>⭐⭐⭐⭐ Urgente</option>
-                      <option value={5}>⭐⭐⭐⭐⭐ Critique</option>
-                    </select>
-                  </div>
-                  <div style={{marginBottom:10}}>
-                    <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Description / Spécifications</div>
-                    <textarea value={dfDesc} onChange={e=>setDfDesc(e.target.value)} rows={3} style={{width:'100%',padding:'8px',borderRadius:6,border:'1px solid #e5e7eb',fontSize:13,resize:'vertical'}}/>
-                  </div>
-                  <div style={{marginBottom:14}}>
-                    <div style={{fontSize:11,fontWeight:600,color:'#dc2626',marginBottom:4}}>Motif de modification *</div>
-                    <input value={dfMotif} onChange={e=>setDfMotif(e.target.value)} placeholder="Raison..." style={{width:'100%',padding:'8px',borderRadius:6,border:'1px solid #fca5a5',fontSize:13}}/>
-                  </div>
-                  <div style={{display:'flex',gap:8}}>
-                    <button onClick={()=>{if(!dfMotif.trim()){alert('Motif requis');return;}modifierDF(dfSelectionne.id,{quantite_demandee:parseFloat(dfQte),description:dfDesc,priorite:dfPriorite,date_livraison_souhaitee:dfDate||null,motif:dfMotif});setDfSelectionne(null);}} style={{flex:1,background:'#7c3aed',color:'#fff',border:'none',borderRadius:8,padding:'10px',cursor:'pointer',fontWeight:700}}>✓ Confirmer</button>
-                    <button onClick={()=>setDfMode('voir')} style={{background:'#f3f4f6',border:'none',borderRadius:8,padding:'10px 16px',cursor:'pointer'}}>Annuler</button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
