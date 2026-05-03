@@ -176,6 +176,7 @@ function getMenuFiltre(role) {
 
 function MenuActionsDF({ df, isDir, user, onValider, onRefuser, onAnnuler, onModifier }) {
   const [ouvert, setOuvert] = React.useState(false);
+  const [pos, setPos] = React.useState({top:0,left:0});
   const [showModif, setShowModif] = React.useState(false);
   const [motifModif, setMotifModif] = React.useState('');
   const [nouvQte, setNouvQte] = React.useState(df.quantite_demandee||'');
@@ -183,12 +184,18 @@ function MenuActionsDF({ df, isDir, user, onValider, onRefuser, onAnnuler, onMod
 
   return (
     <div style={{position:'relative'}}>
-      <button onClick={()=>setOuvert(!ouvert)}
+      <button onClick={e=>{
+        const r=e.currentTarget.getBoundingClientRect();
+        setPos({top:r.bottom+4,left:r.right-180});
+        setOuvert(!ouvert);
+      }}
         style={{background:'#f3f4f6',border:'1px solid #e5e7eb',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:12,fontWeight:600}}>
         Actions ▾
       </button>
       {ouvert && (
-        <div style={{position:'absolute',right:0,top:'100%',background:'#fff',border:'1px solid #e5e7eb',borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,0.12)',zIndex:100,minWidth:160,padding:4}}>
+        <>
+        <div style={{position:'fixed',inset:0,zIndex:9998}} onClick={()=>setOuvert(false)}/>
+        <div style={{position:'fixed',top:pos.top,left:pos.left,background:'#fff',border:'1px solid #e5e7eb',borderRadius:8,boxShadow:'0 8px 24px rgba(0,0,0,0.15)',zIndex:9999,minWidth:180,padding:4}}>
           {/* Voir PDF */}
           <button onClick={()=>{window.open(`/api/df/${df.id}/pdf`,'_blank');setOuvert(false);}}
             style={{width:'100%',padding:'8px 12px',border:'none',background:'none',cursor:'pointer',textAlign:'left',fontSize:12,borderRadius:6,display:'flex',gap:8,alignItems:'center'}}>
@@ -230,6 +237,7 @@ function MenuActionsDF({ df, isDir, user, onValider, onRefuser, onAnnuler, onMod
             </button>
           )}
         </div>
+        </>
       )}
 
       {/* Modal modification */}
