@@ -187,11 +187,14 @@ function GestionDevis() {
   const [clients, setClients] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [showTransfo, setShowTransfo] = useState(null);
+  const [lignes, setLignes] = useState([]);
   const [form, setForm] = useState({
-    client_id:'', article_id:'', quantite:'', quantite_pieces:'',
-    prix_unitaire_fcfa:'', date_validite:'', conditions_livraison:'', notes:''
+    client_id:'', date_validite:'', conditions_livraison:'',
+    notes:'', remise_pct:'0', taux_tva:'18'
   });
-  const [tfForm, setTfForm] = useState({ date_livraison_souhaitee:'', reference_client:'', adresse_livraison:'', notes:'' });
+  const [tfForm, setTfForm] = useState({
+    date_livraison_souhaitee:'', reference_client:'', adresse_livraison:'', notes:''
+  });
 
   const charger = async () => {
     try {
@@ -208,13 +211,55 @@ function GestionDevis() {
 
   useEffect(()=>{ charger(); },[]);
 
+  // Calcul totaux
+  const calcLigne = (l) => {
+    const ht = parseFloat(l.prix_unitaire_ht||0) * parseFloat(l.quantite_kg||0) * (1 - parseFloat(l.remise_pct||0)/100);
+    const tva = ht * parseFloat(l.taux_tva||18)/100;
+    return { ht, tva, ttc: ht+tva };
+  };
+  const totaux = lignes.reduce((acc,l)=>{
+    const c = calcLigne(l);
+    return { ht: acc.ht+c.ht, tva: acc.tva+c.tva, ttc: acc.ttc+c.ttc };
+  }, {ht:0,tva:0,ttc:0});
+
+  const addLigne = (art) => {
+    setLignes(prev=>[...prev, {
+      article_id: art.id,
+      designation: art.designation,
+      article_code: art.code,
+      quantite_pieces: '',
+      quantite_kg: '',
+      prix_unitaire_ht: art.prix_vente_fcfa||'',
+      remise_pct: '0',
+      taux_tva: '18',
+      poids_piece_kg: art.poids_piece_kg||art.poids_theorique_kg||0,
+    }]);
+  };
+
+  const updateLigne = (i, field, val) => {
+    setLignes(prev => {
+      const next = [...prev];
+      next[i] = {...next[i], [field]: val};
+      // Auto pièces ↔ kg
+      if (field==='quantite_pieces' && next[i].poids_piece_kg>0) {
+        next[i].quantite_kg = (parseFloat(val||0)*parseFloat(next[i].poids_piece_kg)).toFixed(3);
+      }
+      if (field==='quantite_kg' && next[i].poids_piece_kg>0) {
+        next[i].quantite_pieces = String(Math.round(parseFloat(val||0)/parseFloat(next[i].poids_piece_kg)));
+      }
+      return next;
+    });
+  };
+
   const creerDevis = async () => {
-    if (!form.client_id || !form.article_id) { toast.error('Client et article requis'); return; }
+    if (!form.client_id) { toast.error('Client requis'); return; }
+    if (lignes.length===0) { toast.error('Ajoutez au moins un article'); return; }
     try {
-      await axios.post(`${API}/devis`, form);
+      await axios.post(`${API}/devis`, { ...form, lignes });
       toast.success('Devis créé !');
       setShowForm(false);
-      setForm({client_id:'',article_id:'',quantite:'',quantite_pieces:'',prix_unitaire_fcfa:'',date_validite:'',conditions_livraison:'',notes:''});
+      setLignes([]);
+      setForm({client_id:'',date_validite:'',conditions_livraison:'',notes:'',remise_pct:'0',taux_tva:'18'});
       charger();
     } catch(e) { toast.error(e.response?.data?.error||'Erreur'); }
   };
@@ -230,7 +275,7 @@ function GestionDevis() {
   const transformerBC = async () => {
     try {
       const res = await axios.post(`${API}/devis/${showTransfo.id}/transformer-bc`, tfForm);
-      toast.success('BC '+res.data.numero_bc+' créé !');
+      toast.success('BC créé !');
       setShowTransfo(null);
       charger();
     } catch(e) { toast.error(e.response?.data?.error||'Erreur'); }
@@ -239,9 +284,9 @@ function GestionDevis() {
   const couleurStatut = s => ({brouillon:'#6b7280',envoye:'#0369a1',accepte:'#15803d',refuse:'#dc2626',expire:'#9ca3af',transforme:'#7c3aed'}[s]||'#6b7280');
   const bgStatut = s => ({brouillon:'#f3f4f6',envoye:'#e0f2fe',accepte:'#dcfce7',refuse:'#fee2e2',expire:'#f3f4f6',transforme:'#f5f3ff'}[s]||'#f3f4f6');
   const labelStatut = s => ({brouillon:'Brouillon',envoye:'Envoyé',accepte:'Accepté',refuse:'Refusé',expire:'Expiré',transforme:'→ BC créé'}[s]||s);
-  const sel = {width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid #e5e7eb',fontSize:13};
+  const sel = {width:'100%',padding:'7px 10px',borderRadius:7,border:'1px solid #e5e7eb',fontSize:12};
 
-  const totalDevis = devis.reduce((s,d)=>s+parseFloat(d.montant_total_fcfa||0),0);
+  const artPF = articles.filter(a=>a.type_article==='produit_fini');
 
   return (
     <div>
@@ -251,126 +296,191 @@ function GestionDevis() {
           {label:'Total devis',value:devis.length,color:'#0891b2',bg:'#e0f2fe',icon:'📋'},
           {label:'Envoyés',value:devis.filter(d=>d.statut==='envoye').length,color:'#0369a1',bg:'#dbeafe',icon:'📤'},
           {label:'Acceptés',value:devis.filter(d=>d.statut==='accepte').length,color:'#15803d',bg:'#dcfce7',icon:'✅'},
-          {label:'Montant total',value:totalDevis.toLocaleString('fr-FR')+' FCFA',color:'#7c3aed',bg:'#f5f3ff',icon:'💰'},
+          {label:'Refusés',value:devis.filter(d=>d.statut==='refuse').length,color:'#dc2626',bg:'#fee2e2',icon:'❌'},
         ].map(k=>(
           <div key={k.label} style={{background:k.bg,borderRadius:12,padding:'12px 14px'}}>
             <div style={{fontSize:10,color:'#6b7280',marginBottom:3}}>{k.icon} {k.label}</div>
-            <div style={{fontSize:18,fontWeight:800,color:k.color}}>{k.value}</div>
+            <div style={{fontSize:20,fontWeight:800,color:k.color}}>{k.value}</div>
           </div>
         ))}
       </div>
 
       <div style={{display:'flex',justifyContent:'flex-end',marginBottom:12}}>
         <button onClick={()=>setShowForm(!showForm)} style={{background:'#0891b2',color:'#fff',border:'none',borderRadius:8,padding:'9px 18px',cursor:'pointer',fontWeight:700,fontSize:13}}>
-          {showForm?'✕ Annuler':'+ Nouveau devis'}
+          {showForm?'✕ Fermer':'+ Nouveau devis'}
         </button>
       </div>
 
-      {/* Formulaire création */}
+      {/* Formulaire style Leinad */}
       {showForm && (
-        <div style={{background:'#f0f9ff',borderRadius:14,padding:20,marginBottom:16,border:'1px solid #bae6fd'}}>
-          <div style={{fontWeight:700,fontSize:15,color:'#0891b2',marginBottom:14}}>📋 Nouveau Devis</div>
-          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12}}>
-            <div><div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Client *</div>
-              <select value={form.client_id} onChange={e=>setForm(p=>({...p,client_id:e.target.value}))} style={sel}>
-                <option value="">-- Sélectionner --</option>
-                {clients.map(c=><option key={c.id} value={c.id}>{c.raison_sociale||c.nom}</option>)}
-              </select>
-            </div>
-            <div><div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Article *</div>
-              <select value={form.article_id} onChange={e=>{
-                const art=articles.find(a=>a.id===e.target.value);
-                setForm(p=>({...p,article_id:e.target.value,
-                  prix_unitaire_fcfa:art?.prix_vente_fcfa||p.prix_unitaire_fcfa}));
-              }} style={sel}>
-                <option value="">-- Sélectionner --</option>
-                {articles.filter(a=>a.type_article==='produit_fini').map(a=><option key={a.id} value={a.id}>{a.code} — {a.designation}</option>)}
-              </select>
-            </div>
-            <div><div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Validité jusqu'au</div>
-              <input type="date" value={form.date_validite} onChange={e=>setForm(p=>({...p,date_validite:e.target.value}))} style={sel}/>
+        <div style={{display:'grid',gridTemplateColumns:'2fr 1fr',gap:16,marginBottom:20}}>
+
+          {/* Colonne gauche — formulaire + lignes */}
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+
+            {/* Infos devis */}
+            <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',padding:16}}>
+              <div style={{fontWeight:700,fontSize:14,color:'#0891b2',marginBottom:12}}>📋 Informations du devis</div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+                <div style={{gridColumn:'1/-1'}}>
+                  <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:3}}>Client *</div>
+                  <select value={form.client_id} onChange={e=>setForm(p=>({...p,client_id:e.target.value}))} style={sel}>
+                    <option value="">-- Sélectionner le client --</option>
+                    {clients.map(c=><option key={c.id} value={c.id}>{c.raison_sociale||c.nom}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:3}}>Validité jusqu'au</div>
+                  <input type="date" value={form.date_validite} onChange={e=>setForm(p=>({...p,date_validite:e.target.value}))} style={sel}/>
+                </div>
+                <div>
+                  <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:3}}>TVA (%)</div>
+                  <select value={form.taux_tva} onChange={e=>setForm(p=>({...p,taux_tva:e.target.value}))} style={sel}>
+                    <option value="0">0% — Exonéré</option>
+                    <option value="18">18% — TVA standard</option>
+                  </select>
+                </div>
+                <div>
+                  <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:3}}>Remise globale (%)</div>
+                  <input type="number" min="0" max="100" value={form.remise_pct}
+                    onChange={e=>setForm(p=>({...p,remise_pct:e.target.value}))} style={sel} placeholder="0"/>
+                </div>
+                <div style={{gridColumn:'1/-1'}}>
+                  <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:3}}>Conditions de livraison</div>
+                  <input value={form.conditions_livraison} onChange={e=>setForm(p=>({...p,conditions_livraison:e.target.value}))}
+                    style={sel} placeholder="ex: Départ usine NAI, sous 15 jours"/>
+                </div>
+                <div style={{gridColumn:'1/-1'}}>
+                  <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:3}}>Notes internes</div>
+                  <input value={form.notes} onChange={e=>setForm(p=>({...p,notes:e.target.value}))}
+                    style={sel} placeholder="Conditions particulières..."/>
+                </div>
+              </div>
             </div>
 
-            {/* Quantités auto */}
-            <div>
-              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Qté (pièces)</div>
-              <input type="number" value={form.quantite_pieces}
-                onChange={e=>{
-                  const pcs=parseFloat(e.target.value||0);
-                  const art=articles.find(a=>a.id===form.article_id);
-                  const pw=parseFloat(art?.poids_piece_kg||art?.poids_theorique_kg||0);
-                  setForm(p=>({...p,quantite_pieces:e.target.value,
-                    quantite:pw>0&&pcs>0?(pcs*pw).toFixed(3):p.quantite}));
-                }}
-                style={sel} placeholder="ex: 10 000 sacs"/>
-            </div>
-            <div>
-              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Qté (kg) — auto si poids/pce connu</div>
-              <input type="number" value={form.quantite}
-                onChange={e=>{
-                  const kg=parseFloat(e.target.value||0);
-                  const art=articles.find(a=>a.id===form.article_id);
-                  const pw=parseFloat(art?.poids_piece_kg||art?.poids_theorique_kg||0);
-                  setForm(p=>({...p,quantite:e.target.value,
-                    quantite_pieces:pw>0&&kg>0?String(Math.round(kg/pw)):p.quantite_pieces}));
-                }}
-                style={sel} placeholder="ex: 500 kg"/>
-              {form.article_id && articles.find(a=>a.id===form.article_id)?.poids_piece_kg && (
-                <div style={{fontSize:10,color:'#15803d',marginTop:2}}>
-                  Poids/pce : {articles.find(a=>a.id===form.article_id)?.poids_piece_kg} kg
+            {/* Lignes du devis */}
+            <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',padding:16}}>
+              <div style={{fontWeight:700,fontSize:14,color:'#0891b2',marginBottom:12}}>
+                🛒 Lignes du devis
+                <span style={{fontWeight:400,fontSize:12,color:'#6b7280',marginLeft:8}}>{lignes.length} article(s)</span>
+              </div>
+
+              {lignes.length===0 ? (
+                <div style={{textAlign:'center',padding:'20px',color:'#9ca3af',fontSize:13}}>
+                  Aucun article ajouté — choisissez dans le catalogue →
                 </div>
+              ) : (
+                <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+                  <thead><tr style={{background:'#f0f9ff'}}>
+                    {['Article','Qté pcs','Qté kg','P.U. HT','Rem.%','TVA%','Total TTC',''].map(h=>(
+                      <th key={h} style={{padding:'6px 8px',textAlign:h==='Article'?'left':'right',fontWeight:600,color:'#0891b2',borderBottom:'2px solid #bae6fd'}}>{h}</th>
+                    ))}
+                  </tr></thead>
+                  <tbody>
+                    {lignes.map((l,i)=>{
+                      const c = calcLigne(l);
+                      return (
+                        <tr key={i} style={{borderBottom:'1px solid #f3f4f6'}}>
+                          <td style={{padding:'6px 8px',fontWeight:600}}>{l.designation}</td>
+                          <td style={{padding:'4px 6px'}}>
+                            <input type="number" value={l.quantite_pieces}
+                              onChange={e=>updateLigne(i,'quantite_pieces',e.target.value)}
+                              style={{width:70,padding:'3px 5px',border:'1px solid #e5e7eb',borderRadius:4,fontSize:11,textAlign:'right'}}/>
+                          </td>
+                          <td style={{padding:'4px 6px'}}>
+                            <input type="number" value={l.quantite_kg}
+                              onChange={e=>updateLigne(i,'quantite_kg',e.target.value)}
+                              style={{width:70,padding:'3px 5px',border:'1px solid #e5e7eb',borderRadius:4,fontSize:11,textAlign:'right'}}/>
+                          </td>
+                          <td style={{padding:'4px 6px'}}>
+                            <input type="number" value={l.prix_unitaire_ht}
+                              onChange={e=>updateLigne(i,'prix_unitaire_ht',e.target.value)}
+                              style={{width:80,padding:'3px 5px',border:'1px solid #e5e7eb',borderRadius:4,fontSize:11,textAlign:'right'}}/>
+                          </td>
+                          <td style={{padding:'4px 6px'}}>
+                            <input type="number" value={l.remise_pct}
+                              onChange={e=>updateLigne(i,'remise_pct',e.target.value)}
+                              style={{width:45,padding:'3px 5px',border:'1px solid #e5e7eb',borderRadius:4,fontSize:11,textAlign:'right'}}/>
+                          </td>
+                          <td style={{padding:'4px 6px'}}>
+                            <select value={l.taux_tva} onChange={e=>updateLigne(i,'taux_tva',e.target.value)}
+                              style={{padding:'3px',border:'1px solid #e5e7eb',borderRadius:4,fontSize:11}}>
+                              <option value="0">0%</option>
+                              <option value="18">18%</option>
+                            </select>
+                          </td>
+                          <td style={{padding:'6px 8px',textAlign:'right',fontWeight:700,color:'#0369a1'}}>
+                            {c.ttc.toLocaleString('fr-FR')}
+                          </td>
+                          <td style={{padding:'4px 6px'}}>
+                            <button onClick={()=>setLignes(prev=>prev.filter((_,j)=>j!==i))}
+                              style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:4,padding:'3px 6px',cursor:'pointer',fontSize:11}}>✕</button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               )}
-            </div>
-            <div>
-              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Prix unitaire HT (FCFA/kg)</div>
-              <input type="number" value={form.prix_unitaire_fcfa}
-                onChange={e=>setForm(p=>({...p,prix_unitaire_fcfa:e.target.value}))}
-                style={sel} placeholder="ex: 850"/>
-            </div>
-            <div>
-              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Remise (%)</div>
-              <input type="number" min="0" max="100" value={form.remise_pct||''}
-                onChange={e=>setForm(p=>({...p,remise_pct:e.target.value}))}
-                style={sel} placeholder="0"/>
-            </div>
-            <div>
-              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>TVA (%)</div>
-              <select value={form.taux_tva||'18'} onChange={e=>setForm(p=>({...p,taux_tva:e.target.value}))} style={sel}>
-                <option value="0">0% — Exonéré</option>
-                <option value="18">18% — TVA standard</option>
-              </select>
-            </div>
-            <div style={{gridColumn:'1/-1'}}>
-              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Conditions de livraison</div>
-              <input value={form.conditions_livraison} onChange={e=>setForm(p=>({...p,conditions_livraison:e.target.value}))}
-                style={sel} placeholder="ex: Départ usine NAI, livraison sous 15 jours"/>
-            </div>
-            <div style={{gridColumn:'1/-1'}}>
-              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Notes</div>
-              <input value={form.notes} onChange={e=>setForm(p=>({...p,notes:e.target.value}))}
-                style={sel} placeholder="Conditions particulières..."/>
             </div>
           </div>
 
-          {/* Calcul HT/TTC automatique */}
-          {form.quantite && form.prix_unitaire_fcfa && (() => {
-            const ht = parseFloat(form.quantite) * parseFloat(form.prix_unitaire_fcfa);
-            const remise = ht * parseFloat(form.remise_pct||0) / 100;
-            const ht_net = ht - remise;
-            const tva = ht_net * parseFloat(form.taux_tva||18) / 100;
-            const ttc = ht_net + tva;
-            return (
-              <div style={{background:'#f0f9ff',borderRadius:8,padding:12,marginTop:8,display:'grid',gridTemplateColumns:'1fr 1fr 1fr 1fr',gap:8}}>
-                <div style={{textAlign:'center'}}><div style={{fontSize:10,color:'#6b7280'}}>Montant HT</div><div style={{fontWeight:700,color:'#0369a1'}}>{ht.toLocaleString('fr-FR')} FCFA</div></div>
-                {parseFloat(form.remise_pct||0)>0 && <div style={{textAlign:'center'}}><div style={{fontSize:10,color:'#6b7280'}}>Remise ({form.remise_pct}%)</div><div style={{fontWeight:700,color:'#dc2626'}}>-{remise.toLocaleString('fr-FR')} FCFA</div></div>}
-                <div style={{textAlign:'center'}}><div style={{fontSize:10,color:'#6b7280'}}>TVA ({form.taux_tva||18}%)</div><div style={{fontWeight:700,color:'#6b7280'}}>{tva.toLocaleString('fr-FR')} FCFA</div></div>
-                <div style={{textAlign:'center',background:'#0369a1',borderRadius:6,padding:'4px 8px'}}><div style={{fontSize:10,color:'#bae6fd'}}>TOTAL TTC</div><div style={{fontWeight:800,color:'#fff',fontSize:15}}>{ttc.toLocaleString('fr-FR')} FCFA</div></div>
+          {/* Colonne droite — catalogue + résumé */}
+          <div style={{display:'flex',flexDirection:'column',gap:12}}>
+
+            {/* Catalogue articles */}
+            <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',padding:14}}>
+              <div style={{fontWeight:700,fontSize:13,color:'#374151',marginBottom:10}}>📦 Articles</div>
+              <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                {artPF.map(a=>{
+                  const deja = lignes.find(l=>l.article_id===a.id);
+                  return (
+                    <div key={a.id} onClick={()=>!deja&&addLigne(a)} style={{
+                      padding:'8px 10px',borderRadius:8,border:'2px solid',
+                      borderColor:deja?'#22c55e':'#e5e7eb',
+                      background:deja?'#f0fdf4':'#fff',
+                      cursor:deja?'default':'pointer',
+                      position:'relative'
+                    }}>
+                      {deja && <span style={{position:'absolute',top:6,right:8,color:'#22c55e',fontWeight:700}}>✓</span>}
+                      <div style={{fontWeight:700,fontSize:12,color:'#374151'}}>{a.code} — {a.designation}</div>
+                      {a.prix_vente_fcfa && <div style={{fontSize:11,color:'#6b7280'}}>{parseFloat(a.prix_vente_fcfa).toLocaleString('fr-FR')} FCFA/kg HT</div>}
+                      {(a.poids_piece_kg||a.poids_theorique_kg) && <div style={{fontSize:10,color:'#9ca3af'}}>{parseFloat(a.poids_piece_kg||a.poids_theorique_kg).toFixed(4)} kg/pce</div>}
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })()}
-          <div style={{display:'flex',gap:10,marginTop:14}}>
-            <button onClick={creerDevis} style={{background:'#0891b2',color:'#fff',border:'none',borderRadius:8,padding:'10px 24px',cursor:'pointer',fontWeight:700}}>✓ Créer le devis</button>
-            <button onClick={()=>setShowForm(false)} style={{background:'#f3f4f6',border:'none',borderRadius:8,padding:'10px 20px',cursor:'pointer'}}>Annuler</button>
+            </div>
+
+            {/* Résumé */}
+            <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',padding:14}}>
+              <div style={{fontWeight:700,fontSize:13,color:'#374151',marginBottom:10}}>💰 Résumé</div>
+              {[
+                ['Sous-total HT', totaux.ht.toLocaleString('fr-FR')+' FCFA', '#374151'],
+                parseFloat(form.remise_pct||0)>0?['Remise ('+form.remise_pct+'%)', '-'+(totaux.ht*parseFloat(form.remise_pct||0)/100).toLocaleString('fr-FR')+' FCFA', '#dc2626']:null,
+                ['TVA ('+form.taux_tva+'%)', totaux.tva.toLocaleString('fr-FR')+' FCFA', '#6b7280'],
+              ].filter(Boolean).map(([l,v,c])=>(
+                <div key={l} style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid #f3f4f6',fontSize:12}}>
+                  <span style={{color:'#6b7280'}}>{l}</span>
+                  <span style={{fontWeight:600,color:c}}>{v}</span>
+                </div>
+              ))}
+              <div style={{background:'#0369a1',borderRadius:8,padding:'10px 12px',marginTop:8,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                <span style={{color:'#bae6fd',fontSize:11}}>TOTAL TTC</span>
+                <span style={{color:'#fff',fontWeight:800,fontSize:16}}>{totaux.ttc.toLocaleString('fr-FR')} FCFA</span>
+              </div>
+              <div style={{display:'flex',gap:8,marginTop:12}}>
+                <button onClick={creerDevis}
+                  disabled={!form.client_id||lignes.length===0}
+                  style={{flex:1,background:form.client_id&&lignes.length>0?'#0891b2':'#d1d5db',color:'#fff',border:'none',borderRadius:8,padding:'10px',cursor:form.client_id&&lignes.length>0?'pointer':'not-allowed',fontWeight:700,fontSize:13}}>
+                  ✓ Créer le devis
+                </button>
+                <button onClick={()=>{setShowForm(false);setLignes([]);}}
+                  style={{background:'#f3f4f6',border:'none',borderRadius:8,padding:'10px 14px',cursor:'pointer'}}>
+                  Annuler
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -381,20 +491,18 @@ function GestionDevis() {
           <div style={{background:'#fff',borderRadius:14,padding:24,width:440,maxWidth:'90vw'}}>
             <div style={{fontWeight:800,fontSize:15,marginBottom:14,color:'#15803d'}}>📦 Transformer en Bon de Commande</div>
             <div style={{background:'#f0fdf4',borderRadius:8,padding:10,marginBottom:14,fontSize:13}}>
-              <strong>{showTransfo.article_nom}</strong> — {showTransfo.client_nom}<br/>
-              {showTransfo.quantite} kg · {showTransfo.montant_total_fcfa?parseFloat(showTransfo.montant_total_fcfa).toLocaleString('fr-FR')+' FCFA':''}
+              <strong>{showTransfo.client_nom}</strong><br/>
+              {showTransfo.nb_lignes} ligne(s) · {showTransfo.montant_total_fcfa?parseFloat(showTransfo.montant_total_fcfa).toLocaleString('fr-FR')+' FCFA TTC':''}
             </div>
             {[
-              ['Référence commande client','reference_client','ex: CMD-2026-123'],
-              ['Date livraison souhaitée','date_livraison_souhaitee',''],
-              ['Adresse de livraison','adresse_livraison','ex: Zone Industrielle, Abidjan'],
-              ['Notes','notes',''],
-            ].map(([l,k,ph])=>(
+              ['Réf. commande client','reference_client','text','ex: CMD-2026-123'],
+              ['Date livraison souhaitée','date_livraison_souhaitee','date',''],
+              ['Adresse de livraison','adresse_livraison','text','ex: Zone Industrielle, Abidjan'],
+            ].map(([l,k,t,ph])=>(
               <div key={k} style={{marginBottom:10}}>
                 <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:3}}>{l}</div>
-                <input type={k==='date_livraison_souhaitee'?'date':'text'} value={tfForm[k]}
-                  onChange={e=>setTfForm(p=>({...p,[k]:e.target.value}))}
-                  style={sel} placeholder={ph}/>
+                <input type={t} value={tfForm[k]} onChange={e=>setTfForm(p=>({...p,[k]:e.target.value}))}
+                  style={{...sel,width:'100%'}} placeholder={ph}/>
               </div>
             ))}
             <div style={{display:'flex',gap:10,marginTop:14}}>
@@ -415,7 +523,7 @@ function GestionDevis() {
         ) : (
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
             <thead><tr style={{background:'#f0f9ff'}}>
-              {['N° Devis','Article','Client','Qté','Montant','Validité','Statut','Actions'].map(h=>(
+              {['N° Devis','Client','Lignes','Montant TTC','Validité','Statut','Actions'].map(h=>(
                 <th key={h} style={{padding:'10px 12px',textAlign:'left',fontWeight:600,color:'#0891b2',borderBottom:'2px solid #bae6fd'}}>{h}</th>
               ))}
             </tr></thead>
@@ -423,9 +531,8 @@ function GestionDevis() {
               {devis.map((d,i)=>(
                 <tr key={d.id} style={{borderBottom:'1px solid #f3f4f6',background:i%2===0?'#fff':'#fafafa'}}>
                   <td style={{padding:'9px 12px',fontWeight:700,color:'#0891b2'}}>{d.numero_devis}</td>
-                  <td style={{padding:'9px 12px'}}>{d.article_nom}</td>
-                  <td style={{padding:'9px 12px',fontSize:12}}>{d.client_nom||'—'}</td>
-                  <td style={{padding:'9px 12px'}}>{d.quantite?parseFloat(d.quantite).toFixed(0)+' kg':'—'}</td>
+                  <td style={{padding:'9px 12px'}}>{d.client_nom||'—'}</td>
+                  <td style={{padding:'9px 12px',textAlign:'center'}}>{d.nb_lignes||0}</td>
                   <td style={{padding:'9px 12px',fontWeight:600}}>{d.montant_total_fcfa?parseFloat(d.montant_total_fcfa).toLocaleString('fr-FR')+' FCFA':'—'}</td>
                   <td style={{padding:'9px 12px',fontSize:12,color:d.date_validite&&new Date(d.date_validite)<new Date()?'#dc2626':'#374151'}}>
                     {d.date_validite?new Date(d.date_validite).toLocaleDateString('fr-FR'):'—'}
@@ -435,7 +542,7 @@ function GestionDevis() {
                       {labelStatut(d.statut)}
                     </span>
                   </td>
-                  <td style={{padding:'9px 12px',display:'flex',gap:6,flexWrap:'wrap'}}>
+                  <td style={{padding:'9px 12px',display:'flex',gap:5,flexWrap:'wrap'}}>
                     <button onClick={()=>window.open(`/api/devis/${d.id}/pdf`,'_blank')} style={{background:'#e0f2fe',color:'#0891b2',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>🖨 PDF</button>
                     {d.statut==='brouillon' && <button onClick={()=>changerStatut(d.id,'envoye')} style={{background:'#dbeafe',color:'#0369a1',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>📤 Envoyer</button>}
                     {d.statut==='envoye' && <button onClick={()=>changerStatut(d.id,'accepte')} style={{background:'#dcfce7',color:'#15803d',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>✓ Accepté</button>}
