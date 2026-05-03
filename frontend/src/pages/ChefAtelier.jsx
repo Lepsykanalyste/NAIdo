@@ -932,6 +932,8 @@ function MenuActionsDF({ df, isDir, user, onValider, onRefuser, onAnnuler, onMod
   const [showDetail, setShowDetail] = React.useState(false);
   const [nouvQte, setNouvQte] = React.useState(String(df.quantite_demandee||''));
   const [nouvDesc, setNouvDesc] = React.useState(df.description||'');
+  const [nouvPriorite, setNouvPriorite] = React.useState(df.priorite||3);
+  const [nouvDate, setNouvDate] = React.useState(df.date_livraison_souhaitee?df.date_livraison_souhaitee.slice(0,10):'');
   const [motifModif, setMotifModif] = React.useState('');
 
   return (
@@ -1020,31 +1022,61 @@ function MenuActionsDF({ df, isDir, user, onValider, onRefuser, onAnnuler, onMod
       {showModif && (
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:10000,display:'flex',alignItems:'center',justifyContent:'center'}}
           onClick={()=>setShowModif(false)}>
-          <div style={{background:'#fff',borderRadius:14,padding:24,width:400,maxWidth:'90vw'}} onClick={e=>e.stopPropagation()}>
-            <div style={{fontWeight:700,fontSize:15,marginBottom:16}}>✏ Modifier {df.numero_df}</div>
-            <div style={{marginBottom:10}}>
-              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Quantité (kg)</div>
-              <input type="number" value={nouvQte} onChange={e=>setNouvQte(e.target.value)}
-                style={{width:'100%',padding:'8px',borderRadius:6,border:'1px solid #e5e7eb',fontSize:14}}/>
+          <div style={{background:'#fff',borderRadius:14,padding:24,width:480,maxWidth:'92vw',maxHeight:'85vh',overflowY:'auto'}} onClick={e=>e.stopPropagation()}>
+            <div style={{fontWeight:700,fontSize:15,marginBottom:4,color:'#7c3aed'}}>✏ Modifier {df.numero_df}</div>
+            <div style={{fontSize:12,color:'#6b7280',marginBottom:16}}>Article : {df.article_nom} · Client : {df.client_nom}</div>
+
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+              <div>
+                <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Quantité demandée (kg)</div>
+                <input type="number" value={nouvQte} onChange={e=>setNouvQte(e.target.value)}
+                  style={{width:'100%',padding:'8px',borderRadius:6,border:'1px solid #e5e7eb',fontSize:14}}/>
+              </div>
+              <div>
+                <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Date livraison souhaitée</div>
+                <input type="date" value={nouvDate} onChange={e=>setNouvDate(e.target.value)}
+                  style={{width:'100%',padding:'8px',borderRadius:6,border:'1px solid #e5e7eb',fontSize:13}}/>
+              </div>
             </div>
+
             <div style={{marginBottom:10}}>
-              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Description</div>
+              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Priorité</div>
+              <select value={nouvPriorite} onChange={e=>setNouvPriorite(parseInt(e.target.value))}
+                style={{width:'100%',padding:'8px',borderRadius:6,border:'1px solid #e5e7eb',fontSize:13}}>
+                <option value={1}>⭐ Basse</option>
+                <option value={2}>⭐⭐ Normale</option>
+                <option value={3}>⭐⭐⭐ Haute</option>
+                <option value={4}>⭐⭐⭐⭐ Urgente</option>
+                <option value={5}>⭐⭐⭐⭐⭐ Critique</option>
+              </select>
+            </div>
+
+            <div style={{marginBottom:10}}>
+              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Description / Spécifications</div>
               <textarea value={nouvDesc} onChange={e=>setNouvDesc(e.target.value)} rows={3}
-                style={{width:'100%',padding:'8px',borderRadius:6,border:'1px solid #e5e7eb',fontSize:13,resize:'none'}}/>
+                style={{width:'100%',padding:'8px',borderRadius:6,border:'1px solid #e5e7eb',fontSize:13,resize:'vertical'}}/>
             </div>
-            <div style={{marginBottom:14}}>
-              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Motif de modification *</div>
+
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:11,fontWeight:600,color:'#dc2626',marginBottom:4}}>Motif de modification *</div>
               <input value={motifModif} onChange={e=>setMotifModif(e.target.value)}
-                style={{width:'100%',padding:'8px',borderRadius:6,border:'1px solid #e5e7eb',fontSize:13}}
+                style={{width:'100%',padding:'8px',borderRadius:6,border:'1px solid #fca5a5',fontSize:13}}
                 placeholder="Raison de la modification..."/>
             </div>
+
             <div style={{display:'flex',gap:8}}>
               <button onClick={()=>{
-                if(!motifModif){alert('Motif requis');return;}
-                onModifier({quantite_demandee:parseFloat(nouvQte),description:nouvDesc+(motifModif?' [Modif: '+motifModif+']':'')});
+                if(!motifModif.trim()){alert('Motif de modification requis');return;}
+                onModifier({
+                  quantite_demandee: parseFloat(nouvQte),
+                  description: nouvDesc,
+                  priorite: nouvPriorite,
+                  date_livraison_souhaitee: nouvDate||null,
+                  motif: motifModif
+                });
                 setShowModif(false);
               }} style={{flex:1,background:'#7c3aed',color:'#fff',border:'none',borderRadius:8,padding:'10px',cursor:'pointer',fontWeight:700}}>
-                ✓ Confirmer
+                ✓ Confirmer la modification
               </button>
               <button onClick={()=>setShowModif(false)} style={{background:'#f3f4f6',border:'none',borderRadius:8,padding:'10px 16px',cursor:'pointer'}}>Annuler</button>
             </div>
