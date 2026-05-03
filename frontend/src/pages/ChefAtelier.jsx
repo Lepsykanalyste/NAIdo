@@ -1359,7 +1359,7 @@ function DemandesFabrication() {
               {dfMode==='voir' && (
                 <div>
                   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,fontSize:13,marginBottom:12}}>
-                    {[['Article',dfSelectionne.article_nom+' ('+dfSelectionne.article_code+')'],['Client',dfSelectionne.client_nom||'—'],['Quantité',(dfSelectionne.quantite_demandee||0)+' kg'],['Priorité','⭐'.repeat(dfSelectionne.priorite||1)],['Livraison',dfSelectionne.date_livraison_souhaitee?new Date(dfSelectionne.date_livraison_souhaitee).toLocaleDateString('fr-FR'):'—'],['Statut',dfSelectionne.statut],['BC origine',dfSelectionne.numero_bc||'—'],['OF généré',dfSelectionne.numero_of||'—'],['Demandeur',dfSelectionne.demandeur_nom||'—'],['Validé par',dfSelectionne.valideur_nom||'—']].map(([l,v])=>(
+                    {[['Article',dfSelectionne.article_nom+' ('+dfSelectionne.article_code+')'],['Client',dfSelectionne.client_nom||'—'],['Quantité',parseFloat(dfSelectionne.quantite_totale_kg||dfSelectionne.quantite_demandee||0).toFixed(1)+' kg'],['Priorité','⭐'.repeat(dfSelectionne.priorite||1)],['Livraison',dfSelectionne.date_livraison_souhaitee?new Date(dfSelectionne.date_livraison_souhaitee).toLocaleDateString('fr-FR'):'—'],['Statut',({'en_attente':'En attente','validee':'Validée → OF','refusee':'Refusée','annulee':'Annulée'}[dfSelectionne.statut]||dfSelectionne.statut)],['BC origine',dfSelectionne.numero_bc||'—'],['OF généré',dfSelectionne.numero_of||'—'],['Demandeur',dfSelectionne.demandeur_nom||'—'],['Validé par',dfSelectionne.valideur_nom||'—']].map(([l,v])=>(
                       <div key={l} style={{background:'#f9fafb',borderRadius:8,padding:'8px 12px'}}>
                         <div style={{fontSize:10,color:'#6b7280',fontWeight:600}}>{l}</div>
                         <div style={{fontWeight:600,marginTop:2}}>{v}</div>
@@ -1400,15 +1400,9 @@ function DemandesFabrication() {
               )}
               {dfMode==='modifier' && (
                 <div>
-                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
-                    <div>
-                      <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Quantité (kg)</div>
-                      <input type="number" value={dfQte} onChange={e=>setDfQte(e.target.value)} style={{width:'100%',padding:'8px',borderRadius:6,border:'1px solid #e5e7eb',fontSize:14}}/>
-                    </div>
-                    <div>
-                      <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Date livraison</div>
-                      <input type="date" value={dfDate} onChange={e=>setDfDate(e.target.value)} style={{width:'100%',padding:'8px',borderRadius:6,border:'1px solid #e5e7eb',fontSize:13}}/>
-                    </div>
+                  <div style={{marginBottom:10}}>
+                    <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Date de livraison souhaitée</div>
+                    <input type="date" value={dfDate} onChange={e=>setDfDate(e.target.value)} style={{width:'100%',padding:'8px',borderRadius:6,border:'1px solid #e5e7eb',fontSize:13}}/>
                   </div>
                   <div style={{marginBottom:10}}>
                     <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Priorité</div>
