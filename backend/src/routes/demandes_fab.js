@@ -244,18 +244,17 @@ ${bc_lignes.length > 0 ? `
     <th style="padding:5px 8px;text-align:right;">Montant TTC</th>
   </tr></thead>
   <tbody>
-    ${bc_lignes.map(l=>`<tr style="border-bottom:1px solid #e5e7eb;">`)}
-      <td style="padding:4px 8px;">${l.designation||'—'}</td>
-      <td style="padding:4px 8px;text-align:right;">${l.quantite_pieces?parseFloat(l.quantite_pieces).toLocaleString('fr-FR')+' pcs':'—'}</td>
-      <td style="padding:4px 8px;text-align:right;">${l.quantite_kg?parseFloat(l.quantite_kg).toFixed(1)+' kg':'—'}</td>
-      <td style="padding:4px 8px;text-align:right;">${l.prix_unitaire_ht?parseFloat(l.prix_unitaire_ht).toLocaleString('fr-FR')+' FCFA':'—'}</td>
-      <td style="padding:4px 8px;text-align:right;font-weight:700;">${l.montant_ttc?parseFloat(l.montant_ttc).toLocaleString('fr-FR')+' FCFA':'—'}</td>
-    </tr>`).join('')}
-    <tr style="background:#f0fdf4;font-weight:700;">
-      <td colspan="4" style="padding:5px 8px;text-align:right;">TOTAL TTC</td>
-      <td style="padding:5px 8px;text-align:right;">${bc_lignes.reduce((s,l)=>s+parseFloat(l.montant_ttc||0),0).toLocaleString('fr-FR')} FCFA</td>
+    ${bc_lignes.map(l=>{
+      const cells = [
+        '<td style="padding:4px 8px;">'+( l.designation||'—')+'</td>',
+        '<td style="padding:4px 8px;text-align:right;">'+( l.quantite_pieces?parseFloat(l.quantite_pieces).toLocaleString('fr-FR')+' pcs':'—')+'</td>',
+        '<td style="padding:4px 8px;text-align:right;">'+( l.quantite_kg?parseFloat(l.quantite_kg).toFixed(1)+' kg':'—')+'</td>',
+        '<td style="padding:4px 8px;text-align:right;">'+( l.prix_unitaire_ht?parseFloat(l.prix_unitaire_ht).toLocaleString('fr-FR')+' FCFA':'—')+'</td>',
+        '<td style="padding:4px 8px;text-align:right;font-weight:700;">'+( l.montant_ttc?parseFloat(l.montant_ttc).toLocaleString('fr-FR')+' FCFA':'—')+'</td>'
+      ];
+      return '<tr style="border-bottom:1px solid #e5e7eb;">'+cells.join('')+'</tr>';
+    }).join('')}
     </tr>
-  </tbody>
 </table>` : ''}
 ${d.description ? `<div class="specs"><strong>Spécifications :</strong> ${d.description}</div>` : ''}
 
