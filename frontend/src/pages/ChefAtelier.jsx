@@ -367,7 +367,7 @@ function GestionDevis() {
     </div>
   );
 
-  // ── NOUVEAU DEVIS (layout Leinad : centre=form+lignes, droite=catalogue+résumé) ──
+  // ── NOUVEAU DEVIS layout exact Leinad ──
   return (
     <div>
       <div style={{marginBottom:16,display:'flex',justifyContent:'space-between',alignItems:'flex-start'}}>
@@ -375,15 +375,16 @@ function GestionDevis() {
           <div style={{fontWeight:800,fontSize:18}}>Nouveau Devis</div>
           <div style={{fontSize:13,color:'#6b7280'}}>Créer un devis pour un client NAI</div>
         </div>
-        <button onClick={()=>{setVue('liste');reset();}} style={{fontSize:13,color:'#6b7280',background:'none',border:'1px solid #e5e7eb',borderRadius:8,padding:'7px 14px',cursor:'pointer'}}>
+        <button onClick={()=>{setVue('liste');reset();}} style={{fontSize:13,color:'#6b7280',background:'#fff',border:'1px solid #e5e7eb',borderRadius:8,padding:'7px 14px',cursor:'pointer'}}>
           ← Retour à la liste
         </button>
       </div>
 
-      <div style={{display:'grid',gridTemplateColumns:'calc(100% - 340px) 320px',gap:16,alignItems:'start',width:'100%'}}>
+      {/* Layout : gauche large + droite résumé */}
+      <div style={{display:'flex',gap:16,alignItems:'flex-start'}}>
 
-        {/* ── Centre : formulaire + lignes + notes ── */}
-        <div style={{display:'flex',flexDirection:'column',gap:14}}>
+        {/* ── GAUCHE ── */}
+        <div style={{flex:1,display:'flex',flexDirection:'column',gap:14}}>
 
           {/* Infos */}
           <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',padding:20}}>
@@ -394,25 +395,25 @@ function GestionDevis() {
                 <select value={form.client_id} onChange={e=>{
                   setForm(p=>({...p,client_id:e.target.value}));
                   setClientInfo(clients.find(x=>x.id===e.target.value)||null);
-                }} style={inp()}>
+                }} style={{width:'100%',padding:'8px 12px',border:'1px solid #d1d5db',borderRadius:7,fontSize:13}}>
                   <option value="">Sélectionner le client…</option>
                   {clients.map(c=><option key={c.id} value={c.id}>{c.raison_sociale||c.nom}{c.telephone?' — '+c.telephone:''}</option>)}
                 </select>
                 {clientInfo&&(
                   <div style={{marginTop:6,background:'#f9fafb',border:'1px solid #e5e7eb',borderRadius:7,padding:'8px 12px',fontSize:12}}>
                     <strong>{clientInfo.raison_sociale||clientInfo.nom}</strong>
-                    {clientInfo.telephone&&<div>{clientInfo.telephone}</div>}
-                    {clientInfo.email&&<div>{clientInfo.email}</div>}
+                    {clientInfo.telephone&&<div>📞 {clientInfo.telephone}</div>}
+                    {clientInfo.email&&<div>✉ {clientInfo.email}</div>}
                   </div>
                 )}
               </div>
               <div>
                 <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>Date du devis *</label>
-                <input type="date" value={new Date().toISOString().split('T')[0]} readOnly style={inp({background:'#f9fafb'})}/>
+                <input type="date" value={new Date().toISOString().split('T')[0]} readOnly style={{width:'100%',padding:'8px 12px',border:'1px solid #d1d5db',borderRadius:7,fontSize:13,background:'#f9fafb'}}/>
               </div>
               <div>
                 <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>Validité jusqu'au</label>
-                <input type="date" value={form.date_validite} onChange={e=>setForm(p=>({...p,date_validite:e.target.value}))} style={inp()}/>
+                <input type="date" value={form.date_validite} onChange={e=>setForm(p=>({...p,date_validite:e.target.value}))} style={{width:'100%',padding:'8px 12px',border:'1px solid #d1d5db',borderRadius:7,fontSize:13}}/>
               </div>
             </div>
           </div>
@@ -423,62 +424,114 @@ function GestionDevis() {
               <div style={{fontWeight:700,fontSize:14}}>Lignes de commande</div>
               <span style={{fontSize:13,color:'#6b7280'}}>{lignes.length} article(s)</span>
             </div>
-            <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
-              <thead style={{background:'#f9fafb'}}>
-                <tr>
-                  <th style={{padding:'8px 10px',textAlign:'left',color:'#374151',fontWeight:600}}>Produit</th>
-                  <th style={{padding:'8px 10px',textAlign:'right',color:'#374151',fontWeight:600}}>Prix unitaire HT</th>
-                  <th style={{padding:'8px 10px',textAlign:'right',color:'#374151',fontWeight:600}}>Rem. %</th>
-                  <th style={{padding:'8px 10px',textAlign:'right',color:'#374151',fontWeight:600}}>Quantité</th>
-                  <th style={{padding:'8px 10px',textAlign:'right',color:'#374151',fontWeight:600}}>Total TTC</th>
-                  <th style={{padding:'8px 10px'}}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {lignes.length===0?(
-                  <tr><td colSpan={7} style={{padding:'24px',textAlign:'center',color:'#9ca3af',fontStyle:'italic'}}>
-                    Aucun produit ajouté pour le moment
-                  </td></tr>
-                ):lignes.map((l,i)=>{
-                  const c=calcLigne(l);
-                  return(
-                    <tr key={i} style={{borderBottom:'1px solid #f3f4f6'}}>
-                      <td style={{padding:'8px 10px'}}>
-                        <div style={{fontWeight:600}}>{l.designation}</div>
-                        <div style={{fontSize:10,color:'#9ca3af'}}>{l.article_code}</div>
-                        {c.ht>0&&<div style={{fontSize:10,color:'#6b7280'}}>{c.ht.toLocaleString('fr-FR')} FCFA HT</div>}
-                      </td>
-                      <td style={{padding:'6px 8px'}}>
-                        <input type="number" value={l.prix_unitaire_ht}
-                          onChange={e=>updateLigne(i,'prix_unitaire_ht',e.target.value)}
-                          style={{width:85,padding:'4px 6px',border:'1px solid #e5e7eb',borderRadius:5,fontSize:12,textAlign:'right'}}/>
-                      </td>
-                      <td style={{padding:'6px 8px'}}>
-                        <input type="number" min="0" max="100" value={l.remise_pct}
-                          onChange={e=>updateLigne(i,'remise_pct',e.target.value)}
-                          style={{width:45,padding:'4px 6px',border:'1px solid #e5e7eb',borderRadius:5,fontSize:12,textAlign:'right'}}/>
-                      </td>
-                      <td style={{padding:'6px 8px'}}>
-                        <input type="number" value={l.quantite_pieces}
-                          onChange={e=>updateLigne(i,'quantite_pieces',e.target.value)}
-                          style={{width:65,padding:'4px 6px',border:'1px solid #e5e7eb',borderRadius:5,fontSize:12,textAlign:'right'}}/>
-                      </td>
-                      <td style={{padding:'8px 10px',textAlign:'right',fontWeight:700,color:'#0369a1',whiteSpace:'nowrap'}}>
-                        {c.ttc.toLocaleString('fr-FR')} FCFA
-                      </td>
-                      <td style={{padding:'6px 8px'}}>
-                        <button onClick={()=>setLignes(prev=>prev.filter((_,j)=>j!==i))}
-                          style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:5,padding:'4px 7px',cursor:'pointer'}}>✕</button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+            <div style={{overflowX:'auto'}}>
+              <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+                <thead style={{background:'#f9fafb'}}>
+                  <tr>
+                    <th style={{padding:'8px 10px',textAlign:'left',color:'#374151',fontWeight:600,borderBottom:'1px solid #e5e7eb'}}>Produit</th>
+                    <th style={{padding:'8px 10px',textAlign:'right',color:'#374151',fontWeight:600,borderBottom:'1px solid #e5e7eb'}}>Prix unitaire TTC</th>
+                    <th style={{padding:'8px 10px',textAlign:'right',color:'#374151',fontWeight:600,borderBottom:'1px solid #e5e7eb'}}>Rem. %</th>
+                    <th style={{padding:'8px 10px',textAlign:'right',color:'#374151',fontWeight:600,borderBottom:'1px solid #e5e7eb'}}>Quantité</th>
+                    <th style={{padding:'8px 10px',textAlign:'right',color:'#374151',fontWeight:600,borderBottom:'1px solid #e5e7eb'}}>Total TTC</th>
+                    <th style={{padding:'8px 10px',borderBottom:'1px solid #e5e7eb'}}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lignes.length===0?(
+                    <tr><td colSpan={6} style={{padding:'30px',textAlign:'center',color:'#9ca3af',fontStyle:'italic'}}>
+                      🛒 Aucun produit ajouté pour le moment
+                    </td></tr>
+                  ):lignes.map((l,i)=>{
+                    const c=calcLigne(l);
+                    return(
+                      <tr key={i} style={{borderBottom:'1px solid #f3f4f6'}}>
+                        <td style={{padding:'8px 10px'}}>
+                          <div style={{fontWeight:600}}>{l.designation}</div>
+                          <div style={{fontSize:10,color:'#9ca3af'}}>{l.article_code}</div>
+                          {c.ht>0&&<div style={{fontSize:10,color:'#6b7280'}}>= {c.ht.toLocaleString('fr-FR')} HT</div>}
+                        </td>
+                        <td style={{padding:'6px 8px',textAlign:'right'}}>
+                          <input type="number" value={l.prix_unitaire_ht}
+                            onChange={e=>updateLigne(i,'prix_unitaire_ht',e.target.value)}
+                            style={{width:90,padding:'4px 6px',border:'1px solid #e5e7eb',borderRadius:5,fontSize:12,textAlign:'right'}}/>
+                        </td>
+                        <td style={{padding:'6px 8px',textAlign:'right'}}>
+                          <input type="number" min="0" max="100" value={l.remise_pct}
+                            onChange={e=>updateLigne(i,'remise_pct',e.target.value)}
+                            style={{width:45,padding:'4px 6px',border:'1px solid #e5e7eb',borderRadius:5,fontSize:12,textAlign:'right'}}/>
+                        </td>
+                        <td style={{padding:'6px 8px',textAlign:'right'}}>
+                          <input type="number" value={l.quantite_pieces}
+                            onChange={e=>updateLigne(i,'quantite_pieces',e.target.value)}
+                            style={{width:70,padding:'4px 6px',border:'1px solid #e5e7eb',borderRadius:5,fontSize:12,textAlign:'right'}}/>
+                        </td>
+                        <td style={{padding:'8px 10px',textAlign:'right',fontWeight:700,color:'#374151',whiteSpace:'nowrap'}}>
+                          {c.ttc.toLocaleString('fr-FR')} FCFA
+                        </td>
+                        <td style={{padding:'6px 8px',textAlign:'center'}}>
+                          <button onClick={()=>setLignes(prev=>prev.filter((_,j)=>j!==i))}
+                            style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:5,padding:'4px 8px',cursor:'pointer',fontSize:11}}>✕</button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
             {lignes.length>0&&(
-              <button onClick={()=>setLignes([])} style={{marginTop:8,background:'none',border:'none',color:'#dc2626',cursor:'pointer',fontSize:12}}>
-                Effacer toutes les lignes
+              <button onClick={()=>setLignes([])} style={{marginTop:8,background:'none',border:'none',color:'#6b7280',cursor:'pointer',fontSize:12,textDecoration:'underline'}}>
+                Effacer
               </button>
+            )}
+          </div>
+
+          {/* Produits — grille 4 colonnes comme Leinad */}
+          <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',padding:20}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+              <div style={{fontWeight:700,fontSize:14}}>Produits</div>
+              <span style={{fontSize:11,background:'#f0fdf4',color:'#15803d',border:'1px solid #bbf7d0',borderRadius:20,padding:'3px 10px',fontWeight:600}}>● Scanner prêt</span>
+            </div>
+            <input value={searchArt} onChange={e=>{setSearchArt(e.target.value);setPageProd(1);}}
+              placeholder="Rechercher par nom, référence ou scanner code-barres…"
+              style={{width:'100%',padding:'8px 12px',border:'1px solid #d1d5db',borderRadius:7,fontSize:13,marginBottom:14}}/>
+
+            {/* Grille 4 colonnes */}
+            <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10}}>
+              {artPage.map(a=>{
+                const deja=lignes.find(l=>l.article_id===a.id);
+                return(
+                  <div key={a.id} style={{
+                    border:'1px solid',borderRadius:8,padding:'10px 12px',
+                    borderColor:deja?'#22c55e':'#e5e7eb',
+                    background:deja?'#f0fdf4':'#fff',
+                    cursor:deja?'default':'pointer',
+                    transition:'all .15s'
+                  }}>
+                    <div style={{fontSize:10,color:'#9ca3af',marginBottom:2}}>{a.code}</div>
+                    <div style={{fontWeight:600,fontSize:12,color:'#1f2937',marginBottom:3}}>{a.designation}</div>
+                    {a.prix_vente_fcfa&&<div style={{fontSize:11,color:'#374151',fontWeight:600}}>{parseFloat(a.prix_vente_fcfa).toLocaleString('fr-FR')} FCFA TTC</div>}
+                    <div style={{fontSize:11,color:'#6b7280',marginBottom:6}}>Stock : {a.stock_disponible||0}</div>
+                    {deja?(
+                      <div style={{fontSize:11,color:'#15803d',fontWeight:700,textAlign:'center'}}>Dans la commande ✓</div>
+                    ):(
+                      <button onClick={()=>addLigne(a)} style={{
+                        width:'100%',background:'#f59e0b',color:'#fff',border:'none',
+                        borderRadius:6,padding:'5px',cursor:'pointer',fontSize:12,fontWeight:600
+                      }}>Ajouter</button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {totalPages>1&&(
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:14,fontSize:12,color:'#6b7280'}}>
+                <span>Page {pageProd} sur {totalPages}</span>
+                <div style={{display:'flex',gap:6}}>
+                  {pageProd>1&&<button onClick={()=>setPageProd(p=>p-1)} style={{padding:'4px 10px',border:'1px solid #e5e7eb',borderRadius:6,cursor:'pointer'}}>‹ Précédent</button>}
+                  {pageProd<totalPages&&<button onClick={()=>setPageProd(p=>p+1)} style={{padding:'4px 10px',border:'1px solid #e5e7eb',borderRadius:6,cursor:'pointer'}}>Suivant ›</button>}
+                </div>
+              </div>
             )}
           </div>
 
@@ -491,68 +544,20 @@ function GestionDevis() {
           </div>
         </div>
 
-        {/* ── Droite : catalogue + résumé ── */}
-        <div style={{display:'flex',flexDirection:'column',gap:14}}>
-
-          {/* Catalogue */}
-          <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',padding:14}}>
-            <div style={{fontWeight:700,fontSize:14,marginBottom:8}}>Produits</div>
-            <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:8}}>
-              <span style={{fontSize:11,background:'#f0fdf4',color:'#15803d',border:'1px solid #bbf7d0',borderRadius:20,padding:'3px 10px',fontWeight:600}}>
-                ● Scanner prêt
-              </span>
+        {/* ── DROITE : résumé fixe ── */}
+        <div style={{width:260,flexShrink:0,display:'flex',flexDirection:'column',gap:0,position:'sticky',top:20}}>
+          <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',padding:16}}>
+            <div style={{fontWeight:700,fontSize:14,marginBottom:12}}>Résumé</div>
+            <div style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid #f3f4f6',fontSize:13}}>
+              <span style={{color:'#6b7280'}}>Sous-total HT :</span>
+              <span style={{fontWeight:600}}>{subtotalHT.toLocaleString('fr-FR')} FCFA</span>
             </div>
-            <input value={searchArt} onChange={e=>{setSearchArt(e.target.value);setPageProd(1);}}
-              placeholder="Rechercher par nom, référence…"
-              style={{width:'100%',padding:'7px 10px',border:'1px solid #d1d5db',borderRadius:7,fontSize:12,marginBottom:10}}/>
-
-            <div style={{display:'flex',flexDirection:'column',gap:6}}>
-              {artPage.map(a=>{
-                const deja=lignes.find(l=>l.article_id===a.id);
-                const stock = a.stock_disponible||0;
-                return(
-                  <div key={a.id} style={{border:'1px solid',borderRadius:8,padding:'10px 12px',borderColor:deja?'#22c55e':'#e5e7eb',background:deja?'#f0fdf4':'#fff'}}>
-                    <div style={{fontSize:11,color:'#9ca3af',marginBottom:2}}>{a.code}</div>
-                    <div style={{fontWeight:600,fontSize:12,color:'#1f2937'}}>{a.designation}</div>
-                    {a.prix_vente_fcfa&&<div style={{fontSize:11,color:'#374151',margin:'2px 0'}}>{parseFloat(a.prix_vente_fcfa).toLocaleString('fr-FR')} FCFA HT/kg</div>}
-                    <div style={{fontSize:11,color:stock<0?'#dc2626':'#6b7280'}}>Stock : {stock}</div>
-                    {deja?(
-                      <div style={{marginTop:6,fontSize:11,color:'#15803d',fontWeight:700}}>Dans la commande ✓</div>
-                    ):(
-                      <button onClick={()=>addLigne(a)} style={{marginTop:6,width:'100%',background:'#0891b2',color:'#fff',border:'none',borderRadius:6,padding:'5px',cursor:'pointer',fontSize:12,fontWeight:600}}>
-                        Ajouter
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
+            <div style={{display:'flex',justifyContent:'space-between',padding:'6px 0',borderBottom:'1px solid #f3f4f6',fontSize:13}}>
+              <span style={{color:'#6b7280'}}>TVA :</span>
+              <span style={{fontWeight:600}}>{totalTVA.toLocaleString('fr-FR')} FCFA</span>
             </div>
-
-            {totalPages>1&&(
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:10,fontSize:12,color:'#6b7280'}}>
-                <span>Page {pageProd} sur {totalPages}</span>
-                <div style={{display:'flex',gap:4}}>
-                  {pageProd>1&&<button onClick={()=>setPageProd(p=>p-1)} style={{padding:'3px 8px',border:'1px solid #e5e7eb',borderRadius:6,cursor:'pointer',fontSize:12}}>‹ Préc</button>}
-                  {pageProd<totalPages&&<button onClick={()=>setPageProd(p=>p+1)} style={{padding:'3px 8px',border:'1px solid #e5e7eb',borderRadius:6,cursor:'pointer',fontSize:12}}>Suiv ›</button>}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Résumé */}
-          <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',padding:14}}>
-            <div style={{fontWeight:700,fontSize:14,marginBottom:10}}>Résumé</div>
-            {[
-              ['Sous-total HT :', subtotalHT.toLocaleString('fr-FR')+' FCFA'],
-              ['TVA ('+form.taux_tva+'%) :', totalTVA.toLocaleString('fr-FR')+' FCFA'],
-            ].map(([l,v])=>(
-              <div key={l} style={{display:'flex',justifyContent:'space-between',padding:'5px 0',fontSize:13,borderBottom:'1px solid #f3f4f6'}}>
-                <span style={{color:'#6b7280'}}>{l}</span><span style={{fontWeight:600}}>{v}</span>
-              </div>
-            ))}
-            {/* Remise */}
             <div style={{padding:'8px 0',borderBottom:'1px solid #f3f4f6'}}>
-              <div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:5}}>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:13,marginBottom:6}}>
                 <span style={{color:'#6b7280'}}>Remise globale :</span>
                 <span style={{fontWeight:600,color:discAmt>0?'#dc2626':'#374151'}}>{discAmt>0?'-'+discAmt.toLocaleString('fr-FR')+' FCFA':'0 FCFA'}</span>
               </div>
@@ -565,18 +570,17 @@ function GestionDevis() {
                   placeholder="FCFA" style={{flex:2,padding:'5px 7px',border:'1px solid #e5e7eb',borderRadius:6,fontSize:12,textAlign:'right'}}/>
               </div>
             </div>
-            <div style={{display:'flex',justifyContent:'space-between',padding:'10px 0',fontSize:16,fontWeight:800,color:'#0369a1'}}>
+            <div style={{display:'flex',justifyContent:'space-between',padding:'10px 0',fontSize:15,fontWeight:800,color:'#0369a1'}}>
               <span>Total TTC :</span><span>{totalTTC.toLocaleString('fr-FR')} FCFA</span>
             </div>
-
-            <div style={{display:'flex',flexDirection:'column',gap:7}}>
+            <div style={{display:'flex',flexDirection:'column',gap:7,marginTop:4}}>
               <button onClick={()=>sauver('brouillon')} style={{background:'#f3f4f6',color:'#374151',border:'1px solid #e5e7eb',borderRadius:8,padding:'9px',cursor:'pointer',fontWeight:600,fontSize:13}}>
                 💾 Enregistrer comme brouillon
               </button>
-              <button onClick={()=>sauver('envoye')} style={{background:'#0891b2',color:'#fff',border:'none',borderRadius:8,padding:'9px',cursor:'pointer',fontWeight:700,fontSize:13}}>
+              <button onClick={()=>sauver('envoye')} style={{background:'#f59e0b',color:'#fff',border:'none',borderRadius:8,padding:'9px',cursor:'pointer',fontWeight:700,fontSize:13}}>
                 ✓ Confirmer la commande
               </button>
-              <button onClick={reset} style={{background:'#fff',color:'#dc2626',border:'1px solid #fca5a5',borderRadius:8,padding:'9px',cursor:'pointer',fontWeight:600,fontSize:13}}>
+              <button onClick={reset} style={{background:'#fff',color:'#374151',border:'1px solid #e5e7eb',borderRadius:8,padding:'9px',cursor:'pointer',fontSize:13}}>
                 🔄 Réinitialiser
               </button>
               <button onClick={()=>{setVue('liste');reset();}} style={{background:'#fff',color:'#6b7280',border:'1px solid #e5e7eb',borderRadius:8,padding:'9px',cursor:'pointer',fontSize:13}}>
