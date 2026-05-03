@@ -298,7 +298,7 @@ function GestionDevis() {
                 onChange={e=>{
                   const pcs=parseFloat(e.target.value||0);
                   const art=articles.find(a=>a.id===form.article_id);
-                  const pw=parseFloat(art?.poids_piece_kg||0);
+                  const pw=parseFloat(art?.poids_piece_kg||art?.poids_theorique_kg||0);
                   setForm(p=>({...p,quantite_pieces:e.target.value,
                     quantite:pw>0&&pcs>0?(pcs*pw).toFixed(3):p.quantite}));
                 }}
@@ -310,7 +310,7 @@ function GestionDevis() {
                 onChange={e=>{
                   const kg=parseFloat(e.target.value||0);
                   const art=articles.find(a=>a.id===form.article_id);
-                  const pw=parseFloat(art?.poids_piece_kg||0);
+                  const pw=parseFloat(art?.poids_piece_kg||art?.poids_theorique_kg||0);
                   setForm(p=>({...p,quantite:e.target.value,
                     quantite_pieces:pw>0&&kg>0?String(Math.round(kg/pw)):p.quantite_pieces}));
                 }}
@@ -551,7 +551,7 @@ function GestionBC() {
               <input type="number" value={form.quantite_pieces} onChange={e=>{
                 const pcs=parseFloat(e.target.value||0);
                 const art=articles.find(a=>a.id===form.article_id);
-                const pw=parseFloat(art?.poids_piece_kg||0);
+                const pw=parseFloat(art?.poids_piece_kg||art?.poids_theorique_kg||0);
                 setForm(p=>({...p,quantite_pieces:e.target.value,quantite:pw>0?(pcs*pw).toFixed(3):p.quantite}));
               }} style={sel} placeholder="ex: 10000"/>
             </div>
@@ -559,7 +559,7 @@ function GestionBC() {
               <input type="number" value={form.quantite} onChange={e=>{
                 const kg=parseFloat(e.target.value||0);
                 const art=articles.find(a=>a.id===form.article_id);
-                const pw=parseFloat(art?.poids_piece_kg||0);
+                const pw=parseFloat(art?.poids_piece_kg||art?.poids_theorique_kg||0);
                 setForm(p=>({...p,quantite:e.target.value,quantite_pieces:pw>0?String(Math.round(kg/pw)):p.quantite_pieces}));
               }} style={sel} placeholder="ex: 500"/>
             </div>
