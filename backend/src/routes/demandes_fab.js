@@ -117,7 +117,7 @@ router.put('/:id/refuser', auth, async (req, res) => {
 module.exports = router;
 
 // GET /api/df/:id/ticket — Document de Demande de Fabrication
-router.get('/:id/ticket', async (req, res) => {
+router.get('/:id/pdf', async (req, res) => {
   try {
     const { rows } = await db.query(`
       SELECT df.*, 
