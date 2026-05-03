@@ -161,7 +161,7 @@ router.get('/:id/pdf', async (req, res) => {
         const pu = l.prix_unitaire_ht ? parseFloat(l.prix_unitaire_ht).toLocaleString('fr-FR')+' FCFA' : '—';
         const ttc = l.montant_ttc ? parseFloat(l.montant_ttc).toLocaleString('fr-FR')+' FCFA' : '—';
         rows_html += '<tr style="border-bottom:1px solid #e5e7eb;">';
-        rows_html += '<td style="padding:4px 8px;">'+(l.designation||'—')+'</td>';
+        rows_html += '<td style="padding:4px 8px;"><strong>'+(l.article_code||'')+'</strong>'+(l.article_code?' — ':'')+(l.designation||'—')+'</td>';
         rows_html += '<td style="padding:4px 8px;text-align:right;">'+qpcs+'</td>';
         rows_html += '<td style="padding:4px 8px;text-align:right;">'+qkg+'</td>';
         rows_html += '<td style="padding:4px 8px;text-align:right;">'+pu+'</td>';
