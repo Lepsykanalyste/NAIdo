@@ -13,13 +13,16 @@ router.get('/', auth, async (req, res) => {
              a.designation AS article_nom, a.code AS article_code,
              u1.nom||' '||u1.prenom AS demandeur_nom,
              u2.nom||' '||u2.prenom AS valideur_nom,
-             o.numero_of
+             o.numero_of,
+             bc.numero_bc,
+             COALESCE((SELECT SUM(quantite_kg) FROM bc_lignes WHERE bc_id=df.bc_id), df.quantite_demandee) AS quantite_totale_kg
       FROM demandes_fabrication df
       LEFT JOIN clients_complet c ON c.id=df.client_id
       LEFT JOIN articles a ON a.id=df.article_id
       LEFT JOIN utilisateurs u1 ON u1.id=df.demandeur_id
       LEFT JOIN utilisateurs u2 ON u2.id=df.validee_par
       LEFT JOIN ordres_fabrication o ON o.id=df.of_id
+      LEFT JOIN bons_commande bc ON bc.id=df.bc_id
       WHERE 1=1
     `;
     const params = [];
@@ -123,7 +126,9 @@ router.get('/:id/ticket', async (req, res) => {
              a.longueur_mm, a.largeur_mm,
              u1.nom||' '||u1.prenom AS demandeur_nom,
              u2.nom||' '||u2.prenom AS valideur_nom,
-             o.numero_of
+             o.numero_of,
+             bc.numero_bc,
+             COALESCE((SELECT SUM(quantite_kg) FROM bc_lignes WHERE bc_id=df.bc_id), df.quantite_demandee) AS quantite_totale_kg
       FROM demandes_fabrication df
       LEFT JOIN clients_complet c ON c.id=df.client_id
       LEFT JOIN articles a ON a.id=df.article_id
