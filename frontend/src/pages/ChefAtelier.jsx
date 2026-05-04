@@ -7057,7 +7057,6 @@ function OrdresLivraison() {
   const [loadingBC, setLoadingBC] = useState(false);
   const [lignesOL, setLignesOL] = useState([]);
   const [formInfo, setFormInfo] = useState({date_livraison_prevue:'',adresse_livraison:'',transporteur:'',notes:'',est_derogatoire:false});
-
   const charger = async () => {
     setLoading(true);
     try {
@@ -7070,26 +7069,16 @@ function OrdresLivraison() {
     } finally { setLoading(false); }
   };
   React.useEffect(()=>{ charger(); },[]);
-
-  const getStock = (article_id) => {
-    const s = stock.find(s => s.id === article_id);
-    return parseFloat(s?.stock_total_dispo ?? 0);
-  };
-
-  const ouvrirModal = (m) => {
-    setMode(m); setStep(1); setBcChoisi(null); setLignesOL([]);
-    setFormInfo({date_livraison_prevue:'',adresse_livraison:'',transporteur:'',notes:'',est_derogatoire:false});
-    setSearchBC(''); setShowModal(true);
-  };
-
+  const getStock = (article_id) => { const s=stock.find(s=>s.id===article_id); return parseFloat(s?.stock_total_dispo??0); };
+  const ouvrirModal = (m) => { setMode(m);setStep(1);setBcChoisi(null);setLignesOL([]);setFormInfo({date_livraison_prevue:'',adresse_livraison:'',transporteur:'',notes:'',est_derogatoire:false});setSearchBC('');setShowModal(true); };
   const choisirBC = async (bc) => {
     setBcChoisi(bc); setLoadingBC(true);
     try {
       const {data:lignes} = await axios.get(`${API}/bc/${bc.id}/lignes`);
       const lignesInit = lignes.map(l => {
-        const qteCmd = parseFloat(l.quantite_pieces||l.quantite_kg||0);
-        const stockDispo = getStock(l.article_id);
-        const qteLivrer = mode==='stock' ? Math.min(qteCmd,stockDispo) : qteCmd;
+        const qteCmd=parseFloat(l.quantite_pieces||l.quantite_kg||0);
+        const stockDispo=getStock(l.article_id);
+        const qteLivrer=mode==='stock'?Math.min(qteCmd,stockDispo):qteCmd;
         return {...l,bc_ligne_id:l.id,quantite_commandee:qteCmd,quantite_livrer:qteLivrer,stock_dispo:stockDispo,inclure:qteLivrer>0};
       });
       setLignesOL(lignesInit);
@@ -7098,32 +7087,16 @@ function OrdresLivraison() {
     } catch { toast.error('Impossible de charger les lignes du BC'); }
     finally { setLoadingBC(false); }
   };
-
   const creerOL = async () => {
-    const lignesActives = lignesOL.filter(l=>l.inclure&&parseFloat(l.quantite_livrer)>0);
-    if(!lignesActives.length){toast.error('Au moins une ligne avec quantité > 0 requise');return;}
-    const estDerogatoire = mode==='stock'
-      ? lignesActives.some(l=>parseFloat(l.quantite_livrer)>l.stock_dispo)
-      : formInfo.est_derogatoire;
+    const lignesActives=lignesOL.filter(l=>l.inclure&&parseFloat(l.quantite_livrer)>0);
+    if(!lignesActives.length){toast.error('Au moins une ligne avec quantité > 0');return;}
+    const estDerogatoire=mode==='stock'?lignesActives.some(l=>parseFloat(l.quantite_livrer)>l.stock_dispo):formInfo.est_derogatoire;
     try {
-      await axios.post(API+'/ol',{
-        bc_id:bcChoisi.id, client_id:bcChoisi.client_id,
-        date_livraison_prevue:formInfo.date_livraison_prevue||null,
-        adresse_livraison:formInfo.adresse_livraison||null,
-        notes:formInfo.notes||null, transporteur:formInfo.transporteur||null,
-        est_derogatoire:estDerogatoire,
-        lignes:lignesActives.map(l=>({bc_ligne_id:l.bc_ligne_id,article_id:l.article_id,designation:l.designation||l.article_nom||'',quantite_commandee:l.quantite_commandee,quantite_livrer:parseFloat(l.quantite_livrer)})),
-      });
-      toast.success('Ordre de Livraison créé !');
-      setShowModal(false); charger();
+      await axios.post(API+'/ol',{bc_id:bcChoisi.id,client_id:bcChoisi.client_id,date_livraison_prevue:formInfo.date_livraison_prevue||null,adresse_livraison:formInfo.adresse_livraison||null,notes:formInfo.notes||null,transporteur:formInfo.transporteur||null,est_derogatoire:estDerogatoire,lignes:lignesActives.map(l=>({bc_ligne_id:l.bc_ligne_id,article_id:l.article_id,designation:l.designation||l.article_nom||'',quantite_commandee:l.quantite_commandee,quantite_livrer:parseFloat(l.quantite_livrer)}))});
+      toast.success('Ordre de Livraison créé !'); setShowModal(false); charger();
     } catch(e){toast.error(e.response?.data?.error||'Erreur création OL');}
   };
-
-  const changerStatut = async (id,statut) => {
-    try{await axios.put(API+'/ol/'+id+'/statut',{statut});charger();}
-    catch{toast.error('Erreur changement statut');}
-  };
-
+  const changerStatut = async (id,statut) => { try{await axios.put(API+'/ol/'+id+'/statut',{statut});charger();}catch{toast.error('Erreur');} };
   const clOL=s=>({brouillon:'#6b7280',confirme:'#0369a1',en_livraison:'#d97706',livre:'#15803d',annule:'#dc2626'}[s]||'#6b7280');
   const bgOL=s=>({brouillon:'#f3f4f6',confirme:'#e0f2fe',en_livraison:'#fef3c7',livre:'#dcfce7',annule:'#fee2e2'}[s]||'#f3f4f6');
   const lbOL=s=>({brouillon:'Brouillon',confirme:'Confirmé',en_livraison:'En livraison',livre:'Livré',annule:'Annulé'}[s]||s);
@@ -7136,7 +7109,6 @@ function OrdresLivraison() {
   const brMode=mode==='stock'?'#86efac':'#bfdbfe';
   const bcsFiltres=bcs.filter(bc=>bc.statut!=='annule').filter(bc=>!searchBC||(bc.numero_bc||'').toLowerCase().includes(searchBC.toLowerCase())||(bc.client_nom||'').toLowerCase().includes(searchBC.toLowerCase())||(bc.reference_client||'').toLowerCase().includes(searchBC.toLowerCase()));
   const hasDerog=mode==='stock'&&lignesOL.some(l=>l.inclure&&parseFloat(l.quantite_livrer||0)>l.stock_dispo);
-
   return (
     <div style={{padding:'24px',maxWidth:1100,margin:'0 auto'}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
@@ -7151,11 +7123,7 @@ function OrdresLivraison() {
       </div>
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12,marginBottom:20}}>
         {[{l:'Total',v:ols.length,c:'#0369a1',b:'#e0f2fe',i:'📦'},{l:'En cours',v:ols.filter(o=>o.statut==='en_livraison').length,c:'#d97706',b:'#fef3c7',i:'🚚'},{l:'Livrés',v:ols.filter(o=>o.statut==='livre').length,c:'#15803d',b:'#dcfce7',i:'✅'},{l:'Dérogatoires',v:ols.filter(o=>o.est_derogatoire).length,c:'#7c3aed',b:'#f5f3ff',i:'⚠'}].map(s=>(
-          <div key={s.l} style={{background:s.b,borderRadius:10,padding:'12px 16px'}}>
-            <div style={{fontSize:20}}>{s.i}</div>
-            <div style={{fontSize:22,fontWeight:800,color:s.c}}>{s.v}</div>
-            <div style={{fontSize:12,color:s.c,fontWeight:600}}>{s.l}</div>
-          </div>
+          <div key={s.l} style={{background:s.b,borderRadius:10,padding:'12px 16px'}}><div style={{fontSize:20}}>{s.i}</div><div style={{fontSize:22,fontWeight:800,color:s.c}}>{s.v}</div><div style={{fontSize:12,color:s.c,fontWeight:600}}>{s.l}</div></div>
         ))}
       </div>
       {loading?<div style={{textAlign:'center',padding:40,color:'#6b7280'}}>Chargement...</div>:(
@@ -7176,18 +7144,12 @@ function OrdresLivraison() {
                   <td style={{padding:'9px 12px',fontSize:12}}>{ol.date_livraison_prevue?new Date(ol.date_livraison_prevue).toLocaleDateString('fr-FR'):'—'}</td>
                   <td style={{padding:'9px 12px'}}><span style={{background:bgOL(ol.statut),color:clOL(ol.statut),padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:700}}>{lbOL(ol.statut)}</span></td>
                   <td style={{padding:'9px 12px',textAlign:'center'}}>{ol.est_derogatoire?'⚠ Oui':'—'}</td>
-                  <td style={{padding:'9px 12px'}}>
-                    <div style={{display:'flex',gap:5,alignItems:'center'}}>
-                      <button onClick={()=>window.open(`/api/ol/${ol.id}/pdf`,'_blank')} style={{background:'#e0f2fe',color:'#0891b2',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>🖨</button>
-                      <select value={ol.statut} onChange={e=>changerStatut(ol.id,e.target.value)} style={{padding:'4px 6px',borderRadius:6,border:'1px solid #e5e7eb',fontSize:11}}>
-                        <option value="brouillon">Brouillon</option>
-                        <option value="confirme">Confirmé</option>
-                        <option value="en_livraison">En livraison</option>
-                        <option value="livre">Livré</option>
-                        <option value="annule">Annulé</option>
-                      </select>
-                    </div>
-                  </td>
+                  <td style={{padding:'9px 12px'}}><div style={{display:'flex',gap:5,alignItems:'center'}}>
+                    <button onClick={()=>window.open(`/api/ol/${ol.id}/pdf`,'_blank')} style={{background:'#e0f2fe',color:'#0891b2',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>🖨</button>
+                    <select value={ol.statut} onChange={e=>changerStatut(ol.id,e.target.value)} style={{padding:'4px 6px',borderRadius:6,border:'1px solid #e5e7eb',fontSize:11}}>
+                      <option value="brouillon">Brouillon</option><option value="confirme">Confirmé</option><option value="en_livraison">En livraison</option><option value="livre">Livré</option><option value="annule">Annulé</option>
+                    </select>
+                  </div></td>
                 </tr>
               ))}
             </tbody>
@@ -7212,10 +7174,7 @@ function OrdresLivraison() {
                   {loadingBC&&<div style={{textAlign:'center',padding:20,color:'#6b7280',fontSize:13}}>Chargement des lignes...</div>}
                   <div style={{border:'1px solid #e5e7eb',borderRadius:8,overflow:'hidden',maxHeight:360,overflowY:'auto'}}>
                     {bcsFiltres.length===0?(<div style={{padding:32,textAlign:'center',color:'#6b7280',fontSize:13}}>Aucun bon de commande trouvé</div>):bcsFiltres.map(bc=>(
-                      <div key={bc.id} onClick={()=>!loadingBC&&choisirBC(bc)}
-                        style={{padding:'12px 16px',borderBottom:'1px solid #f3f4f6',cursor:loadingBC?'wait':'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',background:'#fff'}}
-                        onMouseEnter={e=>e.currentTarget.style.background=bgMode}
-                        onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
+                      <div key={bc.id} onClick={()=>!loadingBC&&choisirBC(bc)} style={{padding:'12px 16px',borderBottom:'1px solid #f3f4f6',cursor:loadingBC?'wait':'pointer',display:'flex',justifyContent:'space-between',alignItems:'center',background:'#fff'}} onMouseEnter={e=>e.currentTarget.style.background=bgMode} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
                         <div>
                           <div style={{fontWeight:700,color:couleurMode,fontSize:14}}>{bc.numero_bc}</div>
                           <div style={{fontSize:13,color:'#374151',marginTop:2}}>{bc.client_nom}</div>
@@ -7258,61 +7217,29 @@ function OrdresLivraison() {
                           const stockInsuf=mode==='stock'&&parseFloat(l.quantite_livrer||0)>l.stock_dispo;
                           return(
                             <tr key={i} style={{borderTop:'1px solid #f3f4f6',background:l.inclure?'#fff':'#fafafa',opacity:l.inclure?1:0.5}}>
-                              <td style={{padding:'8px 10px',textAlign:'center'}}>
-                                <input type="checkbox" checked={l.inclure||false} onChange={e=>setLignesOL(p=>{const n=[...p];n[i]={...n[i],inclure:e.target.checked};return n;})} style={{cursor:'pointer',width:15,height:15}}/>
-                              </td>
-                              <td style={{padding:'8px 10px'}}>
-                                <div style={{fontWeight:600,fontSize:13}}>{l.designation||l.article_nom||'—'}</div>
-                                {l.article_code&&<div style={{fontSize:11,color:'#9ca3af'}}>{l.article_code}</div>}
-                              </td>
+                              <td style={{padding:'8px 10px',textAlign:'center'}}><input type="checkbox" checked={l.inclure||false} onChange={e=>setLignesOL(p=>{const n=[...p];n[i]={...n[i],inclure:e.target.checked};return n;})} style={{cursor:'pointer',width:15,height:15}}/></td>
+                              <td style={{padding:'8px 10px'}}><div style={{fontWeight:600,fontSize:13}}>{l.designation||l.article_nom||'—'}</div>{l.article_code&&<div style={{fontSize:11,color:'#9ca3af'}}>{l.article_code}</div>}</td>
                               <td style={{padding:'8px 10px',textAlign:'right',fontSize:13}}>{parseFloat(l.quantite_commandee||0).toLocaleString('fr-FR')}</td>
-                              {mode==='stock'&&(
-                                <td style={{padding:'8px 10px',textAlign:'right'}}>
-                                  <span style={{fontWeight:700,fontSize:13,color:l.stock_dispo>=l.quantite_commandee?'#15803d':l.stock_dispo>0?'#d97706':'#dc2626'}}>{parseFloat(l.stock_dispo||0).toLocaleString('fr-FR')}</span>
-                                  {l.stock_dispo<l.quantite_commandee&&<div style={{fontSize:10,color:'#d97706'}}>{l.stock_dispo===0?'✗ rupture':'⚠ partiel'}</div>}
-                                </td>
-                              )}
-                              <td style={{padding:'8px 10px',textAlign:'right'}}>
-                                <input type="number" min="0" step="0.01" value={l.quantite_livrer} disabled={!l.inclure}
-                                  onChange={e=>setLignesOL(p=>{const n=[...p];n[i]={...n[i],quantite_livrer:e.target.value};return n;})}
-                                  style={{width:90,padding:'5px 8px',borderRadius:6,textAlign:'right',border:`1px solid ${stockInsuf?'#fbbf24':'#d1d5db'}`,background:stockInsuf?'#fffbeb':'#fff',fontSize:13,fontWeight:700}}/>
-                              </td>
+                              {mode==='stock'&&(<td style={{padding:'8px 10px',textAlign:'right'}}>
+                                <span style={{fontWeight:700,fontSize:13,color:l.stock_dispo>=l.quantite_commandee?'#15803d':l.stock_dispo>0?'#d97706':'#dc2626'}}>{parseFloat(l.stock_dispo||0).toLocaleString('fr-FR')}</span>
+                                {l.stock_dispo<l.quantite_commandee&&<div style={{fontSize:10,color:'#d97706'}}>{l.stock_dispo===0?'✗ rupture':'⚠ partiel'}</div>}
+                              </td>)}
+                              <td style={{padding:'8px 10px',textAlign:'right'}}><input type="number" min="0" step="0.01" value={l.quantite_livrer} disabled={!l.inclure} onChange={e=>setLignesOL(p=>{const n=[...p];n[i]={...n[i],quantite_livrer:e.target.value};return n;})} style={{width:90,padding:'5px 8px',borderRadius:6,textAlign:'right',border:`1px solid ${stockInsuf?'#fbbf24':'#d1d5db'}`,background:stockInsuf?'#fffbeb':'#fff',fontSize:13,fontWeight:700}}/></td>
                             </tr>
                           );
                         })}
                       </tbody>
                     </table>
                   </div>
-                  {hasDerog&&(
-                    <div style={{background:'#fffbeb',border:'1px solid #fde68a',borderRadius:8,padding:'10px 14px',marginBottom:14,fontSize:12,color:'#92400e',display:'flex',gap:8}}>
-                      <span>⚠</span><div><strong>Livraison dérogatoire</strong> — certaines quantités dépassent le stock. L'OL sera automatiquement marqué dérogatoire.</div>
-                    </div>
-                  )}
+                  {hasDerog&&(<div style={{background:'#fffbeb',border:'1px solid #fde68a',borderRadius:8,padding:'10px 14px',marginBottom:14,fontSize:12,color:'#92400e',display:'flex',gap:8}}><span>⚠</span><div><strong>Livraison dérogatoire</strong> — certaines quantités dépassent le stock. L'OL sera automatiquement marqué dérogatoire.</div></div>)}
                   <div style={{fontWeight:700,fontSize:13,color:'#374151',marginBottom:10}}>Informations de livraison</div>
                   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
-                    <div>
-                      <label style={{fontSize:11,fontWeight:600,color:'#6b7280',display:'block',marginBottom:3}}>Date de livraison prévue</label>
-                      <input type="date" value={formInfo.date_livraison_prevue} onChange={e=>setFormInfo(f=>({...f,date_livraison_prevue:e.target.value}))} style={inp}/>
-                    </div>
-                    <div>
-                      <label style={{fontSize:11,fontWeight:600,color:'#6b7280',display:'block',marginBottom:3}}>Transporteur</label>
-                      <input value={formInfo.transporteur} onChange={e=>setFormInfo(f=>({...f,transporteur:e.target.value}))} placeholder="ex: BOLLORÉ, client lui-même..." style={inp}/>
-                    </div>
+                    <div><label style={{fontSize:11,fontWeight:600,color:'#6b7280',display:'block',marginBottom:3}}>Date de livraison prévue</label><input type="date" value={formInfo.date_livraison_prevue} onChange={e=>setFormInfo(f=>({...f,date_livraison_prevue:e.target.value}))} style={inp}/></div>
+                    <div><label style={{fontSize:11,fontWeight:600,color:'#6b7280',display:'block',marginBottom:3}}>Transporteur</label><input value={formInfo.transporteur} onChange={e=>setFormInfo(f=>({...f,transporteur:e.target.value}))} placeholder="ex: BOLLORÉ, client lui-même..." style={inp}/></div>
                   </div>
-                  <div style={{marginBottom:10}}>
-                    <label style={{fontSize:11,fontWeight:600,color:'#6b7280',display:'block',marginBottom:3}}>Adresse de livraison</label>
-                    <input value={formInfo.adresse_livraison} onChange={e=>setFormInfo(f=>({...f,adresse_livraison:e.target.value}))} placeholder="Zone Industrielle, Abidjan..." style={inp}/>
-                  </div>
-                  <div style={{marginBottom:10}}>
-                    <label style={{fontSize:11,fontWeight:600,color:'#6b7280',display:'block',marginBottom:3}}>Notes / Instructions</label>
-                    <textarea value={formInfo.notes} onChange={e=>setFormInfo(f=>({...f,notes:e.target.value}))} placeholder="Instructions particulières..." style={{...inp,minHeight:60,resize:'vertical'}}/>
-                  </div>
-                  {mode==='bc'&&(
-                    <label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:13,color:'#374151',marginTop:4}}>
-                      <input type="checkbox" checked={formInfo.est_derogatoire} onChange={e=>setFormInfo(f=>({...f,est_derogatoire:e.target.checked}))} style={{width:15,height:15,cursor:'pointer'}}/>
-                      Marquer comme dérogatoire
-                    </label>
-                  )}
+                  <div style={{marginBottom:10}}><label style={{fontSize:11,fontWeight:600,color:'#6b7280',display:'block',marginBottom:3}}>Adresse de livraison</label><input value={formInfo.adresse_livraison} onChange={e=>setFormInfo(f=>({...f,adresse_livraison:e.target.value}))} placeholder="Zone Industrielle, Abidjan..." style={inp}/></div>
+                  <div style={{marginBottom:10}}><label style={{fontSize:11,fontWeight:600,color:'#6b7280',display:'block',marginBottom:3}}>Notes / Instructions</label><textarea value={formInfo.notes} onChange={e=>setFormInfo(f=>({...f,notes:e.target.value}))} placeholder="Instructions particulières..." style={{...inp,minHeight:60,resize:'vertical'}}/></div>
+                  {mode==='bc'&&(<label style={{display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:13,color:'#374151',marginTop:4}}><input type="checkbox" checked={formInfo.est_derogatoire} onChange={e=>setFormInfo(f=>({...f,est_derogatoire:e.target.checked}))} style={{width:15,height:15,cursor:'pointer'}}/>Marquer comme dérogatoire</label>)}
                 </div>
               )}
             </div>
@@ -7335,10 +7262,7 @@ function OrdresLivraison() {
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,fontSize:13}}>
               {[['BC origine',olDetail.numero_bc||'—'],['Client',olDetail.client_nom||'—'],['Statut',lbOL(olDetail.statut)],['Livraison',olDetail.date_livraison_prevue?new Date(olDetail.date_livraison_prevue).toLocaleDateString('fr-FR'):'—'],['Transporteur',olDetail.transporteur||'—'],['N° suivi',olDetail.numero_suivi||'—'],['DF origine',olDetail.numero_df||'—'],['OF origine',olDetail.numero_of||'—'],['Type',olDetail.est_derogatoire?'⚠ Dérogatoire':'Flux normal'],['Articles',(olDetail.nb_articles||0)+' ligne(s)']].map(([l,v])=>(
-                <div key={l} style={{background:'#f9fafb',borderRadius:8,padding:'8px 12px'}}>
-                  <div style={{fontSize:10,color:'#6b7280',fontWeight:600,textTransform:'uppercase'}}>{l}</div>
-                  <div style={{fontWeight:600,marginTop:2}}>{v}</div>
-                </div>
+                <div key={l} style={{background:'#f9fafb',borderRadius:8,padding:'8px 12px'}}><div style={{fontSize:10,color:'#6b7280',fontWeight:600,textTransform:'uppercase'}}>{l}</div><div style={{fontWeight:600,marginTop:2}}>{v}</div></div>
               ))}
             </div>
             <button onClick={()=>setOlDetail(null)} style={{marginTop:16,width:'100%',padding:9,borderRadius:8,border:'1px solid #e5e7eb',background:'#f9fafb',cursor:'pointer',fontSize:13}}>Fermer</button>
