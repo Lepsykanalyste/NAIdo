@@ -17,7 +17,7 @@ router.get('/', auth, async (req, res) => {
       LEFT JOIN clients_complet c ON c.id=ol.client_id
       LEFT JOIN bons_commande bc ON bc.id=ol.bc_id
       LEFT JOIN demandes_fabrication df ON df.id=ol.df_id
-      LEFT JOIN ordres_fabrication o ON o.id=ol.of_id
+      LEFT JOIN ordres_fabrication o ON o.id=ol.of_id OR (ol.of_id IS NULL AND o.df_id=ol.df_id)
       LEFT JOIN utilisateurs u ON u.id=ol.demandeur_id
       ORDER BY ol.created_at DESC
     `);
@@ -118,7 +118,7 @@ router.get('/:id/pdf', async (req, res) => {
       LEFT JOIN clients_complet c ON c.id=ol.client_id
       LEFT JOIN bons_commande bc ON bc.id=ol.bc_id
       LEFT JOIN demandes_fabrication df ON df.id=ol.df_id
-      LEFT JOIN ordres_fabrication o ON o.id=ol.of_id
+      LEFT JOIN ordres_fabrication o ON o.id=ol.of_id OR (ol.of_id IS NULL AND o.df_id=ol.df_id)
       LEFT JOIN utilisateurs u ON u.id=ol.demandeur_id
       WHERE ol.id=$1
     `, [req.params.id]);
