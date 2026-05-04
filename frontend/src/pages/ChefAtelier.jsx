@@ -7243,6 +7243,9 @@ export default function ChefAtelier() {
     return !perms.permissions || perms.permissions[mod]?.voir !== false;
   });
 
+
+}
+
 function Clients() {
   const [clients, setClients] = useState([]);
   const [search, setSearch] = useState('');
