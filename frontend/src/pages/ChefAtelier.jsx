@@ -9281,5 +9281,13 @@ function GMAO() {
           {SECTIONS[ongletActif] || <Dashboard />}
         </main>
 
+
         {/* Footer */}
         <footer style={{ background:'#fff', borderTop:'1px solid #e5e7eb', padding:'8px 24px', fontSize:11, color:'#9ca3af', textAlign:'center', flexShrink:0 }}>
+          © 2026 NAIdo v3.0 — Logiciel créé par SOPHOPSY pour NAI
+        </footer>
+      </div>
+    </div>
+  </PermissionsContext.Provider>
+  );
+}
