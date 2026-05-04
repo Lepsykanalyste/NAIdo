@@ -7149,102 +7149,82 @@ function OrdresLivraison() {
   );
 }
 
-export default function ChefAtelier() {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
-  const [ongletActif, setOngletActif] = useState('dashboard');
-  const [sidebarOuverte, setSidebarOuverte] = useState(true);
-  const [nbAlertes, setNbAlertes] = useState(0);
-  const [perms, setPerms] = useState({ permissions:{}, is_super_admin:false, has_finance:false, role:'' });
-
-  useEffect(() => {
-    const chargerAlertes = () => {
-      axios.get(`${API}/alertes/count`).then(({data}) => setNbAlertes(data.count)).catch(() => {});
-    };
-    const chargerPerms = async () => {
-      try {
-        const {data} = await axios.get(`${API}/permissions/moi`);
-        setPerms(data);
-        // Rediriger si pas accès au module actuel
-        if (data.permissions && !data.is_super_admin) {
-          const allowed = Object.keys(data.permissions).filter(k=>data.permissions[k]?.voir);
-          if (!allowed.includes(ongletActif) && !allowed.includes('*')) {
-            setOngletActif(allowed[0] || 'dashboard');
-          }
-        }
-      } catch {}
-    };
-    chargerAlertes();
-    chargerPerms();
-    const iv = setInterval(chargerAlertes, 30000);
-    return () => clearInterval(iv);
-  }, []);
-
-  const canAccess = (module) => {
-    if (perms.is_super_admin) return true;
-    if (perms.permissions?.['*']?.voir) return true;
-    return perms.permissions?.[module]?.voir || false;
-  };
-  const hasFinance = () => perms.has_finance || perms.is_super_admin;
-
-  const handleLogout = () => { logout(); navigate('/login'); };
-
-
-
-  const MENU_ITEMS = [
-    { id:'separator1',  label:'PRODUCTION',               separator:true },
-    { id:'dashboard',   label:'Tableau de bord',           icon:'home',        color:'#1d4ed8' },
-    { id:'devis',       label:'Devis',                   icon:'clipboard', color:'#0891b2' },
-  { id:'bc',          label:'Bons de Commande',        icon:'clipboard', color:'#0369a1' },
-  { id:'df',          label:'Demandes de Fabrication', icon:'clipboard', color:'#7c3aed' },
-  { id:'of',          label:'Ordres de Fabrication', icon:'clipboard', color:'#0369a1' },
-  { id:'production',  label:'Suivi Production',          icon:'activity',    color:'#059669' },
-    { id:'planning',    label:'Planning Machines',          icon:'calendar',    color:'#7c3aed' },
-    { id:'rapportjour', label:'Rapports Journaliers',       icon:'file-text',   color:'#0891b2' },
-    { id:'separator2',  label:'STOCKS & ARTICLES',          separator:true },
-    { id:'articles',    label:'Articles (Produits)',        icon:'package',     color:'#b45309' },
-    { id:'matieres',    label:'Matières Premières',        icon:'layers',      color:'#92400e' },
-    { id:'stock',       label:'Stock',                     icon:'archive',     color:'#15803d' },
-    { id:'cession',     label:'Bons de Cession',           icon:'shuffle',     color:'#1d4ed8' },
-    { id:'separator3',  label:'VENTE & ACHAT',             separator:true },
-    { id:'clients',     label:'Clients',                   icon:'users',       color:'#dc2626' },
-    { id:'vente',       label:'Ventes',                    icon:'trending-up', color:'#059669' },
-    { id:'fournisseurs',label:'Fournisseurs',              icon:'truck',       color:'#7c3aed' },
-    { id:'achats',      label:'Commandes Achat',           icon:'shopping-cart',color:'#0891b2' },
-    { id:'separator3b', label:'GMAO & MAINTENANCE',        separator:true },
-    { id:'gmao',        label:'GMAO / Maintenance',        icon:'tool',        color:'#059669' },
-    { id:'separator4',  label:'QHSE & MAINTENANCE',        separator:true },
-    { id:'qhse',        label:'QHSE / NC',                 icon:'qhse',        color:'#b45309' },
-    { id:'separator4b', label:'RESSOURCES HUMAINES',       separator:true },
-    { id:'rh',          label:'RH — Employés & Paie',      icon:'users',       color:'#0891b2' },
-    { id:'separator5',  label:'ADMIN & IA',                separator:true },
-    { id:'kpi',         label:'KPI & Rapports',            icon:'bar-chart',   color:'#1d4ed8' },
-    { id:'ia',          label:'Assistant IA',              icon:'cpu',         color:'#7c3aed' },
-    { id:'utilisateurs',label:'Utilisateurs',              icon:'users',       color:'#6d28d9' },
-    { id:'parametres',  label:'⚙ Paramètres Système',     separator:false,    icon:'settings',    color:'#1e1b4b' },
-    { id:'separator6',  label:'RÉFÉRENTIELS',              separator:true },
-    { id:'alertes',     label:'Alertes',                   icon:'bell',        color:'#dc2626' },
-    { id:'parametres',  label:'⚙ Paramètres',  icon:'settings',    color:'#1e1b4b' },
-  { id:'parametres',  label:'⚙ Paramètres', icon:'settings', color:'#1e1b4b' },
-  { id:'referentiels',label:'Référentiels',              icon:'database',    color:'#374151' },
-  ].filter(item => {
-    if (item.separator) return true;
-    if (perms.is_super_admin) return true;
-    const moduleMap = {
-      dashboard:'dashboard', production:'production', planning:'planning',
-      rapportjour:'production', articles:'articles', matieres:'stock',
-      stock:'stock', cession:'bons_cession', clients:'vente',
-      vente:'vente', fournisseurs:'achat', achats:'achat',
-      qhse:'qhse', gmao:'gmao', rh:'rh', kpi:'kpi', ia:'ia',
-      utilisateurs:'utilisateurs', parametres:'parametres',
-    };
-    const mod = moduleMap[item.id];
-    if (!mod) return true;
-    return !perms.permissions || perms.permissions[mod]?.voir !== false;
-  });
-
-
+                <button onClick={()=>setForm(f=>({...f,est_derogatoire:true}))} style={{flex:1,padding:'8px',borderRadius:8,border:'2px solid '+(form.est_derogatoire?'#7c3aed':'#e5e7eb'),background:form.est_derogatoire?'#f5f3ff':'#f9fafb',cursor:'pointer',fontSize:13,fontWeight:600,color:form.est_derogatoire?'#7c3aed':'#6b7280'}}>Derogatoire (stock)</button>
+              </div>
+            </div>
+            {!form.est_derogatoire && (
+              <div style={{marginBottom:12}}>
+                <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>DF validee</label>
+                <select value={form.df_id} onChange={e=>{ const df=dfs.find(d=>d.id===e.target.value); setForm(f=>({...f,df_id:e.target.value,client_id:df?.client_id||'',article_id:df?.article_id||''})); }} style={sel}>
+                  <option value="">-- Selectionner une DF --</option>
+                  {dfs.map(d=><option key={d.id} value={d.id}>{d.numero_df} — {d.client_nom} — {d.article_nom}</option>)}
+                </select>
+              </div>
+            )}
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+              <div>
+                <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>Client destinataire</label>
+                <select value={form.client_id} onChange={e=>setForm(f=>({...f,client_id:e.target.value}))} style={sel}>
+                  <option value="">-- Client --</option>
+                  {clients.map(c=><option key={c.id} value={c.id}>{c.raison_sociale}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>Article</label>
+                <select value={form.article_id} onChange={e=>setForm(f=>({...f,article_id:e.target.value}))} style={sel}>
+                  <option value="">-- Article --</option>
+                  {articles.map(a=><option key={a.id} value={a.id}>{a.code} — {a.designation}</option>)}
+                </select>
+              </div>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+              <div>
+                <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>Quantite (kg)</label>
+                <input type="number" value={form.quantite_livrer} onChange={e=>setForm(f=>({...f,quantite_livrer:e.target.value}))} style={sel}/>
+              </div>
+              <div>
+                <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>Date livraison prevue</label>
+                <input type="date" value={form.date_livraison_prevue} onChange={e=>setForm(f=>({...f,date_livraison_prevue:e.target.value}))} style={sel}/>
+              </div>
+            </div>
+            <div style={{marginBottom:12}}>
+              <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>Adresse de livraison</label>
+              <input type="text" value={form.adresse_livraison} onChange={e=>setForm(f=>({...f,adresse_livraison:e.target.value}))} style={sel} placeholder="Adresse..."/>
+            </div>
+            <div style={{marginBottom:20}}>
+              <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>Notes</label>
+              <textarea value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} style={{...sel,minHeight:60,resize:'vertical'}} placeholder="Instructions..."/>
+            </div>
+            <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
+              <button onClick={()=>setShowForm(false)} style={{padding:'9px 20px',borderRadius:8,border:'1px solid #e5e7eb',background:'#f9fafb',cursor:'pointer',fontSize:13}}>Annuler</button>
+              <button onClick={creerOL} style={{padding:'9px 20px',borderRadius:8,border:'none',background:'#15803d',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>Creer OL</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {olDetail && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={()=>setOlDetail(null)}>
+          <div style={{background:'#fff',borderRadius:14,padding:28,width:500,maxWidth:'95vw'}} onClick={e=>e.stopPropagation()}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+              <div style={{fontWeight:800,fontSize:16,color:'#15803d'}}>{olDetail.numero_ol}</div>
+              <button onClick={()=>setOlDetail(null)} style={{background:'none',border:'none',fontSize:20,cursor:'pointer'}}>✕</button>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,fontSize:13}}>
+              {[['Article',(olDetail.article_nom||'—')+'('+(olDetail.article_code||'')+ ')'],['Client',olDetail.client_nom||'—'],['Quantite',parseFloat(olDetail.quantite_livrer||0).toLocaleString('fr-FR')+' kg'],['Statut',lb(olDetail.statut)],['Livraison',olDetail.date_livraison_prevue?new Date(olDetail.date_livraison_prevue).toLocaleDateString('fr-FR'):'—'],['DF origine',olDetail.numero_df||'—'],['OF origine',olDetail.numero_of||'—'],['Type',olDetail.est_derogatoire?'Derogatoire':'Flux normal']].map(([l,v])=>(
+                <div key={l} style={{background:'#f9fafb',borderRadius:8,padding:'8px 12px'}}>
+                  <div style={{fontSize:10,color:'#6b7280',fontWeight:600}}>{l}</div>
+                  <div style={{fontWeight:600,marginTop:2}}>{v}</div>
+                </div>
+              ))}
+            </div>
+            <button onClick={()=>setOlDetail(null)} style={{marginTop:16,width:'100%',padding:'9px',borderRadius:8,border:'1px solid #e5e7eb',background:'#f9fafb',cursor:'pointer',fontSize:13}}>Fermer</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
+
 
   const SECTIONS = {
     devis:       <GestionDevis />,
@@ -7386,7 +7366,6 @@ export default function ChefAtelier() {
           {SECTIONS[ongletActif] || <Dashboard />}
         </main>
 
-
         {/* Footer */}
         <footer style={{ background:'#fff', borderTop:'1px solid #e5e7eb', padding:'8px 24px', fontSize:11, color:'#9ca3af', textAlign:'center', flexShrink:0 }}>
           © 2026 NAIdo v3.0 — Logiciel créé par SOPHOPSY pour NAI
@@ -7397,6 +7376,9 @@ export default function ChefAtelier() {
   );
 }
 
+// ══════════════════════════════════════════════════════════════
+// MODULE CLIENTS
+// ══════════════════════════════════════════════════════════════
 function Clients() {
   const [clients, setClients] = useState([]);
   const [search, setSearch] = useState('');
