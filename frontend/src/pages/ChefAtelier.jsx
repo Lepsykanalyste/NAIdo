@@ -694,7 +694,36 @@ function GestionBC() {
     } catch(e) { toast.error(e.response?.data?.error||'Erreur'); }
   };
 
-  const [dfModal, setDfModal] = useState(null); // {bcId, priorite, description}
+  const [dfModal, setDfModal] = useState(null);
+  const [olModal, setOlModal] = useState(null);
+  const [olBcLignes, setOlBcLignes] = useState([]);
+  const ouvrirOlModal = async (bc) => {
+    const r = await axios.get(API+'/bc/'+bc.id+'/lignes').catch(()=>({data:[]}));
+    const lignes = (r.data||[]).map(l=>({...l, quantite_livrer: l.quantite_pieces}));
+    setOlBcLignes(lignes);
+    setOlModal({bcId: bc.id, numeroBc: bc.numero_bc, clientId: bc.client_id, clientNom: bc.client_nom, referenceclient: bc.reference_client, adresse: bc.adresse_livraison||'', date: bc.date_livraison_souhaitee?bc.date_livraison_souhaitee.slice(0,10):'', transporteur:'', notes:''});
+  };
+  const confirmerOL = async () => {
+    if (!olModal) return;
+    try {
+      const lignes = olBcLignes.filter(l=>parseFloat(l.quantite_livrer||0)>0).map(l=>({
+        bc_ligne_id: l.id, article_id: l.article_id, designation: l.designation,
+        quantite_commandee: l.quantite_pieces, quantite_livrer: parseFloat(l.quantite_livrer||0)
+      }));
+      if (lignes.length===0) { toast.error('Quantite requise pour au moins un article'); return; }
+      await axios.post(API+'/ol', {
+        bc_id: olModal.bcId, client_id: olModal.clientId,
+        date_livraison_prevue: olModal.date||null,
+        adresse_livraison: olModal.adresse||null,
+        notes: olModal.notes||null,
+        transporteur: olModal.transporteur||null,
+        est_derogatoire: false, lignes
+      });
+      toast.success('OL cree avec succes');
+      setOlModal(null); setOlBcLignes([]);
+      charger();
+    } catch(e) { toast.error(e.response?.data?.error||'Erreur'); }
+  }; // {bcId, priorite, description}
   const [bcDetail, setBcDetail] = useState(null);
   const [bcDetailLignes, setBcDetailLignes] = useState([]);
   React.useEffect(()=>{
@@ -832,6 +861,9 @@ function GestionBC() {
                     <button onClick={()=>window.open(`/api/bc/${b.id}/pdf`,'_blank')} style={{background:'#e0f2fe',color:'#0369a1',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>🖨 PDF</button>
                     {b.statut==='recu' && (
                       <button onClick={()=>ouvrirDfModal(b)} style={{background:'#f5f3ff',color:'#7c3aed',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11,fontWeight:700}}>→ DF</button>
+                    )}
+                    {(b.statut==='recu'||b.statut==='transforme_df') && (
+                      <button onClick={()=>ouvrirOlModal(b)} style={{background:'#dcfce7',color:'#15803d',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11,fontWeight:700}}>→ OL</button>
                     )}
                   </td>
                 </tr>
@@ -7043,49 +7075,50 @@ export default function ChefAtelier() {
   });
 
 function OrdresLivraison() {
-  const { user } = useAuth();
   const [ols, setOls] = useState([]);
-  const [dfs, setDfs] = useState([]);
-  const [clients, setClients] = useState([]);
-  const [articles, setArticles] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
   const [olDetail, setOlDetail] = useState(null);
-  const [form, setForm] = useState({df_id:'',of_id:'',client_id:'',article_id:'',quantite_livrer:'',date_livraison_prevue:'',adresse_livraison:'',notes:'',est_derogatoire:false});
+  const [olLignes, setOlLignes] = useState([]);
+  const [showStatut, setShowStatut] = useState(null);
+  const [statutForm, setStatutForm] = useState({statut:'',numero_suivi:'',transporteur:''});
 
   const charger = async () => {
     setLoading(true);
     try {
-      const [r1,r2,r3,r4] = await Promise.all([
-        axios.get(API+'/ol').catch(()=>({data:[]})),
-        axios.get(API+'/df?statut=validee').catch(()=>({data:[]})),
-        axios.get(API+'/vente/clients').catch(()=>({data:[]})),
-        axios.get(API+'/articles').catch(()=>({data:[]})),
-      ]);
-      setOls(r1.data||[]); setDfs(r2.data||[]); setClients(r3.data||[]); setArticles(r4.data||[]);
+      const r = await axios.get(API+'/ol').catch(()=>({data:[]}));
+      setOls(r.data||[]);
     } finally { setLoading(false); }
   };
+
   React.useEffect(()=>{ charger(); },[]);
 
-  const creerOL = async () => {
-    try {
-      await axios.post(API+'/ol', form);
-      toast.success('OL cree');
-      setShowForm(false);
-      setForm({df_id:'',of_id:'',client_id:'',article_id:'',quantite_livrer:'',date_livraison_prevue:'',adresse_livraison:'',notes:'',est_derogatoire:false});
-      charger();
-    } catch(e) { toast.error(e.response?.data?.error||'Erreur'); }
+  const ouvrirOL = async (ol) => {
+    setOlDetail(ol);
+    const r = await axios.get(API+'/ol/'+ol.id+'/lignes').catch(()=>({data:[]}));
+    setOlLignes(r.data||[]);
   };
 
-  const changerStatut = async (id, statut) => {
-    try { await axios.put(API+'/ol/'+id+'/statut',{statut}); charger(); }
-    catch(e) { toast.error('Erreur'); }
+  const confirmerStatut = async () => {
+    if (!showStatut) return;
+    try {
+      await axios.put(API+'/ol/'+showStatut.id+'/statut', statutForm);
+      toast.success('Statut mis a jour');
+      setShowStatut(null);
+      charger();
+      if (olDetail && olDetail.id===showStatut.id) setOlDetail(prev=>({...prev,statut:statutForm.statut}));
+    } catch(e) { toast.error(e.response?.data?.error||'Erreur'); }
   };
 
   const cl = s=>({brouillon:'#6b7280',confirme:'#0369a1',en_livraison:'#d97706',livre:'#15803d',annule:'#dc2626'}[s]||'#6b7280');
   const bg = s=>({brouillon:'#f3f4f6',confirme:'#e0f2fe',en_livraison:'#fef3c7',livre:'#dcfce7',annule:'#fee2e2'}[s]||'#f3f4f6');
   const lb = s=>({brouillon:'Brouillon',confirme:'Confirme',en_livraison:'En livraison',livre:'Livre',annule:'Annule'}[s]||s);
-  const sel = {width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid #e5e7eb',fontSize:13};
+
+  const stats = [
+    {l:'Total OL',v:ols.length,c:'#0369a1',b:'#e0f2fe',i:'📦'},
+    {l:'En livraison',v:ols.filter(o=>o.statut==='en_livraison').length,c:'#d97706',b:'#fef3c7',i:'🚚'},
+    {l:'Livres',v:ols.filter(o=>o.statut==='livre').length,c:'#15803d',b:'#dcfce7',i:'✅'},
+    {l:'Derogatoires',v:ols.filter(o=>o.est_derogatoire).length,c:'#7c3aed',b:'#f5f3ff',i:'⚠'},
+  ];
 
   return (
     <div style={{padding:'24px',maxWidth:1100,margin:'0 auto'}}>
@@ -7094,10 +7127,11 @@ function OrdresLivraison() {
           <h2 style={{fontSize:22,fontWeight:700,color:'#1f2937',margin:0}}>Ordres de Livraison</h2>
           <div style={{fontSize:12,color:'#6b7280',marginTop:2}}>{new Date().toLocaleDateString('fr-FR',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}</div>
         </div>
-        <button onClick={()=>setShowForm(true)} style={{background:'#15803d',color:'#fff',border:'none',borderRadius:8,padding:'10px 18px',cursor:'pointer',fontSize:14,fontWeight:600}}>+ Nouvel OL</button>
+        <div style={{fontSize:12,color:'#6b7280'}}>Creez un OL depuis un Bon de Commande</div>
       </div>
+
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12,marginBottom:20}}>
-        {[{l:'Total',v:ols.length,c:'#0369a1',b:'#e0f2fe',i:'📦'},{l:'En cours',v:ols.filter(o=>o.statut==='en_livraison').length,c:'#d97706',b:'#fef3c7',i:'🚚'},{l:'Livres',v:ols.filter(o=>o.statut==='livre').length,c:'#15803d',b:'#dcfce7',i:'✅'},{l:'Derogatoires',v:ols.filter(o=>o.est_derogatoire).length,c:'#7c3aed',b:'#f5f3ff',i:'⚠'}].map(s=>(
+        {stats.map(s=>(
           <div key={s.l} style={{background:s.b,borderRadius:10,padding:'12px 16px'}}>
             <div style={{fontSize:20}}>{s.i}</div>
             <div style={{fontSize:22,fontWeight:800,color:s.c}}>{s.v}</div>
@@ -7105,32 +7139,28 @@ function OrdresLivraison() {
           </div>
         ))}
       </div>
+
       {loading ? <div style={{textAlign:'center',padding:40,color:'#6b7280'}}>Chargement...</div> : (
         <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',overflow:'hidden'}}>
           <table style={{width:'100%',borderCollapse:'collapse'}}>
             <thead><tr style={{background:'#f9fafb'}}>
-              {['N° OL','Article','Client','Qte','Livraison','Statut','Derogatoire','Actions'].map(h=>(
+              {['N OL','BC','Ref client','Client','Articles','Livraison','Statut','Actions'].map(h=>(
                 <th key={h} style={{padding:'10px 12px',textAlign:'left',fontWeight:600,color:'#15803d',borderBottom:'2px solid #e5e7eb',fontSize:12}}>{h}</th>
               ))}
             </tr></thead>
             <tbody>
-              {ols.length===0?(<tr><td colSpan={8} style={{padding:40,textAlign:'center',color:'#6b7280'}}>Aucun ordre de livraison</td></tr>):ols.map((ol,i)=>(
+              {ols.length===0?(<tr><td colSpan={8} style={{padding:40,textAlign:'center',color:'#6b7280'}}>Aucun ordre de livraison. Creez-en un depuis les Bons de Commande.</td></tr>):ols.map((ol,i)=>(
                 <tr key={ol.id} style={{borderBottom:'1px solid #f3f4f6',background:i%2===0?'#fff':'#fafafa'}}>
-                  <td style={{padding:'9px 12px',fontWeight:700,color:'#15803d',cursor:'pointer',textDecoration:'underline'}} onClick={()=>setOlDetail(ol)}>{ol.numero_ol}</td>
-                  <td style={{padding:'9px 12px',fontSize:12}}>{ol.article_nom||'—'}</td>
+                  <td style={{padding:'9px 12px',fontWeight:700,color:'#15803d',cursor:'pointer',textDecoration:'underline'}} onClick={()=>ouvrirOL(ol)}>{ol.numero_ol}</td>
+                  <td style={{padding:'9px 12px',fontSize:12}}>{ol.numero_bc||'—'}</td>
+                  <td style={{padding:'9px 12px',fontSize:12}}>{ol.reference_client||'—'}</td>
                   <td style={{padding:'9px 12px',fontSize:12}}>{ol.client_nom||'—'}</td>
-                  <td style={{padding:'9px 12px',fontWeight:600}}>{parseFloat(ol.quantite_livrer||0).toLocaleString('fr-FR')} kg</td>
+                  <td style={{padding:'9px 12px',fontSize:12,textAlign:'center'}}>{ol.nb_articles||'—'}</td>
                   <td style={{padding:'9px 12px',fontSize:12}}>{ol.date_livraison_prevue?new Date(ol.date_livraison_prevue).toLocaleDateString('fr-FR'):'—'}</td>
                   <td style={{padding:'9px 12px'}}><span style={{background:bg(ol.statut),color:cl(ol.statut),padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:700}}>{lb(ol.statut)}</span></td>
-                  <td style={{padding:'9px 12px',textAlign:'center'}}>{ol.est_derogatoire?'⚠ Oui':'—'}</td>
-                  <td style={{padding:'9px 12px'}}>
-                    <select value={ol.statut} onChange={e=>changerStatut(ol.id,e.target.value)} style={{padding:'4px 8px',borderRadius:6,border:'1px solid #e5e7eb',fontSize:11}}>
-                      <option value="brouillon">Brouillon</option>
-                      <option value="confirme">Confirme</option>
-                      <option value="en_livraison">En livraison</option>
-                      <option value="livre">Livre</option>
-                      <option value="annule">Annule</option>
-                    </select>
+                  <td style={{padding:'9px 12px',display:'flex',gap:6}}>
+                    <button onClick={()=>window.open('/api/ol/'+ol.id+'/pdf','_blank')} style={{background:'#e0f2fe',color:'#0369a1',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>PDF</button>
+                    <button onClick={()=>{setShowStatut(ol);setStatutForm({statut:ol.statut,numero_suivi:ol.numero_suivi||'',transporteur:ol.transporteur||''}); }} style={{background:'#f3f4f6',border:'1px solid #e5e7eb',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>Statut</button>
                   </td>
                 </tr>
               ))}
@@ -7138,86 +7168,74 @@ function OrdresLivraison() {
           </table>
         </div>
       )}
-      {showForm && (
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
-          <div style={{background:'#fff',borderRadius:14,padding:28,width:560,maxWidth:'95vw',maxHeight:'88vh',overflowY:'auto'}}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
-              <div style={{fontWeight:700,fontSize:16,color:'#15803d'}}>Nouvel Ordre de Livraison</div>
-              <button onClick={()=>setShowForm(false)} style={{background:'none',border:'none',fontSize:20,cursor:'pointer'}}>✕</button>
-            </div>
-            <div style={{marginBottom:12}}>
-              <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>Type</label>
-              <div style={{display:'flex',gap:10}}>
-                <button onClick={()=>setForm(f=>({...f,est_derogatoire:false}))} style={{flex:1,padding:'8px',borderRadius:8,border:'2px solid '+(form.est_derogatoire?'#e5e7eb':'#15803d'),background:form.est_derogatoire?'#f9fafb':'#dcfce7',cursor:'pointer',fontSize:13,fontWeight:600,color:form.est_derogatoire?'#6b7280':'#15803d'}}>Flux normal (OF)</button>
-                <button onClick={()=>setForm(f=>({...f,est_derogatoire:true}))} style={{flex:1,padding:'8px',borderRadius:8,border:'2px solid '+(form.est_derogatoire?'#7c3aed':'#e5e7eb'),background:form.est_derogatoire?'#f5f3ff':'#f9fafb',cursor:'pointer',fontSize:13,fontWeight:600,color:form.est_derogatoire?'#7c3aed':'#6b7280'}}>Derogatoire (stock)</button>
-              </div>
-            </div>
-            {!form.est_derogatoire && (
-              <div style={{marginBottom:12}}>
-                <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>DF validee</label>
-                <select value={form.df_id} onChange={e=>{ const df=dfs.find(d=>d.id===e.target.value); setForm(f=>({...f,df_id:e.target.value,client_id:df?.client_id||'',article_id:df?.article_id||''})); }} style={sel}>
-                  <option value="">-- Selectionner une DF --</option>
-                  {dfs.map(d=><option key={d.id} value={d.id}>{d.numero_df} — {d.client_nom} — {d.article_nom}</option>)}
-                </select>
-              </div>
-            )}
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
-              <div>
-                <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>Client destinataire</label>
-                <select value={form.client_id} onChange={e=>setForm(f=>({...f,client_id:e.target.value}))} style={sel}>
-                  <option value="">-- Client --</option>
-                  {clients.map(c=><option key={c.id} value={c.id}>{c.raison_sociale}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>Article</label>
-                <select value={form.article_id} onChange={e=>setForm(f=>({...f,article_id:e.target.value}))} style={sel}>
-                  <option value="">-- Article --</option>
-                  {articles.map(a=><option key={a.id} value={a.id}>{a.code} — {a.designation}</option>)}
-                </select>
-              </div>
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
-              <div>
-                <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>Quantite (kg)</label>
-                <input type="number" value={form.quantite_livrer} onChange={e=>setForm(f=>({...f,quantite_livrer:e.target.value}))} style={sel}/>
-              </div>
-              <div>
-                <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>Date livraison prevue</label>
-                <input type="date" value={form.date_livraison_prevue} onChange={e=>setForm(f=>({...f,date_livraison_prevue:e.target.value}))} style={sel}/>
-              </div>
-            </div>
-            <div style={{marginBottom:12}}>
-              <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>Adresse de livraison</label>
-              <input type="text" value={form.adresse_livraison} onChange={e=>setForm(f=>({...f,adresse_livraison:e.target.value}))} style={sel} placeholder="Adresse..."/>
-            </div>
-            <div style={{marginBottom:20}}>
-              <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>Notes</label>
-              <textarea value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} style={{...sel,minHeight:60,resize:'vertical'}} placeholder="Instructions..."/>
-            </div>
-            <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
-              <button onClick={()=>setShowForm(false)} style={{padding:'9px 20px',borderRadius:8,border:'1px solid #e5e7eb',background:'#f9fafb',cursor:'pointer',fontSize:13}}>Annuler</button>
-              <button onClick={creerOL} style={{padding:'9px 20px',borderRadius:8,border:'none',background:'#15803d',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>Creer OL</button>
-            </div>
-          </div>
-        </div>
-      )}
+
+      {/* Modale detail OL */}
       {olDetail && (
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={()=>setOlDetail(null)}>
-          <div style={{background:'#fff',borderRadius:14,padding:28,width:500,maxWidth:'95vw'}} onClick={e=>e.stopPropagation()}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+          <div style={{background:'#fff',borderRadius:14,padding:28,width:580,maxWidth:'95vw',maxHeight:'88vh',overflowY:'auto'}} onClick={e=>e.stopPropagation()}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
               <div style={{fontWeight:800,fontSize:16,color:'#15803d'}}>{olDetail.numero_ol}</div>
-              <button onClick={()=>setOlDetail(null)} style={{background:'none',border:'none',fontSize:20,cursor:'pointer'}}>✕</button>
+              <button onClick={()=>setOlDetail(null)} style={{background:'none',border:'none',fontSize:20,cursor:'pointer'}}>x</button>
             </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,fontSize:13}}>
-              {[['Article',(olDetail.article_nom||'—')+'('+(olDetail.article_code||'')+ ')'],['Client',olDetail.client_nom||'—'],['Quantite',parseFloat(olDetail.quantite_livrer||0).toLocaleString('fr-FR')+' kg'],['Statut',lb(olDetail.statut)],['Livraison',olDetail.date_livraison_prevue?new Date(olDetail.date_livraison_prevue).toLocaleDateString('fr-FR'):'—'],['DF origine',olDetail.numero_df||'—'],['OF origine',olDetail.numero_of||'—'],['Type',olDetail.est_derogatoire?'Derogatoire':'Flux normal']].map(([l,v])=>(
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,fontSize:13,marginBottom:14}}>
+              {[['BC NAI',olDetail.numero_bc||'—'],['Ref client',olDetail.reference_client||'—'],['Client',olDetail.client_nom||'—'],['Statut',lb(olDetail.statut)],['Livraison',olDetail.date_livraison_prevue?new Date(olDetail.date_livraison_prevue).toLocaleDateString('fr-FR'):'—'],['Transporteur',olDetail.transporteur||'—'],['N suivi',olDetail.numero_suivi||'—'],['Type',olDetail.est_derogatoire?'Derogatoire':'Flux normal']].map(([l,v])=>(
                 <div key={l} style={{background:'#f9fafb',borderRadius:8,padding:'8px 12px'}}>
                   <div style={{fontSize:10,color:'#6b7280',fontWeight:600}}>{l}</div>
                   <div style={{fontWeight:600,marginTop:2}}>{v}</div>
                 </div>
               ))}
             </div>
-            <button onClick={()=>setOlDetail(null)} style={{marginTop:16,width:'100%',padding:'9px',borderRadius:8,border:'1px solid #e5e7eb',background:'#f9fafb',cursor:'pointer',fontSize:13}}>Fermer</button>
+            <div style={{fontSize:12,fontWeight:600,color:'#374151',marginBottom:8}}>ARTICLES</div>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+              <thead><tr style={{background:'#15803d',color:'#fff'}}>
+                {['Ref','Designation','Qte commandee','Qte a livrer'].map(h=><th key={h} style={{padding:'6px 8px',textAlign:'left'}}>{h}</th>)}
+              </tr></thead>
+              <tbody>
+                {olLignes.map((l,i)=>(
+                  <tr key={i} style={{borderBottom:'1px solid #f3f4f6'}}>
+                    <td style={{padding:'6px 8px',fontWeight:700}}>{l.article_code||'—'}</td>
+                    <td style={{padding:'6px 8px'}}>{l.designation||'—'}</td>
+                    <td style={{padding:'6px 8px',textAlign:'right'}}>{parseFloat(l.quantite_commandee||0).toLocaleString('fr-FR')} pcs</td>
+                    <td style={{padding:'6px 8px',textAlign:'right',fontWeight:700,color:'#15803d'}}>{parseFloat(l.quantite_livrer||0).toLocaleString('fr-FR')} pcs</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div style={{display:'flex',gap:8,marginTop:16,justifyContent:'flex-end'}}>
+              <button onClick={()=>window.open('/api/ol/'+olDetail.id+'/pdf','_blank')} style={{padding:'8px 16px',borderRadius:8,border:'none',background:'#15803d',color:'#fff',cursor:'pointer',fontSize:13}}>PDF</button>
+              <button onClick={()=>setOlDetail(null)} style={{padding:'8px 16px',borderRadius:8,border:'1px solid #e5e7eb',background:'#f9fafb',cursor:'pointer',fontSize:13}}>Fermer</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modale changement statut */}
+      {showStatut && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1001,display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <div style={{background:'#fff',borderRadius:14,padding:24,width:420,maxWidth:'95vw'}}>
+            <div style={{fontWeight:700,fontSize:15,marginBottom:16,color:'#15803d'}}>Mettre a jour : {showStatut.numero_ol}</div>
+            <div style={{marginBottom:12}}>
+              <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>Statut</label>
+              <select value={statutForm.statut} onChange={e=>setStatutForm(f=>({...f,statut:e.target.value}))} style={{width:'100%',padding:'8px',borderRadius:8,border:'1px solid #e5e7eb',fontSize:13}}>
+                <option value="brouillon">Brouillon</option>
+                <option value="confirme">Confirme</option>
+                <option value="en_livraison">En livraison</option>
+                <option value="livre">Livre</option>
+                <option value="annule">Annule</option>
+              </select>
+            </div>
+            <div style={{marginBottom:12}}>
+              <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>Transporteur</label>
+              <input value={statutForm.transporteur} onChange={e=>setStatutForm(f=>({...f,transporteur:e.target.value}))} placeholder="Nom du transporteur..." style={{width:'100%',padding:'8px',borderRadius:8,border:'1px solid #e5e7eb',fontSize:13}}/>
+            </div>
+            <div style={{marginBottom:20}}>
+              <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>Numero de suivi</label>
+              <input value={statutForm.numero_suivi} onChange={e=>setStatutForm(f=>({...f,numero_suivi:e.target.value}))} placeholder="Ex: DHL123456..." style={{width:'100%',padding:'8px',borderRadius:8,border:'1px solid #e5e7eb',fontSize:13}}/>
+            </div>
+            <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
+              <button onClick={()=>setShowStatut(null)} style={{padding:'8px 18px',borderRadius:8,border:'1px solid #e5e7eb',background:'#f9fafb',cursor:'pointer',fontSize:13}}>Annuler</button>
+              <button onClick={confirmerStatut} style={{padding:'8px 18px',borderRadius:8,border:'none',background:'#15803d',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>Confirmer</button>
+            </div>
           </div>
         </div>
       )}
@@ -7225,160 +7243,6 @@ function OrdresLivraison() {
   );
 }
 
-
-  const SECTIONS = {
-    devis:       <GestionDevis />,
-    bc:          <GestionBC />,
-    df:          <DemandesFabrication />,
-    ol:          <OrdresLivraison />,
-    of:          <OrdresFabrication />,
-    dashboard:   <Dashboard />,
-    production:  <SuiviProduction />,
-    planning:    <PlanningMachines />,
-    rapportjour: <RapportsJournaliers />,
-    articles:    <Articles />,
-    matieres:    <MatieresPremières />,
-    stock:       <Stock />,
-    clients:     <Clients />,
-    vente:       <Vente />,
-    fournisseurs:<Fournisseurs />,
-    achat:       <Achat />,
-    cession:     <BonsCession />,
-    qhse:        <QHSE />,
-    rh:          <RH />,
-    gmao:        <GMAO />,
-    kpi:         <KPIRapports />,
-    parametres:  <ParametresSysteme />,
-    ia:          <AssistantIA />,
-    users:       <Utilisateurs />,
-    import:      <ImportSage />,
-    alertes:     <Alertes />,
-    referentiels:<Referentiels />,
-  };
-
-  const menuItem = MENU.find(m => m.id === ongletActif);
-
-  return (
-    <PermissionsContext.Provider value={perms}>
-    <div style={{ display:'flex', height:'100vh', fontFamily:'system-ui,sans-serif', background:'#f8fafc' }}>
-
-      {/* ── SIDEBAR ── */}
-      <aside style={{
-        width: sidebarOuverte ? 240 : 60, flexShrink:0,
-        background:'#111827', color:'#fff',
-        display:'flex', flexDirection:'column',
-        transition:'width .2s ease', overflow:'hidden'
-      }}>
-        {/* Logo */}
-        <div style={{ padding:'16px 14px', borderBottom:'1px solid #1f2937', display:'flex', alignItems:'center', gap:10, flexShrink:0 }}>
-          <div style={{ width:32, height:32, background:'#4ade80', borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:800, color:'#14532d', fontSize:16, flexShrink:0 }}>N</div>
-          {sidebarOuverte && (
-            <div>
-              <div style={{ fontWeight:700, fontSize:14, whiteSpace:'nowrap' }}>NAIdo ERP/MES</div>
-              <div style={{ fontSize:10, color:'#6b7280', whiteSpace:'nowrap' }}>NAI</div>
-            </div>
-          )}
-          <button onClick={() => setSidebarOuverte(!sidebarOuverte)}
-            style={{ marginLeft:'auto', background:'none', border:'none', color:'#6b7280', cursor:'pointer', padding:4, flexShrink:0 }}>
-            {sidebarOuverte ? '◀' : '▶'}
-          </button>
-        </div>
-
-        {/* Menu */}
-        <nav style={{ flex:1, overflowY:'auto', padding:'8px 0' }}>
-          {getMenuFiltre(user?.role).map(item => {
-            if (item.separator) {
-              return sidebarOuverte ? (
-                <div key={item.id} style={{ padding:'12px 14px 4px', fontSize:10, fontWeight:700, color:'#4b5563', letterSpacing:1, textTransform:'uppercase', whiteSpace:'nowrap' }}>
-                  {item.label}
-                </div>
-              ) : <div key={item.id} style={{ height:8 }}/>;
-            }
-            const actif = ongletActif === item.id;
-            return (
-              <button key={item.id} onClick={() => setOngletActif(item.id)}
-                title={!sidebarOuverte ? item.label : ''}
-                style={{
-                  width:'100%', display:'flex', alignItems:'center', gap:10,
-                  padding:'9px 14px', border:'none', background: actif ? '#1f2937' : 'none',
-                  borderLeft: actif ? `3px solid ${item.color}` : '3px solid transparent',
-                  color: actif ? '#fff' : '#9ca3af', cursor:'pointer',
-                  fontSize:13, fontWeight: actif ? 600 : 400,
-                  textAlign:'left', transition:'all .15s', position:'relative'
-                }}>
-                <span style={{ color: actif ? item.color : '#6b7280', flexShrink:0 }}>
-                  <Icon d={ICONS[item.icon]} size={16}/>
-                </span>
-                {sidebarOuverte && <span style={{ whiteSpace:'nowrap', flex:1 }}>{item.label}</span>}
-                {item.id === 'alertes' && nbAlertes > 0 && (
-                  <span style={{ background:'#dc2626', color:'#fff', borderRadius:'50%', width:18, height:18, fontSize:10, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700, flexShrink:0 }}>
-                    {nbAlertes > 9 ? '9+' : nbAlertes}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </nav>
-
-        {/* User info */}
-        <div style={{ padding:'12px 14px', borderTop:'1px solid #1f2937', display:'flex', alignItems:'center', gap:10, flexShrink:0 }}>
-          <div style={{ width:30, height:30, background:'#374151', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:700, flexShrink:0 }}>
-            {user?.prenom?.[0]}{user?.nom?.[0]}
-          </div>
-          {sidebarOuverte && (
-            <>
-              <div style={{ flex:1, overflow:'hidden' }}>
-                <div style={{ fontSize:12, fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{user?.prenom} {user?.nom}</div>
-                <div style={{ fontSize:10, color:'#6b7280' }}>{user?.role}</div>
-              </div>
-              <button onClick={handleLogout} title="Déconnexion" style={{ background:'none', border:'none', color:'#6b7280', cursor:'pointer', padding:4 }}>
-                <Icon d={ICONS.logout} size={16}/>
-              </button>
-            </>
-          )}
-        </div>
-      </aside>
-
-      {/* ── CONTENU PRINCIPAL ── */}
-      <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
-        {/* Header */}
-        <header style={{ background:'#fff', borderBottom:'1px solid #e5e7eb', padding:'0 24px', height:56, display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
-          <div>
-            <span style={{ fontWeight:700, fontSize:16, color:'#111827' }}>
-              {menuItem && !menuItem.separator ? menuItem.label : ''}
-            </span>
-          </div>
-          <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-            <span style={{ fontSize:12, color:'#9ca3af' }}>
-              {new Date().toLocaleDateString('fr-FR', { weekday:'long', year:'numeric', month:'long', day:'numeric' })}
-            </span>
-            {nbAlertes > 0 && (
-              <button onClick={() => setOngletActif('alertes')}
-                style={{ background:'#fee2e2', border:'1px solid #fca5a5', color:'#dc2626', padding:'4px 12px', borderRadius:20, cursor:'pointer', fontSize:12, fontWeight:600 }}>
-                ⚠ {nbAlertes} alerte{nbAlertes > 1 ? 's' : ''}
-              </button>
-            )}
-          </div>
-        </header>
-
-        {/* Zone de contenu */}
-        <main style={{ flex:1, overflow:'auto', padding:24 }}>
-          {SECTIONS[ongletActif] || <Dashboard />}
-        </main>
-
-        {/* Footer */}
-        <footer style={{ background:'#fff', borderTop:'1px solid #e5e7eb', padding:'8px 24px', fontSize:11, color:'#9ca3af', textAlign:'center', flexShrink:0 }}>
-          © 2026 NAIdo v3.0 — Logiciel créé par SOPHOPSY pour NAI
-        </footer>
-      </div>
-    </div>
-  </PermissionsContext.Provider>
-  );
-}
-
-// ══════════════════════════════════════════════════════════════
-// MODULE CLIENTS
-// ══════════════════════════════════════════════════════════════
 function Clients() {
   const [clients, setClients] = useState([]);
   const [search, setSearch] = useState('');
