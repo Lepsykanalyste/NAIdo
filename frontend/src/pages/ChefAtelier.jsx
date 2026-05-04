@@ -7046,6 +7046,7 @@ export default function ChefAtelier() {
     devis:       <GestionDevis />,
     bc:          <GestionBC />,
     df:          <DemandesFabrication />,
+    ol:          <OrdresLivraison />,
     of:          <OrdresFabrication />,
     dashboard:   <Dashboard />,
     production:  <SuiviProduction />,
