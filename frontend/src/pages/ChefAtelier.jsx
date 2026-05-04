@@ -7042,6 +7042,190 @@ export default function ChefAtelier() {
     return !perms.permissions || perms.permissions[mod]?.voir !== false;
   });
 
+function OrdresLivraison() {
+  const { user } = useAuth();
+  const [ols, setOls] = useState([]);
+  const [dfs, setDfs] = useState([]);
+  const [clients, setClients] = useState([]);
+  const [articles, setArticles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [olDetail, setOlDetail] = useState(null);
+  const [form, setForm] = useState({df_id:'',of_id:'',client_id:'',article_id:'',quantite_livrer:'',date_livraison_prevue:'',adresse_livraison:'',notes:'',est_derogatoire:false});
+
+  const charger = async () => {
+    setLoading(true);
+    try {
+      const [r1,r2,r3,r4] = await Promise.all([
+        axios.get(API+'/ol').catch(()=>({data:[]})),
+        axios.get(API+'/df?statut=validee').catch(()=>({data:[]})),
+        axios.get(API+'/vente/clients').catch(()=>({data:[]})),
+        axios.get(API+'/articles').catch(()=>({data:[]})),
+      ]);
+      setOls(r1.data||[]); setDfs(r2.data||[]); setClients(r3.data||[]); setArticles(r4.data||[]);
+    } finally { setLoading(false); }
+  };
+  React.useEffect(()=>{ charger(); },[]);
+
+  const creerOL = async () => {
+    try {
+      await axios.post(API+'/ol', form);
+      toast.success('OL cree');
+      setShowForm(false);
+      setForm({df_id:'',of_id:'',client_id:'',article_id:'',quantite_livrer:'',date_livraison_prevue:'',adresse_livraison:'',notes:'',est_derogatoire:false});
+      charger();
+    } catch(e) { toast.error(e.response?.data?.error||'Erreur'); }
+  };
+
+  const changerStatut = async (id, statut) => {
+    try { await axios.put(API+'/ol/'+id+'/statut',{statut}); charger(); }
+    catch(e) { toast.error('Erreur'); }
+  };
+
+  const cl = s=>({brouillon:'#6b7280',confirme:'#0369a1',en_livraison:'#d97706',livre:'#15803d',annule:'#dc2626'}[s]||'#6b7280');
+  const bg = s=>({brouillon:'#f3f4f6',confirme:'#e0f2fe',en_livraison:'#fef3c7',livre:'#dcfce7',annule:'#fee2e2'}[s]||'#f3f4f6');
+  const lb = s=>({brouillon:'Brouillon',confirme:'Confirme',en_livraison:'En livraison',livre:'Livre',annule:'Annule'}[s]||s);
+  const sel = {width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid #e5e7eb',fontSize:13};
+
+  return (
+    <div style={{padding:'24px',maxWidth:1100,margin:'0 auto'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
+        <div>
+          <h2 style={{fontSize:22,fontWeight:700,color:'#1f2937',margin:0}}>Ordres de Livraison</h2>
+          <div style={{fontSize:12,color:'#6b7280',marginTop:2}}>{new Date().toLocaleDateString('fr-FR',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}</div>
+        </div>
+        <button onClick={()=>setShowForm(true)} style={{background:'#15803d',color:'#fff',border:'none',borderRadius:8,padding:'10px 18px',cursor:'pointer',fontSize:14,fontWeight:600}}>+ Nouvel OL</button>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12,marginBottom:20}}>
+        {[{l:'Total',v:ols.length,c:'#0369a1',b:'#e0f2fe',i:'📦'},{l:'En cours',v:ols.filter(o=>o.statut==='en_livraison').length,c:'#d97706',b:'#fef3c7',i:'🚚'},{l:'Livres',v:ols.filter(o=>o.statut==='livre').length,c:'#15803d',b:'#dcfce7',i:'✅'},{l:'Derogatoires',v:ols.filter(o=>o.est_derogatoire).length,c:'#7c3aed',b:'#f5f3ff',i:'⚠'}].map(s=>(
+          <div key={s.l} style={{background:s.b,borderRadius:10,padding:'12px 16px'}}>
+            <div style={{fontSize:20}}>{s.i}</div>
+            <div style={{fontSize:22,fontWeight:800,color:s.c}}>{s.v}</div>
+            <div style={{fontSize:12,color:s.c,fontWeight:600}}>{s.l}</div>
+          </div>
+        ))}
+      </div>
+      {loading ? <div style={{textAlign:'center',padding:40,color:'#6b7280'}}>Chargement...</div> : (
+        <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',overflow:'hidden'}}>
+          <table style={{width:'100%',borderCollapse:'collapse'}}>
+            <thead><tr style={{background:'#f9fafb'}}>
+              {['N° OL','Article','Client','Qte','Livraison','Statut','Derogatoire','Actions'].map(h=>(
+                <th key={h} style={{padding:'10px 12px',textAlign:'left',fontWeight:600,color:'#15803d',borderBottom:'2px solid #e5e7eb',fontSize:12}}>{h}</th>
+              ))}
+            </tr></thead>
+            <tbody>
+              {ols.length===0?(<tr><td colSpan={8} style={{padding:40,textAlign:'center',color:'#6b7280'}}>Aucun ordre de livraison</td></tr>):ols.map((ol,i)=>(
+                <tr key={ol.id} style={{borderBottom:'1px solid #f3f4f6',background:i%2===0?'#fff':'#fafafa'}}>
+                  <td style={{padding:'9px 12px',fontWeight:700,color:'#15803d',cursor:'pointer',textDecoration:'underline'}} onClick={()=>setOlDetail(ol)}>{ol.numero_ol}</td>
+                  <td style={{padding:'9px 12px',fontSize:12}}>{ol.article_nom||'—'}</td>
+                  <td style={{padding:'9px 12px',fontSize:12}}>{ol.client_nom||'—'}</td>
+                  <td style={{padding:'9px 12px',fontWeight:600}}>{parseFloat(ol.quantite_livrer||0).toLocaleString('fr-FR')} kg</td>
+                  <td style={{padding:'9px 12px',fontSize:12}}>{ol.date_livraison_prevue?new Date(ol.date_livraison_prevue).toLocaleDateString('fr-FR'):'—'}</td>
+                  <td style={{padding:'9px 12px'}}><span style={{background:bg(ol.statut),color:cl(ol.statut),padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:700}}>{lb(ol.statut)}</span></td>
+                  <td style={{padding:'9px 12px',textAlign:'center'}}>{ol.est_derogatoire?'⚠ Oui':'—'}</td>
+                  <td style={{padding:'9px 12px'}}>
+                    <select value={ol.statut} onChange={e=>changerStatut(ol.id,e.target.value)} style={{padding:'4px 8px',borderRadius:6,border:'1px solid #e5e7eb',fontSize:11}}>
+                      <option value="brouillon">Brouillon</option>
+                      <option value="confirme">Confirme</option>
+                      <option value="en_livraison">En livraison</option>
+                      <option value="livre">Livre</option>
+                      <option value="annule">Annule</option>
+                    </select>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {showForm && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <div style={{background:'#fff',borderRadius:14,padding:28,width:560,maxWidth:'95vw',maxHeight:'88vh',overflowY:'auto'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+              <div style={{fontWeight:700,fontSize:16,color:'#15803d'}}>Nouvel Ordre de Livraison</div>
+              <button onClick={()=>setShowForm(false)} style={{background:'none',border:'none',fontSize:20,cursor:'pointer'}}>✕</button>
+            </div>
+            <div style={{marginBottom:12}}>
+              <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>Type</label>
+              <div style={{display:'flex',gap:10}}>
+                <button onClick={()=>setForm(f=>({...f,est_derogatoire:false}))} style={{flex:1,padding:'8px',borderRadius:8,border:'2px solid '+(form.est_derogatoire?'#e5e7eb':'#15803d'),background:form.est_derogatoire?'#f9fafb':'#dcfce7',cursor:'pointer',fontSize:13,fontWeight:600,color:form.est_derogatoire?'#6b7280':'#15803d'}}>Flux normal (OF)</button>
+                <button onClick={()=>setForm(f=>({...f,est_derogatoire:true}))} style={{flex:1,padding:'8px',borderRadius:8,border:'2px solid '+(form.est_derogatoire?'#7c3aed':'#e5e7eb'),background:form.est_derogatoire?'#f5f3ff':'#f9fafb',cursor:'pointer',fontSize:13,fontWeight:600,color:form.est_derogatoire?'#7c3aed':'#6b7280'}}>Derogatoire (stock)</button>
+              </div>
+            </div>
+            {!form.est_derogatoire && (
+              <div style={{marginBottom:12}}>
+                <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>DF validee</label>
+                <select value={form.df_id} onChange={e=>{ const df=dfs.find(d=>d.id===e.target.value); setForm(f=>({...f,df_id:e.target.value,client_id:df?.client_id||'',article_id:df?.article_id||''})); }} style={sel}>
+                  <option value="">-- Selectionner une DF --</option>
+                  {dfs.map(d=><option key={d.id} value={d.id}>{d.numero_df} — {d.client_nom} — {d.article_nom}</option>)}
+                </select>
+              </div>
+            )}
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+              <div>
+                <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>Client destinataire</label>
+                <select value={form.client_id} onChange={e=>setForm(f=>({...f,client_id:e.target.value}))} style={sel}>
+                  <option value="">-- Client --</option>
+                  {clients.map(c=><option key={c.id} value={c.id}>{c.raison_sociale}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>Article</label>
+                <select value={form.article_id} onChange={e=>setForm(f=>({...f,article_id:e.target.value}))} style={sel}>
+                  <option value="">-- Article --</option>
+                  {articles.map(a=><option key={a.id} value={a.id}>{a.code} — {a.designation}</option>)}
+                </select>
+              </div>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+              <div>
+                <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>Quantite (kg)</label>
+                <input type="number" value={form.quantite_livrer} onChange={e=>setForm(f=>({...f,quantite_livrer:e.target.value}))} style={sel}/>
+              </div>
+              <div>
+                <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>Date livraison prevue</label>
+                <input type="date" value={form.date_livraison_prevue} onChange={e=>setForm(f=>({...f,date_livraison_prevue:e.target.value}))} style={sel}/>
+              </div>
+            </div>
+            <div style={{marginBottom:12}}>
+              <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>Adresse de livraison</label>
+              <input type="text" value={form.adresse_livraison} onChange={e=>setForm(f=>({...f,adresse_livraison:e.target.value}))} style={sel} placeholder="Adresse..."/>
+            </div>
+            <div style={{marginBottom:20}}>
+              <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>Notes</label>
+              <textarea value={form.notes} onChange={e=>setForm(f=>({...f,notes:e.target.value}))} style={{...sel,minHeight:60,resize:'vertical'}} placeholder="Instructions..."/>
+            </div>
+            <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
+              <button onClick={()=>setShowForm(false)} style={{padding:'9px 20px',borderRadius:8,border:'1px solid #e5e7eb',background:'#f9fafb',cursor:'pointer',fontSize:13}}>Annuler</button>
+              <button onClick={creerOL} style={{padding:'9px 20px',borderRadius:8,border:'none',background:'#15803d',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>Creer OL</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {olDetail && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={()=>setOlDetail(null)}>
+          <div style={{background:'#fff',borderRadius:14,padding:28,width:500,maxWidth:'95vw'}} onClick={e=>e.stopPropagation()}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+              <div style={{fontWeight:800,fontSize:16,color:'#15803d'}}>{olDetail.numero_ol}</div>
+              <button onClick={()=>setOlDetail(null)} style={{background:'none',border:'none',fontSize:20,cursor:'pointer'}}>✕</button>
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,fontSize:13}}>
+              {[['Article',(olDetail.article_nom||'—')+'('+(olDetail.article_code||'')+ ')'],['Client',olDetail.client_nom||'—'],['Quantite',parseFloat(olDetail.quantite_livrer||0).toLocaleString('fr-FR')+' kg'],['Statut',lb(olDetail.statut)],['Livraison',olDetail.date_livraison_prevue?new Date(olDetail.date_livraison_prevue).toLocaleDateString('fr-FR'):'—'],['DF origine',olDetail.numero_df||'—'],['OF origine',olDetail.numero_of||'—'],['Type',olDetail.est_derogatoire?'Derogatoire':'Flux normal']].map(([l,v])=>(
+                <div key={l} style={{background:'#f9fafb',borderRadius:8,padding:'8px 12px'}}>
+                  <div style={{fontSize:10,color:'#6b7280',fontWeight:600}}>{l}</div>
+                  <div style={{fontWeight:600,marginTop:2}}>{v}</div>
+                </div>
+              ))}
+            </div>
+            <button onClick={()=>setOlDetail(null)} style={{marginTop:16,width:'100%',padding:'9px',borderRadius:8,border:'1px solid #e5e7eb',background:'#f9fafb',cursor:'pointer',fontSize:13}}>Fermer</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
   const SECTIONS = {
     devis:       <GestionDevis />,
     bc:          <GestionBC />,
