@@ -2018,9 +2018,10 @@ onClick={()=>window.open(`/api/of/${of.id}/pdf`,'_blank')}
                   </button>
                 </td>
                 <td style={{padding:'9px 12px'}} onClick={e=>e.stopPropagation()}>
-                  {of.statut==='planifie' && <button onClick={()=>changerStatut(of.id,'lance')} style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>▶</button>}
-                  {of.statut==='lance' && <button onClick={()=>changerStatut(of.id,'en_cours')} style={{background:'#d97706',color:'#fff',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>⚙</button>}
-                  {of.statut==='en_cours' && <button onClick={()=>changerStatut(of.id,'termine')} style={{background:'#15803d',color:'#fff',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>✓</button>}
+                  {user?.role!=='directeur' && of.statut==='planifie' && <button onClick={()=>changerStatut(of.id,'lance')} style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>▶</button>}
+                  {user?.role!=='directeur' && of.statut==='lance' && <button onClick={()=>changerStatut(of.id,'en_cours')} style={{background:'#d97706',color:'#fff',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>⚙</button>}
+                  {user?.role!=='directeur' && of.statut==='en_cours' && <button onClick={()=>changerStatut(of.id,'termine')} style={{background:'#15803d',color:'#fff',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>✓</button>}
+                  {user?.role==='directeur' && <span style={{fontSize:11,color:'#9ca3af'}}>—</span>}
                 </td>
               </tr>
             ))}
