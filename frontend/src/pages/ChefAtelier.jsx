@@ -1753,6 +1753,7 @@ function DetailOF({ detail, machines, onClose, onRefresh, onStatut }) {
 // MODULE ORDRES DE FABRICATION
 // ══════════════════════════════════════════════════════════════
 function OrdresFabrication() {
+  const { user } = useAuth();
   const [ofs, setOfs] = useState([]);
   const [articles, setArticles] = useState([]);
   const [clients, setClients] = useState([]);
