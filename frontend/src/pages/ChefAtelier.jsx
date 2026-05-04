@@ -1334,7 +1334,7 @@ function DemandesFabrication() {
                   <td style={{padding:'9px 12px',fontWeight:700,color:'#7c3aed',cursor:'pointer',textDecoration:'underline'}} onClick={()=>ouvrirDF(df)}>{df.numero_df}</td>
                   
                   <td style={{padding:'9px 12px',fontSize:12}}>{df.client_nom||'—'}</td>
-                  <td style={{padding:'9px 12px',fontWeight:600}}>{parseFloat(df.quantite_demandee).toFixed(0)} kg</td>
+                  <td style={{padding:'9px 12px',fontWeight:600}}>{parseFloat(df.quantite_totale_kg||df.quantite_demandee||0).toFixed(1)} kg</td>
                   <td style={{padding:'9px 12px',fontSize:12}}>{df.date_livraison_souhaitee?new Date(df.date_livraison_souhaitee).toLocaleDateString('fr-FR'):'—'}</td>
                   <td style={{padding:'9px 12px',textAlign:'center'}}>{'⭐'.repeat(df.priorite||1)}</td>
                   <td style={{padding:'9px 12px'}}>
@@ -2079,7 +2079,7 @@ function DashboardCommercial() {
                 <td style={{padding:'8px 12px',fontWeight:700,color:'#7c3aed'}}>{df.numero_df}</td>
                 <td style={{padding:'8px 12px'}}>{df.article_nom}</td>
                 <td style={{padding:'8px 12px',fontSize:12}}>{df.client_nom||'—'}</td>
-                <td style={{padding:'8px 12px',fontWeight:600}}>{parseFloat(df.quantite_demandee).toFixed(0)} kg</td>
+                <td style={{padding:'8px 12px',fontWeight:600}}>{parseFloat(df.quantite_totale_kg||df.quantite_demandee||0).toFixed(1)} kg</td>
                 <td style={{padding:'8px 12px',fontSize:12}}>{df.date_livraison_souhaitee?new Date(df.date_livraison_souhaitee).toLocaleDateString('fr-FR'):'—'}</td>
                 <td style={{padding:'8px 12px'}}>
                   <span style={{background:df.statut==='validee'?'#dcfce7':df.statut==='refusee'?'#fee2e2':'#fef3c7',color:df.statut==='validee'?'#15803d':df.statut==='refusee'?'#dc2626':'#d97706',padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:700}}>
