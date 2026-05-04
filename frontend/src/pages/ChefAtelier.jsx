@@ -7246,6 +7246,157 @@ export default function ChefAtelier() {
 
 }
 
+  const SECTIONS = {
+    devis:       <GestionDevis />,
+    bc:          <GestionBC />,
+    df:          <DemandesFabrication />,
+    ol:          <OrdresLivraison />,
+    of:          <OrdresFabrication />,
+    dashboard:   <Dashboard />,
+    production:  <SuiviProduction />,
+    planning:    <PlanningMachines />,
+    rapportjour: <RapportsJournaliers />,
+    articles:    <Articles />,
+    matieres:    <MatieresPremières />,
+    stock:       <Stock />,
+    clients:     <Clients />,
+    vente:       <Vente />,
+    fournisseurs:<Fournisseurs />,
+    achat:       <Achat />,
+    cession:     <BonsCession />,
+    qhse:        <QHSE />,
+    rh:          <RH />,
+    gmao:        <GMAO />,
+    kpi:         <KPIRapports />,
+    parametres:  <ParametresSysteme />,
+    ia:          <AssistantIA />,
+    users:       <Utilisateurs />,
+    import:      <ImportSage />,
+    alertes:     <Alertes />,
+    referentiels:<Referentiels />,
+  };
+
+  const menuItem = MENU.find(m => m.id === ongletActif);
+
+  return (
+    <PermissionsContext.Provider value={perms}>
+    <div style={{ display:'flex', height:'100vh', fontFamily:'system-ui,sans-serif', background:'#f8fafc' }}>
+
+      {/* ── SIDEBAR ── */}
+      <aside style={{
+        width: sidebarOuverte ? 240 : 60, flexShrink:0,
+        background:'#111827', color:'#fff',
+        display:'flex', flexDirection:'column',
+        transition:'width .2s ease', overflow:'hidden'
+      }}>
+        {/* Logo */}
+        <div style={{ padding:'16px 14px', borderBottom:'1px solid #1f2937', display:'flex', alignItems:'center', gap:10, flexShrink:0 }}>
+          <div style={{ width:32, height:32, background:'#4ade80', borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:800, color:'#14532d', fontSize:16, flexShrink:0 }}>N</div>
+          {sidebarOuverte && (
+            <div>
+              <div style={{ fontWeight:700, fontSize:14, whiteSpace:'nowrap' }}>NAIdo ERP/MES</div>
+              <div style={{ fontSize:10, color:'#6b7280', whiteSpace:'nowrap' }}>NAI</div>
+            </div>
+          )}
+          <button onClick={() => setSidebarOuverte(!sidebarOuverte)}
+            style={{ marginLeft:'auto', background:'none', border:'none', color:'#6b7280', cursor:'pointer', padding:4, flexShrink:0 }}>
+            {sidebarOuverte ? '◀' : '▶'}
+          </button>
+        </div>
+
+        {/* Menu */}
+        <nav style={{ flex:1, overflowY:'auto', padding:'8px 0' }}>
+          {getMenuFiltre(user?.role).map(item => {
+            if (item.separator) {
+              return sidebarOuverte ? (
+                <div key={item.id} style={{ padding:'12px 14px 4px', fontSize:10, fontWeight:700, color:'#4b5563', letterSpacing:1, textTransform:'uppercase', whiteSpace:'nowrap' }}>
+                  {item.label}
+                </div>
+              ) : <div key={item.id} style={{ height:8 }}/>;
+            }
+            const actif = ongletActif === item.id;
+            return (
+              <button key={item.id} onClick={() => setOngletActif(item.id)}
+                title={!sidebarOuverte ? item.label : ''}
+                style={{
+                  width:'100%', display:'flex', alignItems:'center', gap:10,
+                  padding:'9px 14px', border:'none', background: actif ? '#1f2937' : 'none',
+                  borderLeft: actif ? `3px solid ${item.color}` : '3px solid transparent',
+                  color: actif ? '#fff' : '#9ca3af', cursor:'pointer',
+                  fontSize:13, fontWeight: actif ? 600 : 400,
+                  textAlign:'left', transition:'all .15s', position:'relative'
+                }}>
+                <span style={{ color: actif ? item.color : '#6b7280', flexShrink:0 }}>
+                  <Icon d={ICONS[item.icon]} size={16}/>
+                </span>
+                {sidebarOuverte && <span style={{ whiteSpace:'nowrap', flex:1 }}>{item.label}</span>}
+                {item.id === 'alertes' && nbAlertes > 0 && (
+                  <span style={{ background:'#dc2626', color:'#fff', borderRadius:'50%', width:18, height:18, fontSize:10, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700, flexShrink:0 }}>
+                    {nbAlertes > 9 ? '9+' : nbAlertes}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* User info */}
+        <div style={{ padding:'12px 14px', borderTop:'1px solid #1f2937', display:'flex', alignItems:'center', gap:10, flexShrink:0 }}>
+          <div style={{ width:30, height:30, background:'#374151', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:700, flexShrink:0 }}>
+            {user?.prenom?.[0]}{user?.nom?.[0]}
+          </div>
+          {sidebarOuverte && (
+            <>
+              <div style={{ flex:1, overflow:'hidden' }}>
+                <div style={{ fontSize:12, fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{user?.prenom} {user?.nom}</div>
+                <div style={{ fontSize:10, color:'#6b7280' }}>{user?.role}</div>
+              </div>
+              <button onClick={handleLogout} title="Déconnexion" style={{ background:'none', border:'none', color:'#6b7280', cursor:'pointer', padding:4 }}>
+                <Icon d={ICONS.logout} size={16}/>
+              </button>
+            </>
+          )}
+        </div>
+      </aside>
+
+      {/* ── CONTENU PRINCIPAL ── */}
+      <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
+        {/* Header */}
+        <header style={{ background:'#fff', borderBottom:'1px solid #e5e7eb', padding:'0 24px', height:56, display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
+          <div>
+            <span style={{ fontWeight:700, fontSize:16, color:'#111827' }}>
+              {menuItem && !menuItem.separator ? menuItem.label : ''}
+            </span>
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+            <span style={{ fontSize:12, color:'#9ca3af' }}>
+              {new Date().toLocaleDateString('fr-FR', { weekday:'long', year:'numeric', month:'long', day:'numeric' })}
+            </span>
+            {nbAlertes > 0 && (
+              <button onClick={() => setOngletActif('alertes')}
+                style={{ background:'#fee2e2', border:'1px solid #fca5a5', color:'#dc2626', padding:'4px 12px', borderRadius:20, cursor:'pointer', fontSize:12, fontWeight:600 }}>
+                ⚠ {nbAlertes} alerte{nbAlertes > 1 ? 's' : ''}
+              </button>
+            )}
+          </div>
+        </header>
+
+        {/* Zone de contenu */}
+        <main style={{ flex:1, overflow:'auto', padding:24 }}>
+          {SECTIONS[ongletActif] || <Dashboard />}
+        </main>
+
+
+        {/* Footer */}
+        <footer style={{ background:'#fff', borderTop:'1px solid #e5e7eb', padding:'8px 24px', fontSize:11, color:'#9ca3af', textAlign:'center', flexShrink:0 }}>
+          © 2026 NAIdo v3.0 — Logiciel créé par SOPHOPSY pour NAI
+        </footer>
+      </div>
+    </div>
+  </PermissionsContext.Provider>
+  );
+}
+
 function Clients() {
   const [clients, setClients] = useState([]);
   const [search, setSearch] = useState('');
@@ -9139,155 +9290,5 @@ function GMAO() {
         </div>
       )}
     </div>
-  );
-}
-  const SECTIONS = {
-    devis:       <GestionDevis />,
-    bc:          <GestionBC />,
-    df:          <DemandesFabrication />,
-    ol:          <OrdresLivraison />,
-    of:          <OrdresFabrication />,
-    dashboard:   <Dashboard />,
-    production:  <SuiviProduction />,
-    planning:    <PlanningMachines />,
-    rapportjour: <RapportsJournaliers />,
-    articles:    <Articles />,
-    matieres:    <MatieresPremières />,
-    stock:       <Stock />,
-    clients:     <Clients />,
-    vente:       <Vente />,
-    fournisseurs:<Fournisseurs />,
-    achat:       <Achat />,
-    cession:     <BonsCession />,
-    qhse:        <QHSE />,
-    rh:          <RH />,
-    gmao:        <GMAO />,
-    kpi:         <KPIRapports />,
-    parametres:  <ParametresSysteme />,
-    ia:          <AssistantIA />,
-    users:       <Utilisateurs />,
-    import:      <ImportSage />,
-    alertes:     <Alertes />,
-    referentiels:<Referentiels />,
-  };
-
-  const menuItem = MENU.find(m => m.id === ongletActif);
-
-  return (
-    <PermissionsContext.Provider value={perms}>
-    <div style={{ display:'flex', height:'100vh', fontFamily:'system-ui,sans-serif', background:'#f8fafc' }}>
-
-      {/* ── SIDEBAR ── */}
-      <aside style={{
-        width: sidebarOuverte ? 240 : 60, flexShrink:0,
-        background:'#111827', color:'#fff',
-        display:'flex', flexDirection:'column',
-        transition:'width .2s ease', overflow:'hidden'
-      }}>
-        {/* Logo */}
-        <div style={{ padding:'16px 14px', borderBottom:'1px solid #1f2937', display:'flex', alignItems:'center', gap:10, flexShrink:0 }}>
-          <div style={{ width:32, height:32, background:'#4ade80', borderRadius:8, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:800, color:'#14532d', fontSize:16, flexShrink:0 }}>N</div>
-          {sidebarOuverte && (
-            <div>
-              <div style={{ fontWeight:700, fontSize:14, whiteSpace:'nowrap' }}>NAIdo ERP/MES</div>
-              <div style={{ fontSize:10, color:'#6b7280', whiteSpace:'nowrap' }}>NAI</div>
-            </div>
-          )}
-          <button onClick={() => setSidebarOuverte(!sidebarOuverte)}
-            style={{ marginLeft:'auto', background:'none', border:'none', color:'#6b7280', cursor:'pointer', padding:4, flexShrink:0 }}>
-            {sidebarOuverte ? '◀' : '▶'}
-          </button>
-        </div>
-
-        {/* Menu */}
-        <nav style={{ flex:1, overflowY:'auto', padding:'8px 0' }}>
-          {getMenuFiltre(user?.role).map(item => {
-            if (item.separator) {
-              return sidebarOuverte ? (
-                <div key={item.id} style={{ padding:'12px 14px 4px', fontSize:10, fontWeight:700, color:'#4b5563', letterSpacing:1, textTransform:'uppercase', whiteSpace:'nowrap' }}>
-                  {item.label}
-                </div>
-              ) : <div key={item.id} style={{ height:8 }}/>;
-            }
-            const actif = ongletActif === item.id;
-            return (
-              <button key={item.id} onClick={() => setOngletActif(item.id)}
-                title={!sidebarOuverte ? item.label : ''}
-                style={{
-                  width:'100%', display:'flex', alignItems:'center', gap:10,
-                  padding:'9px 14px', border:'none', background: actif ? '#1f2937' : 'none',
-                  borderLeft: actif ? `3px solid ${item.color}` : '3px solid transparent',
-                  color: actif ? '#fff' : '#9ca3af', cursor:'pointer',
-                  fontSize:13, fontWeight: actif ? 600 : 400,
-                  textAlign:'left', transition:'all .15s', position:'relative'
-                }}>
-                <span style={{ color: actif ? item.color : '#6b7280', flexShrink:0 }}>
-                  <Icon d={ICONS[item.icon]} size={16}/>
-                </span>
-                {sidebarOuverte && <span style={{ whiteSpace:'nowrap', flex:1 }}>{item.label}</span>}
-                {item.id === 'alertes' && nbAlertes > 0 && (
-                  <span style={{ background:'#dc2626', color:'#fff', borderRadius:'50%', width:18, height:18, fontSize:10, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700, flexShrink:0 }}>
-                    {nbAlertes > 9 ? '9+' : nbAlertes}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </nav>
-
-        {/* User info */}
-        <div style={{ padding:'12px 14px', borderTop:'1px solid #1f2937', display:'flex', alignItems:'center', gap:10, flexShrink:0 }}>
-          <div style={{ width:30, height:30, background:'#374151', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:700, flexShrink:0 }}>
-            {user?.prenom?.[0]}{user?.nom?.[0]}
-          </div>
-          {sidebarOuverte && (
-            <>
-              <div style={{ flex:1, overflow:'hidden' }}>
-                <div style={{ fontSize:12, fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{user?.prenom} {user?.nom}</div>
-                <div style={{ fontSize:10, color:'#6b7280' }}>{user?.role}</div>
-              </div>
-              <button onClick={handleLogout} title="Déconnexion" style={{ background:'none', border:'none', color:'#6b7280', cursor:'pointer', padding:4 }}>
-                <Icon d={ICONS.logout} size={16}/>
-              </button>
-            </>
-          )}
-        </div>
-      </aside>
-
-      {/* ── CONTENU PRINCIPAL ── */}
-      <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
-        {/* Header */}
-        <header style={{ background:'#fff', borderBottom:'1px solid #e5e7eb', padding:'0 24px', height:56, display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
-          <div>
-            <span style={{ fontWeight:700, fontSize:16, color:'#111827' }}>
-              {menuItem && !menuItem.separator ? menuItem.label : ''}
-            </span>
-          </div>
-          <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-            <span style={{ fontSize:12, color:'#9ca3af' }}>
-              {new Date().toLocaleDateString('fr-FR', { weekday:'long', year:'numeric', month:'long', day:'numeric' })}
-            </span>
-            {nbAlertes > 0 && (
-              <button onClick={() => setOngletActif('alertes')}
-                style={{ background:'#fee2e2', border:'1px solid #fca5a5', color:'#dc2626', padding:'4px 12px', borderRadius:20, cursor:'pointer', fontSize:12, fontWeight:600 }}>
-                ⚠ {nbAlertes} alerte{nbAlertes > 1 ? 's' : ''}
-              </button>
-            )}
-          </div>
-        </header>
-
-        {/* Zone de contenu */}
-        <main style={{ flex:1, overflow:'auto', padding:24 }}>
-          {SECTIONS[ongletActif] || <Dashboard />}
-        </main>
-
-
-        {/* Footer */}
-        <footer style={{ background:'#fff', borderTop:'1px solid #e5e7eb', padding:'8px 24px', fontSize:11, color:'#9ca3af', textAlign:'center', flexShrink:0 }}>
-          © 2026 NAIdo v3.0 — Logiciel créé par SOPHOPSY pour NAI
-        </footer>
-      </div>
-    </div>
-  </PermissionsContext.Provider>
   );
 }
