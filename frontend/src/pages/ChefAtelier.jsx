@@ -272,6 +272,23 @@ function GestionDevis() {
     } catch(e){toast.error(e.response?.data?.error||'Erreur');}
   };
 
+  const ouvrirModalEdit = async (ol) => {
+    setMode('bc'); setStep(2); setShowModal(true); setSearchBC('');
+    setBcChoisi({id:ol.bc_id,numero_bc:ol.numero_bc,client_nom:ol.client_nom,client_id:ol.client_id,reference_client:ol.reference_client});
+    setFormInfo({date_livraison_prevue:ol.date_livraison_prevue?ol.date_livraison_prevue.slice(0,10):'',adresse_livraison:ol.adresse_livraison||'',transporteur:ol.transporteur||'',notes:ol.notes||'',est_derogatoire:ol.est_derogatoire||false});
+    try {
+      const {data:lignes} = await axios.get(API+'/ol/'+ol.id+'/lignes');
+      setLignesOL(lignes.map(l=>({...l,bc_ligne_id:l.bc_ligne_id,quantite_commandee:parseFloat(l.quantite_commandee||0),quantite_livrer:parseFloat(l.quantite_livrer||0),stock_dispo:getStock(l.article_id),inclure:true})));
+    } catch { toast.error('Erreur chargement lignes'); }
+  };
+  const modifierOL = async () => {
+    const lignesActives=lignesOL.filter(l=>l.inclure&&parseFloat(l.quantite_livrer)>0);
+    if(!lignesActives.length){toast.error('Au moins une ligne requise');return;}
+    try {
+      await axios.put(API+'/ol/'+olEdit.id,{client_id:bcChoisi.client_id,date_livraison_prevue:formInfo.date_livraison_prevue||null,adresse_livraison:formInfo.adresse_livraison||null,notes:formInfo.notes||null,transporteur:formInfo.transporteur||null,est_derogatoire:formInfo.est_derogatoire,lignes:lignesActives.map(l=>({bc_ligne_id:l.bc_ligne_id,article_id:l.article_id,designation:l.designation||l.article_nom||'',quantite_commandee:l.quantite_commandee,quantite_livrer:parseFloat(l.quantite_livrer)}))});
+      toast.success('OL modifié !'); setShowModal(false); setOlEdit(null); charger();
+    } catch(e){toast.error(e.response?.data?.error||'Erreur modification OL');}
+  };
   const changerStatut = async (id,statut) => {
     try{await axios.put(`${API}/devis/${id}/statut`,{statut});toast.success('Statut mis à jour');charger();}
     catch{toast.error('Erreur');}
@@ -7050,6 +7067,7 @@ function OrdresLivraison() {
   const [loading, setLoading] = useState(true);
   const [olDetail, setOlDetail] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [olEdit, setOlEdit] = useState(null);
   const [mode, setMode] = useState(null);
   const [step, setStep] = useState(1);
   const [searchBC, setSearchBC] = useState('');
@@ -7095,6 +7113,23 @@ function OrdresLivraison() {
       await axios.post(API+'/ol',{bc_id:bcChoisi.id,client_id:bcChoisi.client_id,date_livraison_prevue:formInfo.date_livraison_prevue||null,adresse_livraison:formInfo.adresse_livraison||null,notes:formInfo.notes||null,transporteur:formInfo.transporteur||null,est_derogatoire:estDerogatoire,lignes:lignesActives.map(l=>({bc_ligne_id:l.bc_ligne_id,article_id:l.article_id,designation:l.designation||l.article_nom||'',quantite_commandee:l.quantite_commandee,quantite_livrer:parseFloat(l.quantite_livrer)}))});
       toast.success('Ordre de Livraison créé !'); setShowModal(false); charger();
     } catch(e){toast.error(e.response?.data?.error||'Erreur création OL');}
+  };
+  const ouvrirModalEdit = async (ol) => {
+    setMode('bc'); setStep(2); setShowModal(true); setSearchBC('');
+    setBcChoisi({id:ol.bc_id,numero_bc:ol.numero_bc,client_nom:ol.client_nom,client_id:ol.client_id,reference_client:ol.reference_client});
+    setFormInfo({date_livraison_prevue:ol.date_livraison_prevue?ol.date_livraison_prevue.slice(0,10):'',adresse_livraison:ol.adresse_livraison||'',transporteur:ol.transporteur||'',notes:ol.notes||'',est_derogatoire:ol.est_derogatoire||false});
+    try {
+      const {data:lignes} = await axios.get(API+'/ol/'+ol.id+'/lignes');
+      setLignesOL(lignes.map(l=>({...l,bc_ligne_id:l.bc_ligne_id,quantite_commandee:parseFloat(l.quantite_commandee||0),quantite_livrer:parseFloat(l.quantite_livrer||0),stock_dispo:getStock(l.article_id),inclure:true})));
+    } catch { toast.error('Erreur chargement lignes'); }
+  };
+  const modifierOL = async () => {
+    const lignesActives=lignesOL.filter(l=>l.inclure&&parseFloat(l.quantite_livrer)>0);
+    if(!lignesActives.length){toast.error('Au moins une ligne requise');return;}
+    try {
+      await axios.put(API+'/ol/'+olEdit.id,{client_id:bcChoisi.client_id,date_livraison_prevue:formInfo.date_livraison_prevue||null,adresse_livraison:formInfo.adresse_livraison||null,notes:formInfo.notes||null,transporteur:formInfo.transporteur||null,est_derogatoire:formInfo.est_derogatoire,lignes:lignesActives.map(l=>({bc_ligne_id:l.bc_ligne_id,article_id:l.article_id,designation:l.designation||l.article_nom||'',quantite_commandee:l.quantite_commandee,quantite_livrer:parseFloat(l.quantite_livrer)}))});
+      toast.success('OL modifié !'); setShowModal(false); setOlEdit(null); charger();
+    } catch(e){toast.error(e.response?.data?.error||'Erreur modification OL');}
   };
   const changerStatut = async (id,statut) => { try{await axios.put(API+'/ol/'+id+'/statut',{statut});charger();}catch{toast.error('Erreur');} };
   const clOL=s=>({brouillon:'#6b7280',confirme:'#0369a1',en_livraison:'#d97706',livre:'#15803d',annule:'#dc2626'}[s]||'#6b7280');
@@ -7146,6 +7181,7 @@ function OrdresLivraison() {
                   <td style={{padding:'9px 12px',textAlign:'center'}}>{ol.est_derogatoire?'⚠ Oui':'—'}</td>
                   <td style={{padding:'9px 12px'}}><div style={{display:'flex',gap:5,alignItems:'center'}}>
                     <button onClick={()=>window.open(`/api/ol/${ol.id}/pdf`,'_blank')} style={{background:'#e0f2fe',color:'#0891b2',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>🖨</button>
+                      <button onClick={()=>{setOlEdit(ol);ouvrirModalEdit(ol);}} style={{background:'#fef3c7',color:'#d97706',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>✏</button>
                     <select value={ol.statut} onChange={e=>changerStatut(ol.id,e.target.value)} style={{padding:'4px 6px',borderRadius:6,border:'1px solid #e5e7eb',fontSize:11}}>
                       <option value="brouillon">Brouillon</option><option value="confirme">Confirmé</option><option value="en_livraison">En livraison</option><option value="livre">Livré</option><option value="annule">Annulé</option>
                     </select>
@@ -7164,7 +7200,7 @@ function OrdresLivraison() {
                 <div style={{fontWeight:800,fontSize:16,color:couleurMode}}>{mode==='stock'?'🏪 OL depuis stock disponible':'📦 Transformation BC → OL'}</div>
                 <div style={{fontSize:12,color:'#6b7280',marginTop:2}}>{mode==='stock'?'Stock vérifié en temps réel — dérogatoire automatique si dépassement':'Livraison partielle ou totale du bon de commande'}</div>
               </div>
-              <button onClick={()=>setShowModal(false)} style={{background:'none',border:'none',fontSize:20,cursor:'pointer',color:'#9ca3af'}}>✕</button>
+              <button onClick={()=>{setShowModal(false);setOlEdit(null);}} style={{background:'none',border:'none',fontSize:20,cursor:'pointer',color:'#9ca3af'}}>✕</button>
             </div>
             <div style={{padding:'20px 24px',overflowY:'auto',flex:1}}>
               {step===1&&(
@@ -7244,8 +7280,8 @@ function OrdresLivraison() {
               )}
             </div>
             <div style={{padding:'14px 24px',borderTop:'1px solid #e5e7eb',display:'flex',gap:10,justifyContent:'flex-end',flexShrink:0}}>
-              <button onClick={()=>setShowModal(false)} style={{padding:'9px 20px',borderRadius:8,border:'1px solid #e5e7eb',background:'#f9fafb',cursor:'pointer',fontSize:13}}>Annuler</button>
-              {step===2&&<button onClick={creerOL} style={{padding:'9px 24px',borderRadius:8,border:'none',background:couleurMode,color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>✓ Créer l'OL</button>}
+              <button onClick={()=>{setShowModal(false);setOlEdit(null);}} style={{padding:'9px 20px',borderRadius:8,border:'1px solid #e5e7eb',background:'#f9fafb',cursor:'pointer',fontSize:13}}>Annuler</button>
+              {step===2&&<button onClick={olEdit?modifierOL:creerOL} style={{padding:'9px 24px',borderRadius:8,border:'none',background:couleurMode,color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>{olEdit?'✏ Modifier l\'OL':'✓ Créer l\'OL'}</button>}
             </div>
           </div>
         </div>
@@ -7879,6 +7915,23 @@ function Achat() {
     } catch(e) { toast.error(e.response?.data?.error||'Erreur'); }
   };
 
+  const ouvrirModalEdit = async (ol) => {
+    setMode('bc'); setStep(2); setShowModal(true); setSearchBC('');
+    setBcChoisi({id:ol.bc_id,numero_bc:ol.numero_bc,client_nom:ol.client_nom,client_id:ol.client_id,reference_client:ol.reference_client});
+    setFormInfo({date_livraison_prevue:ol.date_livraison_prevue?ol.date_livraison_prevue.slice(0,10):'',adresse_livraison:ol.adresse_livraison||'',transporteur:ol.transporteur||'',notes:ol.notes||'',est_derogatoire:ol.est_derogatoire||false});
+    try {
+      const {data:lignes} = await axios.get(API+'/ol/'+ol.id+'/lignes');
+      setLignesOL(lignes.map(l=>({...l,bc_ligne_id:l.bc_ligne_id,quantite_commandee:parseFloat(l.quantite_commandee||0),quantite_livrer:parseFloat(l.quantite_livrer||0),stock_dispo:getStock(l.article_id),inclure:true})));
+    } catch { toast.error('Erreur chargement lignes'); }
+  };
+  const modifierOL = async () => {
+    const lignesActives=lignesOL.filter(l=>l.inclure&&parseFloat(l.quantite_livrer)>0);
+    if(!lignesActives.length){toast.error('Au moins une ligne requise');return;}
+    try {
+      await axios.put(API+'/ol/'+olEdit.id,{client_id:bcChoisi.client_id,date_livraison_prevue:formInfo.date_livraison_prevue||null,adresse_livraison:formInfo.adresse_livraison||null,notes:formInfo.notes||null,transporteur:formInfo.transporteur||null,est_derogatoire:formInfo.est_derogatoire,lignes:lignesActives.map(l=>({bc_ligne_id:l.bc_ligne_id,article_id:l.article_id,designation:l.designation||l.article_nom||'',quantite_commandee:l.quantite_commandee,quantite_livrer:parseFloat(l.quantite_livrer)}))});
+      toast.success('OL modifié !'); setShowModal(false); setOlEdit(null); charger();
+    } catch(e){toast.error(e.response?.data?.error||'Erreur modification OL');}
+  };
   const changerStatut = async (id,statut) => {
     try { await axios.put(`${API}/achat/commandes/${id}/statut`,{statut}); toast.success(`Statut → ${statut}`); charger(); }
     catch(e) { toast.error(e.response?.data?.error||'Erreur'); }

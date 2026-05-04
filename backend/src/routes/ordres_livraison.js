@@ -200,8 +200,7 @@ ${d.adresse_livraison ? '<div style="background:#f9fafb;border:1px solid #e5e7eb
 ${d.notes ? '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:4px;padding:8px;font-size:8pt;"><strong>Notes :</strong> '+d.notes+'</div>' : ''}
 <div class="sigs">
   <div class="sig-box"><div class="sig-title">Commercial</div><div style="font-size:7.5pt;color:#6b7280;">${d.demandeur_nom||'—'}</div><div class="sig-line">Signature</div></div>
-  <div class="sig-box"><div class="sig-title">Magasinier</div><div style="font-size:7.5pt;color:#6b7280;">A completer</div><div class="sig-line">Signature</div></div>
-  <div class="sig-box"><div class="sig-title">Client / Reception</div><div style="font-size:7.5pt;color:#6b7280;">A completer</div><div class="sig-line">Signature + Cachet</div></div>
+  <div class="sig-box"><div class="sig-title">Magasinier - Magasin Central</div><div style="font-size:7.5pt;color:#6b7280;">A completer</div><div class="sig-line">Signature</div></div>
 </div>
 <div class="footer">Genere le ${new Date().toLocaleString('fr-FR')} · NAIdo — SOPHOPSY pour NAI</div>
 <script>window.onload=()=>setTimeout(()=>window.print(),800);</script>
@@ -209,6 +208,49 @@ ${d.notes ? '<div style="background:#fffbeb;border:1px solid #fde68a;border-radi
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.send(html);
   } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /api/ol/:id — modifier un OL
+router.put('/:id', auth, async (req, res) => {
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const { client_id, date_livraison_prevue, adresse_livraison, notes,
+            est_derogatoire, transporteur, lignes } = req.body;
+
+    await client.query(`
+      UPDATE ordres_livraison SET
+        client_id=COALESCE($1,client_id),
+        date_livraison_prevue=$2,
+        adresse_livraison=$3,
+        notes=$4,
+        est_derogatoire=COALESCE($5,est_derogatoire),
+        transporteur=$6,
+        updated_at=NOW()
+      WHERE id=$7
+    `, [client_id||null, date_livraison_prevue||null, adresse_livraison||null,
+        notes||null, est_derogatoire, transporteur||null, req.params.id]);
+
+    if (lignes && lignes.length > 0) {
+      await client.query('DELETE FROM ol_lignes WHERE ol_id=$1', [req.params.id]);
+      for (let i=0; i<lignes.length; i++) {
+        const l = lignes[i];
+        await client.query(`
+          INSERT INTO ol_lignes (ol_id, bc_ligne_id, article_id, designation,
+            quantite_commandee, quantite_livrer, ordre)
+          VALUES ($1,$2,$3,$4,$5,$6,$7)
+        `, [req.params.id, l.bc_ligne_id||null, l.article_id||null,
+            l.designation||'', parseFloat(l.quantite_commandee||0),
+            parseFloat(l.quantite_livrer||0), i]);
+      }
+    }
+    await client.query('COMMIT');
+    const { rows } = await db.query('SELECT * FROM ordres_livraison WHERE id=$1', [req.params.id]);
+    res.json(rows[0]);
+  } catch(e) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: e.message });
+  } finally { client.release(); }
 });
 
 module.exports = router;
