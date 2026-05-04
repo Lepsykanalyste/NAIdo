@@ -1351,7 +1351,15 @@ function DemandesFabrication() {
                     </button>
                   </td>
                   <td style={{padding:'9px 12px'}}>
-                    <span style={{fontSize:11,color:'#9ca3af'}}>—</span>
+                    <div style={{display:'flex',gap:5}}>
+                      {df.statut==='en_attente' && isDir && (
+                        <button onClick={()=>{setShowValider(df);chargerMachines('AT3');}} style={{background:'#dcfce7',color:'#15803d',border:'none',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:11,fontWeight:700}}>✓ Valider</button>
+                      )}
+                      {df.statut==='en_attente' && isDir && (
+                        <button onClick={()=>{const m=window.prompt('Motif refus :');if(m) refuser(df.id,m);}} style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:11}}>✗ Refuser</button>
+                      )}
+                      {df.statut!=='en_attente' && <span style={{fontSize:11,color:'#9ca3af'}}>—</span>}
+                    </div>
                   </td>
                 </tr>
               ))}
