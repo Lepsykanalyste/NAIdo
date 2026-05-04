@@ -6981,50 +6981,49 @@ function ParametresSysteme() {
 
 
 function OrdresLivraison() {
+  const { user } = useAuth();
   const [ols, setOls] = useState([]);
+  const [dfs, setDfs] = useState([]);
+  const [clients, setClients] = useState([]);
+  const [articles, setArticles] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
   const [olDetail, setOlDetail] = useState(null);
-  const [olLignes, setOlLignes] = useState([]);
-  const [showStatut, setShowStatut] = useState(null);
-  const [statutForm, setStatutForm] = useState({statut:'',numero_suivi:'',transporteur:''});
+  const [form, setForm] = useState({df_id:'',of_id:'',client_id:'',article_id:'',quantite_livrer:'',date_livraison_prevue:'',adresse_livraison:'',notes:'',est_derogatoire:false});
 
   const charger = async () => {
     setLoading(true);
     try {
-      const r = await axios.get(API+'/ol').catch(()=>({data:[]}));
-      setOls(r.data||[]);
+      const [r1,r2,r3,r4] = await Promise.all([
+        axios.get(API+'/ol').catch(()=>({data:[]})),
+        axios.get(API+'/df?statut=validee').catch(()=>({data:[]})),
+        axios.get(API+'/vente/clients').catch(()=>({data:[]})),
+        axios.get(API+'/articles').catch(()=>({data:[]})),
+      ]);
+      setOls(r1.data||[]); setDfs(r2.data||[]); setClients(r3.data||[]); setArticles(r4.data||[]);
     } finally { setLoading(false); }
   };
-
   React.useEffect(()=>{ charger(); },[]);
 
-  const ouvrirOL = async (ol) => {
-    setOlDetail(ol);
-    const r = await axios.get(API+'/ol/'+ol.id+'/lignes').catch(()=>({data:[]}));
-    setOlLignes(r.data||[]);
+  const creerOL = async () => {
+    try {
+      await axios.post(API+'/ol', form);
+      toast.success('OL cree');
+      setShowForm(false);
+      setForm({df_id:'',of_id:'',client_id:'',article_id:'',quantite_livrer:'',date_livraison_prevue:'',adresse_livraison:'',notes:'',est_derogatoire:false});
+      charger();
+    } catch(e) { toast.error(e.response?.data?.error||'Erreur'); }
   };
 
-  const confirmerStatut = async () => {
-    if (!showStatut) return;
-    try {
-      await axios.put(API+'/ol/'+showStatut.id+'/statut', statutForm);
-      toast.success('Statut mis a jour');
-      setShowStatut(null);
-      charger();
-      if (olDetail && olDetail.id===showStatut.id) setOlDetail(prev=>({...prev,statut:statutForm.statut}));
-    } catch(e) { toast.error(e.response?.data?.error||'Erreur'); }
+  const changerStatut = async (id, statut) => {
+    try { await axios.put(API+'/ol/'+id+'/statut',{statut}); charger(); }
+    catch(e) { toast.error('Erreur'); }
   };
 
   const cl = s=>({brouillon:'#6b7280',confirme:'#0369a1',en_livraison:'#d97706',livre:'#15803d',annule:'#dc2626'}[s]||'#6b7280');
   const bg = s=>({brouillon:'#f3f4f6',confirme:'#e0f2fe',en_livraison:'#fef3c7',livre:'#dcfce7',annule:'#fee2e2'}[s]||'#f3f4f6');
   const lb = s=>({brouillon:'Brouillon',confirme:'Confirme',en_livraison:'En livraison',livre:'Livre',annule:'Annule'}[s]||s);
-
-  const stats = [
-    {l:'Total OL',v:ols.length,c:'#0369a1',b:'#e0f2fe',i:'📦'},
-    {l:'En livraison',v:ols.filter(o=>o.statut==='en_livraison').length,c:'#d97706',b:'#fef3c7',i:'🚚'},
-    {l:'Livres',v:ols.filter(o=>o.statut==='livre').length,c:'#15803d',b:'#dcfce7',i:'✅'},
-    {l:'Derogatoires',v:ols.filter(o=>o.est_derogatoire).length,c:'#7c3aed',b:'#f5f3ff',i:'⚠'},
-  ];
+  const sel = {width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid #e5e7eb',fontSize:13};
 
   return (
     <div style={{padding:'24px',maxWidth:1100,margin:'0 auto'}}>
@@ -7033,11 +7032,10 @@ function OrdresLivraison() {
           <h2 style={{fontSize:22,fontWeight:700,color:'#1f2937',margin:0}}>Ordres de Livraison</h2>
           <div style={{fontSize:12,color:'#6b7280',marginTop:2}}>{new Date().toLocaleDateString('fr-FR',{weekday:'long',year:'numeric',month:'long',day:'numeric'})}</div>
         </div>
-        <div style={{fontSize:12,color:'#6b7280'}}>Creez un OL depuis un Bon de Commande</div>
+        <button onClick={()=>setShowForm(true)} style={{background:'#15803d',color:'#fff',border:'none',borderRadius:8,padding:'10px 18px',cursor:'pointer',fontSize:14,fontWeight:600}}>+ Nouvel OL</button>
       </div>
-
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12,marginBottom:20}}>
-        {stats.map(s=>(
+        {[{l:'Total',v:ols.length,c:'#0369a1',b:'#e0f2fe',i:'📦'},{l:'En cours',v:ols.filter(o=>o.statut==='en_livraison').length,c:'#d97706',b:'#fef3c7',i:'🚚'},{l:'Livres',v:ols.filter(o=>o.statut==='livre').length,c:'#15803d',b:'#dcfce7',i:'✅'},{l:'Derogatoires',v:ols.filter(o=>o.est_derogatoire).length,c:'#7c3aed',b:'#f5f3ff',i:'⚠'}].map(s=>(
           <div key={s.l} style={{background:s.b,borderRadius:10,padding:'12px 16px'}}>
             <div style={{fontSize:20}}>{s.i}</div>
             <div style={{fontSize:22,fontWeight:800,color:s.c}}>{s.v}</div>
@@ -7045,28 +7043,32 @@ function OrdresLivraison() {
           </div>
         ))}
       </div>
-
       {loading ? <div style={{textAlign:'center',padding:40,color:'#6b7280'}}>Chargement...</div> : (
         <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',overflow:'hidden'}}>
           <table style={{width:'100%',borderCollapse:'collapse'}}>
             <thead><tr style={{background:'#f9fafb'}}>
-              {['N OL','BC','Ref client','Client','Articles','Livraison','Statut','Actions'].map(h=>(
+              {['N° OL','Article','Client','Qte','Livraison','Statut','Derogatoire','Actions'].map(h=>(
                 <th key={h} style={{padding:'10px 12px',textAlign:'left',fontWeight:600,color:'#15803d',borderBottom:'2px solid #e5e7eb',fontSize:12}}>{h}</th>
               ))}
             </tr></thead>
             <tbody>
-              {ols.length===0?(<tr><td colSpan={8} style={{padding:40,textAlign:'center',color:'#6b7280'}}>Aucun ordre de livraison. Creez-en un depuis les Bons de Commande.</td></tr>):ols.map((ol,i)=>(
+              {ols.length===0?(<tr><td colSpan={8} style={{padding:40,textAlign:'center',color:'#6b7280'}}>Aucun ordre de livraison</td></tr>):ols.map((ol,i)=>(
                 <tr key={ol.id} style={{borderBottom:'1px solid #f3f4f6',background:i%2===0?'#fff':'#fafafa'}}>
-                  <td style={{padding:'9px 12px',fontWeight:700,color:'#15803d',cursor:'pointer',textDecoration:'underline'}} onClick={()=>ouvrirOL(ol)}>{ol.numero_ol}</td>
-                  <td style={{padding:'9px 12px',fontSize:12}}>{ol.numero_bc||'—'}</td>
-                  <td style={{padding:'9px 12px',fontSize:12}}>{ol.reference_client||'—'}</td>
+                  <td style={{padding:'9px 12px',fontWeight:700,color:'#15803d',cursor:'pointer',textDecoration:'underline'}} onClick={()=>setOlDetail(ol)}>{ol.numero_ol}</td>
+                  <td style={{padding:'9px 12px',fontSize:12}}>{ol.article_nom||'—'}</td>
                   <td style={{padding:'9px 12px',fontSize:12}}>{ol.client_nom||'—'}</td>
-                  <td style={{padding:'9px 12px',fontSize:12,textAlign:'center'}}>{ol.nb_articles||'—'}</td>
+                  <td style={{padding:'9px 12px',fontWeight:600}}>{parseFloat(ol.quantite_livrer||0).toLocaleString('fr-FR')} kg</td>
                   <td style={{padding:'9px 12px',fontSize:12}}>{ol.date_livraison_prevue?new Date(ol.date_livraison_prevue).toLocaleDateString('fr-FR'):'—'}</td>
                   <td style={{padding:'9px 12px'}}><span style={{background:bg(ol.statut),color:cl(ol.statut),padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:700}}>{lb(ol.statut)}</span></td>
-                  <td style={{padding:'9px 12px',display:'flex',gap:6}}>
-                    <button onClick={()=>window.open('/api/ol/'+ol.id+'/pdf','_blank')} style={{background:'#e0f2fe',color:'#0369a1',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>PDF</button>
-                    <button onClick={()=>{setShowStatut(ol);setStatutForm({statut:ol.statut,numero_suivi:ol.numero_suivi||'',transporteur:ol.transporteur||''}); }} style={{background:'#f3f4f6',border:'1px solid #e5e7eb',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>Statut</button>
+                  <td style={{padding:'9px 12px',textAlign:'center'}}>{ol.est_derogatoire?'⚠ Oui':'—'}</td>
+                  <td style={{padding:'9px 12px'}}>
+                    <select value={ol.statut} onChange={e=>changerStatut(ol.id,e.target.value)} style={{padding:'4px 8px',borderRadius:6,border:'1px solid #e5e7eb',fontSize:11}}>
+                      <option value="brouillon">Brouillon</option>
+                      <option value="confirme">Confirme</option>
+                      <option value="en_livraison">En livraison</option>
+                      <option value="livre">Livre</option>
+                      <option value="annule">Annule</option>
+                    </select>
                   </td>
                 </tr>
               ))}
@@ -7074,81 +7076,17 @@ function OrdresLivraison() {
           </table>
         </div>
       )}
-
-      {/* Modale detail OL */}
-      {olDetail && (
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={()=>setOlDetail(null)}>
-          <div style={{background:'#fff',borderRadius:14,padding:28,width:580,maxWidth:'95vw',maxHeight:'88vh',overflowY:'auto'}} onClick={e=>e.stopPropagation()}>
-            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-              <div style={{fontWeight:800,fontSize:16,color:'#15803d'}}>{olDetail.numero_ol}</div>
-              <button onClick={()=>setOlDetail(null)} style={{background:'none',border:'none',fontSize:20,cursor:'pointer'}}>x</button>
-            </div>
-            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,fontSize:13,marginBottom:14}}>
-              {[['BC NAI',olDetail.numero_bc||'—'],['Ref client',olDetail.reference_client||'—'],['Client',olDetail.client_nom||'—'],['Statut',lb(olDetail.statut)],['Livraison',olDetail.date_livraison_prevue?new Date(olDetail.date_livraison_prevue).toLocaleDateString('fr-FR'):'—'],['Transporteur',olDetail.transporteur||'—'],['N suivi',olDetail.numero_suivi||'—'],['Type',olDetail.est_derogatoire?'Derogatoire':'Flux normal']].map(([l,v])=>(
-                <div key={l} style={{background:'#f9fafb',borderRadius:8,padding:'8px 12px'}}>
-                  <div style={{fontSize:10,color:'#6b7280',fontWeight:600}}>{l}</div>
-                  <div style={{fontWeight:600,marginTop:2}}>{v}</div>
-                </div>
-              ))}
-            </div>
-            <div style={{fontSize:12,fontWeight:600,color:'#374151',marginBottom:8}}>ARTICLES</div>
-            <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
-              <thead><tr style={{background:'#15803d',color:'#fff'}}>
-                {['Ref','Designation','Qte commandee','Qte a livrer'].map(h=><th key={h} style={{padding:'6px 8px',textAlign:'left'}}>{h}</th>)}
-              </tr></thead>
-              <tbody>
-                {olLignes.map((l,i)=>(
-                  <tr key={i} style={{borderBottom:'1px solid #f3f4f6'}}>
-                    <td style={{padding:'6px 8px',fontWeight:700}}>{l.article_code||'—'}</td>
-                    <td style={{padding:'6px 8px'}}>{l.designation||'—'}</td>
-                    <td style={{padding:'6px 8px',textAlign:'right'}}>{parseFloat(l.quantite_commandee||0).toLocaleString('fr-FR')} pcs</td>
-                    <td style={{padding:'6px 8px',textAlign:'right',fontWeight:700,color:'#15803d'}}>{parseFloat(l.quantite_livrer||0).toLocaleString('fr-FR')} pcs</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div style={{display:'flex',gap:8,marginTop:16,justifyContent:'flex-end'}}>
-              <button onClick={()=>window.open('/api/ol/'+olDetail.id+'/pdf','_blank')} style={{padding:'8px 16px',borderRadius:8,border:'none',background:'#15803d',color:'#fff',cursor:'pointer',fontSize:13}}>PDF</button>
-              <button onClick={()=>setOlDetail(null)} style={{padding:'8px 16px',borderRadius:8,border:'1px solid #e5e7eb',background:'#f9fafb',cursor:'pointer',fontSize:13}}>Fermer</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modale changement statut */}
-      {showStatut && (
-        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1001,display:'flex',alignItems:'center',justifyContent:'center'}}>
-          <div style={{background:'#fff',borderRadius:14,padding:24,width:420,maxWidth:'95vw'}}>
-            <div style={{fontWeight:700,fontSize:15,marginBottom:16,color:'#15803d'}}>Mettre a jour : {showStatut.numero_ol}</div>
-            <div style={{marginBottom:12}}>
-              <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>Statut</label>
-              <select value={statutForm.statut} onChange={e=>setStatutForm(f=>({...f,statut:e.target.value}))} style={{width:'100%',padding:'8px',borderRadius:8,border:'1px solid #e5e7eb',fontSize:13}}>
-                <option value="brouillon">Brouillon</option>
-                <option value="confirme">Confirme</option>
-                <option value="en_livraison">En livraison</option>
-                <option value="livre">Livre</option>
-                <option value="annule">Annule</option>
-              </select>
+      {showForm && (
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <div style={{background:'#fff',borderRadius:14,padding:28,width:560,maxWidth:'95vw',maxHeight:'88vh',overflowY:'auto'}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+              <div style={{fontWeight:700,fontSize:16,color:'#15803d'}}>Nouvel Ordre de Livraison</div>
+              <button onClick={()=>setShowForm(false)} style={{background:'none',border:'none',fontSize:20,cursor:'pointer'}}>✕</button>
             </div>
             <div style={{marginBottom:12}}>
-              <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>Transporteur</label>
-              <input value={statutForm.transporteur} onChange={e=>setStatutForm(f=>({...f,transporteur:e.target.value}))} placeholder="Nom du transporteur..." style={{width:'100%',padding:'8px',borderRadius:8,border:'1px solid #e5e7eb',fontSize:13}}/>
-            </div>
-            <div style={{marginBottom:20}}>
-              <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>Numero de suivi</label>
-              <input value={statutForm.numero_suivi} onChange={e=>setStatutForm(f=>({...f,numero_suivi:e.target.value}))} placeholder="Ex: DHL123456..." style={{width:'100%',padding:'8px',borderRadius:8,border:'1px solid #e5e7eb',fontSize:13}}/>
-            </div>
-            <div style={{display:'flex',gap:10,justifyContent:'flex-end'}}>
-              <button onClick={()=>setShowStatut(null)} style={{padding:'8px 18px',borderRadius:8,border:'1px solid #e5e7eb',background:'#f9fafb',cursor:'pointer',fontSize:13}}>Annuler</button>
-              <button onClick={confirmerStatut} style={{padding:'8px 18px',borderRadius:8,border:'none',background:'#15803d',color:'#fff',cursor:'pointer',fontSize:13,fontWeight:700}}>Confirmer</button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
+              <label style={{fontSize:12,fontWeight:600,color:'#374151',display:'block',marginBottom:4}}>Type</label>
+              <div style={{display:'flex',gap:10}}>
+                <button onClick={()=>setForm(f=>({...f,est_derogatoire:false}))} style={{flex:1,padding:'8px',borderRadius:8,border:'2px solid '+(form.est_derogatoire?'#e5e7eb':'#15803d'),background:form.est_derogatoire?'#f9fafb':'#dcfce7',cursor:'pointer',fontSize:13,fontWeight:600,color:form.est_derogatoire?'#6b7280':'#15803d'}}>Flux normal (OF)</button>
                 <button onClick={()=>setForm(f=>({...f,est_derogatoire:true}))} style={{flex:1,padding:'8px',borderRadius:8,border:'2px solid '+(form.est_derogatoire?'#7c3aed':'#e5e7eb'),background:form.est_derogatoire?'#f5f3ff':'#f9fafb',cursor:'pointer',fontSize:13,fontWeight:600,color:form.est_derogatoire?'#7c3aed':'#6b7280'}}>Derogatoire (stock)</button>
               </div>
             </div>
