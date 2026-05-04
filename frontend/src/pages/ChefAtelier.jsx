@@ -694,36 +694,7 @@ function GestionBC() {
     } catch(e) { toast.error(e.response?.data?.error||'Erreur'); }
   };
 
-  const [dfModal, setDfModal] = useState(null);
-  const [olModal, setOlModal] = useState(null);
-  const [olBcLignes, setOlBcLignes] = useState([]);
-  const ouvrirOlModal = async (bc) => {
-    const r = await axios.get(API+'/bc/'+bc.id+'/lignes').catch(()=>({data:[]}));
-    const lignes = (r.data||[]).map(l=>({...l, quantite_livrer: l.quantite_pieces}));
-    setOlBcLignes(lignes);
-    setOlModal({bcId: bc.id, numeroBc: bc.numero_bc, clientId: bc.client_id, clientNom: bc.client_nom, referenceclient: bc.reference_client, adresse: bc.adresse_livraison||'', date: bc.date_livraison_souhaitee?bc.date_livraison_souhaitee.slice(0,10):'', transporteur:'', notes:''});
-  };
-  const confirmerOL = async () => {
-    if (!olModal) return;
-    try {
-      const lignes = olBcLignes.filter(l=>parseFloat(l.quantite_livrer||0)>0).map(l=>({
-        bc_ligne_id: l.id, article_id: l.article_id, designation: l.designation,
-        quantite_commandee: l.quantite_pieces, quantite_livrer: parseFloat(l.quantite_livrer||0)
-      }));
-      if (lignes.length===0) { toast.error('Quantite requise pour au moins un article'); return; }
-      await axios.post(API+'/ol', {
-        bc_id: olModal.bcId, client_id: olModal.clientId,
-        date_livraison_prevue: olModal.date||null,
-        adresse_livraison: olModal.adresse||null,
-        notes: olModal.notes||null,
-        transporteur: olModal.transporteur||null,
-        est_derogatoire: false, lignes
-      });
-      toast.success('OL cree avec succes');
-      setOlModal(null); setOlBcLignes([]);
-      charger();
-    } catch(e) { toast.error(e.response?.data?.error||'Erreur'); }
-  }; // {bcId, priorite, description}
+  const [dfModal, setDfModal] = useState(null); // {bcId, priorite, description}
   const [bcDetail, setBcDetail] = useState(null);
   const [bcDetailLignes, setBcDetailLignes] = useState([]);
   React.useEffect(()=>{
@@ -861,9 +832,6 @@ function GestionBC() {
                     <button onClick={()=>window.open(`/api/bc/${b.id}/pdf`,'_blank')} style={{background:'#e0f2fe',color:'#0369a1',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>🖨 PDF</button>
                     {b.statut==='recu' && (
                       <button onClick={()=>ouvrirDfModal(b)} style={{background:'#f5f3ff',color:'#7c3aed',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11,fontWeight:700}}>→ DF</button>
-                    )}
-                    {(b.statut==='recu'||b.statut==='transforme_df') && (
-                      <button onClick={()=>ouvrirOlModal(b)} style={{background:'#dcfce7',color:'#15803d',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11,fontWeight:700}}>→ OL</button>
                     )}
                   </td>
                 </tr>
@@ -6979,6 +6947,100 @@ function ParametresSysteme() {
   );
 }
 
+
+export default function ChefAtelier() {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const [ongletActif, setOngletActif] = useState('dashboard');
+  const [sidebarOuverte, setSidebarOuverte] = useState(true);
+  const [nbAlertes, setNbAlertes] = useState(0);
+  const [perms, setPerms] = useState({ permissions:{}, is_super_admin:false, has_finance:false, role:'' });
+
+  useEffect(() => {
+    const chargerAlertes = () => {
+      axios.get(`${API}/alertes/count`).then(({data}) => setNbAlertes(data.count)).catch(() => {});
+    };
+    const chargerPerms = async () => {
+      try {
+        const {data} = await axios.get(`${API}/permissions/moi`);
+        setPerms(data);
+        // Rediriger si pas accès au module actuel
+        if (data.permissions && !data.is_super_admin) {
+          const allowed = Object.keys(data.permissions).filter(k=>data.permissions[k]?.voir);
+          if (!allowed.includes(ongletActif) && !allowed.includes('*')) {
+            setOngletActif(allowed[0] || 'dashboard');
+          }
+        }
+      } catch {}
+    };
+    chargerAlertes();
+    chargerPerms();
+    const iv = setInterval(chargerAlertes, 30000);
+    return () => clearInterval(iv);
+  }, []);
+
+  const canAccess = (module) => {
+    if (perms.is_super_admin) return true;
+    if (perms.permissions?.['*']?.voir) return true;
+    return perms.permissions?.[module]?.voir || false;
+  };
+  const hasFinance = () => perms.has_finance || perms.is_super_admin;
+
+  const handleLogout = () => { logout(); navigate('/login'); };
+
+
+
+  const MENU_ITEMS = [
+    { id:'separator1',  label:'PRODUCTION',               separator:true },
+    { id:'dashboard',   label:'Tableau de bord',           icon:'home',        color:'#1d4ed8' },
+    { id:'devis',       label:'Devis',                   icon:'clipboard', color:'#0891b2' },
+  { id:'bc',          label:'Bons de Commande',        icon:'clipboard', color:'#0369a1' },
+  { id:'df',          label:'Demandes de Fabrication', icon:'clipboard', color:'#7c3aed' },
+  { id:'of',          label:'Ordres de Fabrication', icon:'clipboard', color:'#0369a1' },
+  { id:'production',  label:'Suivi Production',          icon:'activity',    color:'#059669' },
+    { id:'planning',    label:'Planning Machines',          icon:'calendar',    color:'#7c3aed' },
+    { id:'rapportjour', label:'Rapports Journaliers',       icon:'file-text',   color:'#0891b2' },
+    { id:'separator2',  label:'STOCKS & ARTICLES',          separator:true },
+    { id:'articles',    label:'Articles (Produits)',        icon:'package',     color:'#b45309' },
+    { id:'matieres',    label:'Matières Premières',        icon:'layers',      color:'#92400e' },
+    { id:'stock',       label:'Stock',                     icon:'archive',     color:'#15803d' },
+    { id:'cession',     label:'Bons de Cession',           icon:'shuffle',     color:'#1d4ed8' },
+    { id:'separator3',  label:'VENTE & ACHAT',             separator:true },
+    { id:'clients',     label:'Clients',                   icon:'users',       color:'#dc2626' },
+    { id:'vente',       label:'Ventes',                    icon:'trending-up', color:'#059669' },
+    { id:'fournisseurs',label:'Fournisseurs',              icon:'truck',       color:'#7c3aed' },
+    { id:'achats',      label:'Commandes Achat',           icon:'shopping-cart',color:'#0891b2' },
+    { id:'separator3b', label:'GMAO & MAINTENANCE',        separator:true },
+    { id:'gmao',        label:'GMAO / Maintenance',        icon:'tool',        color:'#059669' },
+    { id:'separator4',  label:'QHSE & MAINTENANCE',        separator:true },
+    { id:'qhse',        label:'QHSE / NC',                 icon:'qhse',        color:'#b45309' },
+    { id:'separator4b', label:'RESSOURCES HUMAINES',       separator:true },
+    { id:'rh',          label:'RH — Employés & Paie',      icon:'users',       color:'#0891b2' },
+    { id:'separator5',  label:'ADMIN & IA',                separator:true },
+    { id:'kpi',         label:'KPI & Rapports',            icon:'bar-chart',   color:'#1d4ed8' },
+    { id:'ia',          label:'Assistant IA',              icon:'cpu',         color:'#7c3aed' },
+    { id:'utilisateurs',label:'Utilisateurs',              icon:'users',       color:'#6d28d9' },
+    { id:'parametres',  label:'⚙ Paramètres Système',     separator:false,    icon:'settings',    color:'#1e1b4b' },
+    { id:'separator6',  label:'RÉFÉRENTIELS',              separator:true },
+    { id:'alertes',     label:'Alertes',                   icon:'bell',        color:'#dc2626' },
+    { id:'parametres',  label:'⚙ Paramètres',  icon:'settings',    color:'#1e1b4b' },
+  { id:'parametres',  label:'⚙ Paramètres', icon:'settings', color:'#1e1b4b' },
+  { id:'referentiels',label:'Référentiels',              icon:'database',    color:'#374151' },
+  ].filter(item => {
+    if (item.separator) return true;
+    if (perms.is_super_admin) return true;
+    const moduleMap = {
+      dashboard:'dashboard', production:'production', planning:'planning',
+      rapportjour:'production', articles:'articles', matieres:'stock',
+      stock:'stock', cession:'bons_cession', clients:'vente',
+      vente:'vente', fournisseurs:'achat', achats:'achat',
+      qhse:'qhse', gmao:'gmao', rh:'rh', kpi:'kpi', ia:'ia',
+      utilisateurs:'utilisateurs', parametres:'parametres',
+    };
+    const mod = moduleMap[item.id];
+    if (!mod) return true;
+    return !perms.permissions || perms.permissions[mod]?.voir !== false;
+  });
 
 function OrdresLivraison() {
   const { user } = useAuth();
