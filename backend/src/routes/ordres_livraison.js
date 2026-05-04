@@ -48,12 +48,27 @@ router.post('/', auth, async (req, res) => {
     if (!lignes || lignes.length === 0)
       return res.status(400).json({ error: 'Au moins une ligne requise' });
 
+    // Récupérer df_id et of_id depuis le BC
+    let df_id = null, of_id = null;
+    if (bc_id) {
+      const { rows: bcRows } = await client.query(
+        'SELECT df_id FROM bons_commande WHERE id=$1', [bc_id]
+      );
+      if (bcRows.length && bcRows[0].df_id) {
+        df_id = bcRows[0].df_id;
+        const { rows: dfRows } = await client.query(
+          'SELECT id FROM ordres_fabrication WHERE df_id=$1 LIMIT 1', [df_id]
+        );
+        if (dfRows.length) of_id = dfRows[0].id;
+      }
+    }
+
     const { rows: ol } = await client.query(`
       INSERT INTO ordres_livraison
-        (bc_id, client_id, date_livraison_prevue, adresse_livraison,
+        (bc_id, df_id, of_id, client_id, date_livraison_prevue, adresse_livraison,
          notes, est_derogatoire, transporteur, demandeur_id, statut)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'brouillon') RETURNING *
-    `, [bc_id||null, client_id||null, date_livraison_prevue||null,
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'brouillon') RETURNING *
+    `, [bc_id||null, df_id, of_id, client_id||null, date_livraison_prevue||null,
         adresse_livraison||null, notes||null, est_derogatoire||false,
         transporteur||null, req.user.id]);
 
