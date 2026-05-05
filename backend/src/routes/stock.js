@@ -274,4 +274,37 @@ router.get('/mouvements', auth, async (req, res) => {
   }
 });
 
+
+// GET /api/stock/liste — liste stock avec article info
+router.get('/liste', auth, async (req, res) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT sa.*, a.code, a.designation, a.type_article, a.famille_id,
+             f.libelle AS famille_libelle, f.code AS famille_code
+      FROM stock_articles sa
+      JOIN articles a ON a.id = sa.article_id
+      LEFT JOIN familles_articles f ON f.id = a.famille_id
+      ORDER BY a.type_article, a.code
+    `);
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET /api/stock/matieres — stock MP uniquement
+router.get('/matieres', auth, async (req, res) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT sa.article_id, sa.qte_disponible, sa.qte_reservee,
+             a.code, a.designation, a.famille_id,
+             f.libelle AS famille_libelle, f.code AS famille_code
+      FROM stock_articles sa
+      JOIN articles a ON a.id = sa.article_id
+      LEFT JOIN familles_articles f ON f.id = a.famille_id
+      WHERE a.type_article = 'matiere_premiere'
+      ORDER BY a.famille_id, a.code
+    `);
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;

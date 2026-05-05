@@ -31,7 +31,8 @@ router.get('/of', auth, async (req, res) => {
       SELECT o.*,
              a.code AS article_code, a.designation AS article_nom,
              a.poids_theorique_kg, a.cadence_theorique_kg_h,
-             a.composition, a.couleur, a.longueur_mm, a.largeur_mm,
+             a.composition, a.composition_familles, a.couleur, a.longueur_mm, a.largeur_mm,
+             o.at3_composition_familles,
              c.nom AS client_nom,
              m.code AS machine_code,
              (SELECT COUNT(*) FROM bobines_production b WHERE b.of_id = o.id) AS nb_bobines,
@@ -62,7 +63,8 @@ router.get('/of/:id', auth, async (req, res) => {
       SELECT o.*,
              a.code AS article_code, a.designation AS article_nom,
              a.poids_theorique_kg, a.cadence_theorique_kg_h,
-             a.composition, a.poids_mandrin_kg, a.couleur,
+             a.composition, a.composition_familles, a.poids_mandrin_kg, a.couleur,
+             o.at3_composition_familles,
              a.longueur_mm, a.largeur_mm, a.hauteur_mm,
              a.tracabilite_type, a.format_lot,
              c.nom AS client_nom, c.telephone AS client_tel,
@@ -108,6 +110,10 @@ router.put('/of/:id/configurer', auth, async (req, res) => {
     if (composition_of && Array.isArray(composition_of) && composition_of.length > 0) {
       params.push(JSON.stringify(composition_of));
       sets.push(`at3_composition_of = $${params.length}`);
+    }
+    if (req.body.at3_composition_familles && Array.isArray(req.body.at3_composition_familles)) {
+      params.push(JSON.stringify(req.body.at3_composition_familles));
+      sets.push(`at3_composition_familles = $${params.length}`);
     }
 
     if (valider) {
