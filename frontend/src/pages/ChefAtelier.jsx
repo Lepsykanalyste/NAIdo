@@ -1603,6 +1603,30 @@ function DetailOF({ detail, machines, onClose, onRefresh, onStatut }) {
 
       {/* Composition matières */}
       <div style={{background:'#f0fdf4',borderRadius:10,padding:14,marginBottom:16,border:'1px solid #bbf7d0'}}>
+        {user?.role==='chef_atelier' && (
+          <div style={{background:'#dbeafe',borderRadius:8,padding:'12px 16px',marginBottom:10,border:'1px solid #93c5fd',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <div>
+              <div style={{fontWeight:700,color:'#1d4ed8',fontSize:13}}>🏭 Composition par famille MP</div>
+              <div style={{fontSize:11,color:'#6b7280',marginTop:2}}>Utilisez le module Flux AT3 pour configurer la composition par famille de matières premières</div>
+            </div>
+            <button onClick={()=>{onClose();}}
+              style={{background:'#1d4ed8',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer',fontWeight:700,fontSize:12}}>
+              → Aller au Flux AT3
+            </button>
+          </div>
+        )}
+        {user?.role==='chef_atelier' && (
+          <div style={{background:'#dbeafe',borderRadius:8,padding:'12px 16px',marginBottom:10,border:'1px solid #93c5fd',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <div>
+              <div style={{fontWeight:700,color:'#1d4ed8',fontSize:13}}>🏭 Composition par famille MP</div>
+              <div style={{fontSize:11,color:'#6b7280',marginTop:2}}>Utilisez le module Flux AT3 pour configurer la composition par famille de matières premières</div>
+            </div>
+            <button onClick={()=>{onClose();}}
+              style={{background:'#1d4ed8',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer',fontWeight:700,fontSize:12}}>
+              → Aller au Flux AT3
+            </button>
+          </div>
+        )}
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
           <div style={{fontWeight:700,fontSize:13,color:'#15803d'}}>
             🧪 Composition matières premières
