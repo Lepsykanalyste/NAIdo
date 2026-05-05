@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/useAuth.jsx';
 import { useNavigate } from 'react-router-dom';
 
 import Atelier3Flux from './Atelier3Flux';
+import DBM_StockAT3 from './DBM_StockAT3';
 import toast from 'react-hot-toast';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
@@ -113,6 +114,8 @@ const MENU = [
   { id:'articles',    label:'Articles (Produits)',  icon:'articles',    color:'#7e22ce' },
   { id:'matieres',    label:'Matières Premières',   icon:'articles',    color:'#1d4ed8' },
   { id:'stock',       label:'Stock',               icon:'stock',       color:'#6d28d9' },
+  { id:'dbm',         label:'DBM — Matières',       icon:'stock',       color:'#92400e' },
+  { id:'stock_at3',   label:'Stock AT3',            icon:'stock',       color:'#15803d' },
   { id:'cession',     label:'Bons de Cession',     icon:'cession',     color:'#4338ca' },
   { id:'ol',          label:'Ordres de Livraison', icon:'cession',     color:'#15803d' },
   { id:'separator2b', label:'VENTE & ACHAT',        separator:true },
@@ -143,7 +146,7 @@ const MENU = [
 const MENU_PAR_ROLE = {
   super_admin:   null, // tout
   directeur:     null, // tout
-  chef_atelier:  ['dashboard','separator1','at3flux','of','production','planning','separator2','cession','separator3','gmao','alertes'],
+  chef_atelier:  ['dashboard','separator1','at3flux','of','production','planning','separator2','dbm','stock_at3','cession','separator3','gmao','alertes'],
   regleur:       ['dashboard','separator1','of','production','planning','alertes'],
   commercial:    ['dashboard','separator1','devis','bc','df','ol','separator2b','clients','vente','alertes'],
   operateur:     ['dashboard','separator1','of','production','alertes'],
@@ -153,6 +156,7 @@ const MENU_PAR_ROLE = {
   operateur_dec: ['dashboard','separator1','of','production','cession','alertes'],
   magasinier:    ['dashboard','separator2','stock','cession','alertes'],
   magasinier_at3:['dashboard','separator2','stock','cession','alertes'],
+  magasinier_mp: ['dashboard','dbm','alertes'],
   magasinier_central:['dashboard','separator2','stock','cession','separator2b','vente','alertes'],
   qualite:       ['dashboard','separator1','of','production','separator3','qhse','alertes'],
   qhse:          ['dashboard','separator3','qhse','gmao','alertes'],
@@ -1468,6 +1472,7 @@ function DemandesFabrication() {
 // COMPOSANT DETAIL OF (avec composition lots)
 // ══════════════════════════════════════════════════════════════
 function DetailOF({ detail, machines, onClose, onRefresh, onStatut }) {
+  const { user } = useAuth();
   const [lots, setLots] = useState([]);
   const [lotsDispo, setLotsDispo] = useState([]);
   const [mpArticles, setMpArticles] = useState([]);
@@ -1615,18 +1620,7 @@ function DetailOF({ detail, machines, onClose, onRefresh, onStatut }) {
             </button>
           </div>
         )}
-        {user?.role==='chef_atelier' && (
-          <div style={{background:'#dbeafe',borderRadius:8,padding:'12px 16px',marginBottom:10,border:'1px solid #93c5fd',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-            <div>
-              <div style={{fontWeight:700,color:'#1d4ed8',fontSize:13}}>🏭 Composition par famille MP</div>
-              <div style={{fontSize:11,color:'#6b7280',marginTop:2}}>Utilisez le module Flux AT3 pour configurer la composition par famille de matières premières</div>
-            </div>
-            <button onClick={()=>{onClose();}}
-              style={{background:'#1d4ed8',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer',fontWeight:700,fontSize:12}}>
-              → Aller au Flux AT3
-            </button>
-          </div>
-        )}
+        
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
           <div style={{fontWeight:700,fontSize:13,color:'#15803d'}}>
             🧪 Composition matières premières
@@ -7424,6 +7418,8 @@ function OrdresLivraison() {
     import:      <ImportSage />,
     alertes:     <Alertes />,
     at3flux:     <Atelier3Flux />,
+    dbm:         <DBM_StockAT3 />,
+    stock_at3:   <DBM_StockAT3 />,
     referentiels:<Referentiels />,
   };
 

@@ -83,6 +83,7 @@ app.use((err, req, res, next) => {
 });
 
 app.use('/api/at3', require('./routes/at3_flux'));
+app.use('/api/dbm', require('./routes/dbm'));
 app.listen(PORT, () => console.log(`NAIdo v3 démarré sur le port ${PORT}`));
 module.exports = app;
 
