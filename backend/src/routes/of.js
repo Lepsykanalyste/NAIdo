@@ -14,11 +14,13 @@ router.get('/', auth, async (req, res) => {
              a.cadence_theorique_kg_h AS cadence_heure,
              a.temps_reglage_min, a.poids_theorique_kg,
              a.longueur_mm, a.largeur_mm, a.couleur,
-             m.code AS machine_code, m.nom AS machine_nom, m.type AS machine_type
+             m.code AS machine_code, m.nom AS machine_nom, m.type AS machine_type,
+             at.libelle AS atelier_libelle, at.code AS atelier_code
       FROM ordres_fabrication o
       LEFT JOIN clients_complet c ON c.id = o.client_id
       LEFT JOIN articles a ON a.id = o.article_id
       LEFT JOIN machines m ON m.id = o.machine_id
+      LEFT JOIN ateliers at ON at.id::text = o.atelier_id::text
       WHERE 1=1
     `;
     const params = [];
@@ -97,6 +99,7 @@ router.get('/:id', auth, async (req, res) => {
       LEFT JOIN clients_complet c ON c.id = o.client_id
       LEFT JOIN articles a ON a.id = o.article_id
       LEFT JOIN machines m ON m.id = o.machine_id
+      LEFT JOIN ateliers at ON at.id::text = o.atelier_id::text
       WHERE o.id = $1
     `, [req.params.id]);
     if (!rows.length) return res.status(404).json({ error: 'OF introuvable' });

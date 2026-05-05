@@ -24,14 +24,14 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Identifiants incorrects' });
     const token = jwt.sign(
       { id: user.id, login: user.login, role: user.role_nom,
-        nom: user.nom, prenom: user.prenom },
+        nom: user.nom, prenom: user.prenom, atelier_id: user.atelier_id },
       process.env.JWT_SECRET,
       { expiresIn: process.env.JWT_EXPIRES_IN || '12h' }
     );
     res.json({
       token,
       user: { id: user.id, login: user.login, nom: user.nom,
-              prenom: user.prenom, role: user.role_nom }
+              prenom: user.prenom, role: user.role_nom, atelier_id: user.atelier_id }
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -52,12 +52,12 @@ router.post('/login-badge', async (req, res) => {
     const user = rows[0];
     const token = jwt.sign(
       { id: user.id, login: user.login, role: user.role_nom,
-        nom: user.nom, prenom: user.prenom },
+        nom: user.nom, prenom: user.prenom, atelier_id: user.atelier_id },
       process.env.JWT_SECRET,
       { expiresIn: '12h' }
     );
     res.json({ token, user: { id: user.id, login: user.login, nom: user.nom,
-                               prenom: user.prenom, role: user.role_nom } });
+                               prenom: user.prenom, role: user.role_nom, atelier_id: user.atelier_id } });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

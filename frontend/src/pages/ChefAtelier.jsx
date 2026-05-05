@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useAuth } from '../hooks/useAuth.jsx';
 import { useNavigate } from 'react-router-dom';
+
+import Atelier3Flux from './Atelier3Flux';
 import toast from 'react-hot-toast';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
@@ -141,7 +143,7 @@ const MENU = [
 const MENU_PAR_ROLE = {
   super_admin:   null, // tout
   directeur:     null, // tout
-  chef_atelier:  ['dashboard','separator1','df','of','production','planning','rapportjour','separator2','articles','matieres','stock','cession','separator3','qhse','gmao','separator4','kpi','ia','alertes'],
+  chef_atelier:  ['dashboard','separator1','at3flux','of','production','planning','separator2','cession','separator3','gmao','alertes'],
   regleur:       ['dashboard','separator1','of','production','planning','alertes'],
   commercial:    ['dashboard','separator1','devis','bc','df','ol','separator2b','clients','vente','alertes'],
   operateur:     ['dashboard','separator1','of','production','alertes'],
@@ -1870,9 +1872,7 @@ function OrdresFabrication() {
             {['planifie','lance','en_cours','termine','annule'].map(s=><option key={s} value={s}>{labelStatut(s)}</option>)}
           </select>
         </div>
-        <button onClick={()=>setShowForm(!showForm)} style={{background:'#0369a1',color:'#fff',border:'none',borderRadius:8,padding:'9px 18px',cursor:'pointer',fontWeight:700,fontSize:13}}>
-          {showForm?'✕ Annuler':'+ Nouvel OF'}
-        </button>
+        {user?.role!=='chef_atelier' && <button onClick={()=>setShowForm(s=>!s)} style={{background:'#0369a1',color:'#fff',border:'none',borderRadius:8,padding:'9px 18px',cursor:'pointer',fontWeight:700,fontSize:13}}>{showForm?'✕ Annuler':'+ Nouvel OF'}</button>}
       </div>
 
       {/* Formulaire création */}
@@ -1998,7 +1998,7 @@ function OrdresFabrication() {
                 <td style={{padding:'9px 12px'}}>{of.article_nom||'—'}<br/><span style={{fontSize:10,color:'#6b7280'}}>{of.article_code}</span></td>
                 <td style={{padding:'9px 12px',fontSize:12}}>{of.client_nom||'—'}</td>
                 <td style={{padding:'9px 12px',fontSize:12}}>{of.machine_nom||of.machine_code||'—'}</td>
-                <td style={{padding:'9px 12px',fontSize:12}}>{of.atelier_id||'—'}</td>
+                <td style={{padding:'9px 12px',fontSize:12}}>{of.atelier_nom||of.atelier_libelle||of.atelier_id||'—'}</td>
                 <td style={{padding:'9px 12px',fontWeight:600}}>{parseFloat(of.quantite_cible||0).toFixed(0)} kg</td>
                 <td style={{padding:'9px 12px',fontSize:12}}>{of.temps_prevu_min?of.temps_prevu_min+'min':'—'}</td>
                 <td style={{padding:'9px 12px',fontSize:12}}>{of.date_livraison_prevue?new Date(of.date_livraison_prevue).toLocaleDateString('fr-FR'):'—'}</td>
@@ -2019,9 +2019,12 @@ onClick={()=>window.open(`/api/of/${of.id}/pdf`,'_blank')}
                   </button>
                 </td>
                 <td style={{padding:'9px 12px'}} onClick={e=>e.stopPropagation()}>
-                  {user?.role!=='directeur' && of.statut==='planifie' && <button onClick={()=>changerStatut(of.id,'lance')} style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>▶</button>}
-                  {user?.role!=='directeur' && of.statut==='lance' && <button onClick={()=>changerStatut(of.id,'en_cours')} style={{background:'#d97706',color:'#fff',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>⚙</button>}
-                  {user?.role!=='directeur' && of.statut==='en_cours' && <button onClick={()=>changerStatut(of.id,'termine')} style={{background:'#15803d',color:'#fff',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>✓</button>}
+                  {user?.role==='chef_atelier' && of.statut==='planifie' && <button onClick={()=>changerStatut(of.id,'lance')} style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:11,fontWeight:700}} title='Lancer cet OF en production'>▶ Lancer</button>}
+                  {user?.role==='chef_atelier' && of.statut==='lance' && <button onClick={()=>changerStatut(of.id,'en_cours')} style={{background:'#d97706',color:'#fff',border:'none',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:11,fontWeight:700}} title='Démarrer la production'>⚙ Démarrer</button>}
+                  {user?.role==='chef_atelier' && of.statut==='en_cours' && <button onClick={()=>changerStatut(of.id,'termine')} style={{background:'#15803d',color:'#fff',border:'none',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:11,fontWeight:700}} title='Marquer comme terminé'>✓ Terminer</button>}
+                  {user?.role!=='chef_atelier' && user?.role!=='directeur' && of.statut==='planifie' && <button onClick={()=>changerStatut(of.id,'lance')} style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>▶ Lancer</button>}
+                  {user?.role!=='chef_atelier' && user?.role!=='directeur' && of.statut==='lance' && <button onClick={()=>changerStatut(of.id,'en_cours')} style={{background:'#d97706',color:'#fff',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>⚙ Démarrer</button>}
+                  {user?.role!=='chef_atelier' && user?.role!=='directeur' && of.statut==='en_cours' && <button onClick={()=>changerStatut(of.id,'termine')} style={{background:'#15803d',color:'#fff',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>✓ Terminer</button>}
                   {user?.role==='directeur' && <span style={{fontSize:11,color:'#9ca3af'}}>—</span>}
                 </td>
               </tr>
@@ -2057,7 +2060,7 @@ function DashboardCommercial() {
         {[
           {icon:'📝',label:'DF en attente',value:dfEnAttente,color:'#d97706',bg:'#fef3c7'},
           {icon:'✅',label:'DF validées → OF',value:dfValidees,color:'#15803d',bg:'#dcfce7'},
-          {icon:'📦',label:'Valeur stock',value:stock.valeur_totale?parseFloat(stock.valeur_totale).toLocaleString('fr-FR')+' FCFA':'—',color:'#7c3aed',bg:'#f5f3ff'},
+          {icon:'📦',label:'Valeur stock',value:user?.role==='chef_atelier'?'—':stock.valeur_totale?parseFloat(stock.valeur_totale).toLocaleString('fr-FR')+' FCFA':'—',color:'#7c3aed',bg:'#f5f3ff'},
         ].map(k=>(
           <div key={k.label} style={{background:k.bg,borderRadius:12,padding:'16px'}}>
             <div style={{fontSize:10,color:'#6b7280',marginBottom:4}}>{k.icon} {k.label}</div>
@@ -2098,6 +2101,57 @@ function DashboardCommercial() {
   );
 }
 
+function DashboardAT3() {
+  const { user } = useAuth();
+  const [zones, setZones] = useState([]);
+  const [flux, setFlux] = useState([]);
+  const [trs, setTrs] = useState([]);
+  const [quarantaine, setQuar] = useState([]);
+  const [stock, setStock] = useState([]);
+  const [cessions, setCessions] = useState([]);
+  const [pannes, setPannes] = useState({});
+  const charger = async () => {
+    try {
+      const [d1,d2,d3,d4,d5,d6] = await Promise.all([
+        axios.get(`${API}/at3/dashboard`).catch(()=>({data:{zones:[],flux:[]}})),
+        axios.get(`${API}/kpi/trs`).catch(()=>({data:[]})),
+        axios.get(`${API}/at3/quarantaine`).catch(()=>({data:[]})),
+        axios.get(`${API}/at3/stock`).catch(()=>({data:[]})),
+        axios.get(`${API}/at3/cessions`).catch(()=>({data:[]})),
+        axios.get(`${API}/gmao/dashboard`).catch(()=>({data:{}})),
+      ]);
+      setZones(d1.data?.zones||[]); setFlux(d1.data?.flux||[]);
+      setTrs(d2.data||[]); setQuar(d3.data||[]);
+      setStock(d4.data||[]); setCessions(d5.data||[]);
+      setPannes(d6.data||{});
+    } catch(e){console.error(e);}
+  };
+  useEffect(()=>{ charger(); const t=setInterval(charger,30000); return()=>clearInterval(t); },[]);
+  const trsColor=v=>v>=85?"#15803d":v>=70?"#d97706":"#dc2626";
+  const nbQuar=quarantaine.length;
+  const nbStock=stock.length;
+  const poidsStock=stock.reduce((s,p)=>s+parseFloat(p.poids_sacs_kg||0),0);
+  const nbPannes=pannes.equipements_en_panne||0;
+  const cessPending=cessions.filter(c=>c.statut==="soumis").length;
+  const STATUT_OF={nouveau:{bg:"#f3f4f6",tx:"#374151",label:"Nouveau"},composition:{bg:"#dbeafe",tx:"#1d4ed8",label:"Config."},extrusion:{bg:"#fef3c7",tx:"#92400e",label:"Extrusion"},quarantaine:{bg:"#fef9c3",tx:"#854d0e",label:"Quarantaine"},impression:{bg:"#f3e8ff",tx:"#6d28d9",label:"Impression"},emballage:{bg:"#ecfdf5",tx:"#065f46",label:"Emballage"},stock_at3:{bg:"#dcfce7",tx:"#15803d",label:"Stock AT3"},cede:{bg:"#e0f2fe",tx:"#0369a1",label:"Cédé ✓"}};
+  const ZONE_CFG={EXTR:{icon:"⚙",label:"Extrusion",bg:"#dbeafe",tx:"#1d4ed8"},QUAR:{icon:"⏳",label:"Quarantaine",bg:"#fef3c7",tx:"#92400e"},IMPR:{icon:"🖨",label:"Impression",bg:"#f3e8ff",tx:"#6d28d9"},EMBL:{icon:"📦",label:"Emballage",bg:"#ecfdf5",tx:"#065f46"},STKAT3:{icon:"🏗",label:"Stock AT3",bg:"#dcfce7",tx:"#15803d"}};
+  const machinesEX=Array.from({length:9},(_,i)=>{const code=`EX${String(i+1).padStart(2,"0")}`;const m=trs.find(t=>(t.machine_code||"").includes(code));return{code,v:m?parseFloat(m.trs||0):null};});
+  const machinesSOU=Array.from({length:5},(_,i)=>{const code=`SOU${String(i+1).padStart(2,"0")}`;const m=trs.find(t=>(t.machine_code||"").includes(code));return{code,v:m?parseFloat(m.trs||0):null};});
+  return (<div>
+    <div style={{background:"linear-gradient(135deg,#14532d,#166534)",borderRadius:14,padding:"16px 20px",marginBottom:16,color:"#fff",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+      <div><div style={{fontWeight:800,fontSize:17}}>🏭 Atelier 3 — Tableau de Bord</div><div style={{fontSize:12,opacity:0.8}}>{user?.prenom} {user?.nom} · {new Date().toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"})}</div></div>
+      <button onClick={charger} style={{background:"rgba(255,255,255,0.2)",border:"none",color:"#fff",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:12}}>🔄</button>
+    </div>
+    {(nbQuar>0||nbPannes>0||cessPending>0)&&(<div style={{background:"#fff",borderRadius:12,border:"2px solid #fecdd3",padding:"12px 16px",marginBottom:16}}><div style={{fontWeight:700,color:"#dc2626",marginBottom:8,fontSize:13}}>🚨 Actions requises</div><div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{nbQuar>0&&<div style={{background:"#fef3c7",borderRadius:8,padding:"8px 14px",fontSize:12,fontWeight:700,color:"#92400e"}}>⏳ {nbQuar} bobine(s) en quarantaine à valider</div>}{nbPannes>0&&<div style={{background:"#fee2e2",borderRadius:8,padding:"8px 14px",fontSize:12,fontWeight:700,color:"#dc2626"}}>🔧 {nbPannes} machine(s) en panne</div>}{cessPending>0&&<div style={{background:"#dbeafe",borderRadius:8,padding:"8px 14px",fontSize:12,fontWeight:700,color:"#1d4ed8"}}>📤 {cessPending} cession(s) en attente</div>}</div></div>)}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:8,marginBottom:16}}>{Object.entries(ZONE_CFG).map(([code,cfg])=>{const z=zones.find(z=>z.code===code)||{};return(<div key={code} style={{background:cfg.bg,borderRadius:12,padding:"12px 10px",textAlign:"center"}}><div style={{fontSize:20}}>{cfg.icon}</div><div style={{fontSize:10,fontWeight:700,color:cfg.tx,margin:"4px 0"}}>{cfg.label}</div><div style={{fontSize:26,fontWeight:800,color:cfg.tx}}>{z.nb_bobines||0}</div><div style={{fontSize:10,color:cfg.tx}}>bobines</div>{z.poids_kg>0&&<div style={{fontSize:11,color:cfg.tx,fontWeight:600}}>{parseFloat(z.poids_kg).toFixed(1)} kg</div>}</div>);})}</div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
+      <div style={{background:"#fff",borderRadius:12,border:"1px solid #e5e7eb",padding:14}}><div style={{fontWeight:700,color:"#1d4ed8",marginBottom:10,fontSize:13}}>⚙ Extrudeuses (9)</div><div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6}}>{machinesEX.map(m=>{const c=m.v===null?"#9ca3af":trsColor(m.v);return(<div key={m.code} style={{background:m.v===null?"#f9fafb":`${c}15`,border:`2px solid ${c}`,borderRadius:8,padding:"8px 4px",textAlign:"center"}}><div style={{fontSize:10,fontWeight:700}}>{m.code}</div><div style={{fontSize:18,fontWeight:800,color:c}}>{m.v!==null?`${m.v.toFixed(0)}%`:"—"}</div></div>);})}</div></div>
+      <div style={{background:"#fff",borderRadius:12,border:"1px solid #e5e7eb",padding:14}}><div style={{fontWeight:700,color:"#7c3aed",marginBottom:10,fontSize:13}}>🔥 Soudeuses (5)</div><div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:6}}>{machinesSOU.map(m=>{const c=m.v===null?"#9ca3af":trsColor(m.v);return(<div key={m.code} style={{background:m.v===null?"#f9fafb":`${c}15`,border:`2px solid ${c}`,borderRadius:8,padding:"10px 4px",textAlign:"center"}}><div style={{fontSize:10,fontWeight:700}}>{m.code}</div><div style={{fontSize:20,fontWeight:800,color:c}}>{m.v!==null?`${m.v.toFixed(0)}%`:"—"}</div></div>);})}</div><div style={{marginTop:12,background:"#f0fdf4",borderRadius:10,padding:"10px 12px"}}><div style={{fontWeight:700,color:"#15803d",fontSize:12,marginBottom:6}}>🏗 Stock AT3</div><div style={{display:"flex",justifyContent:"space-between"}}><div style={{textAlign:"center"}}><div style={{fontSize:22,fontWeight:800,color:"#15803d"}}>{nbStock}</div><div style={{fontSize:10,color:"#6b7280"}}>palettes</div></div><div style={{textAlign:"center"}}><div style={{fontSize:22,fontWeight:800,color:"#15803d"}}>{poidsStock.toFixed(0)}</div><div style={{fontSize:10,color:"#6b7280"}}>kg</div></div><div style={{textAlign:"center"}}><div style={{fontSize:22,fontWeight:800,color:"#15803d"}}>{stock.reduce((s,p)=>s+(p.nb_sacs||0),0)}</div><div style={{fontSize:10,color:"#6b7280"}}>sacs</div></div></div></div></div>
+    </div>
+    <div style={{background:"#fff",borderRadius:12,border:"1px solid #e5e7eb",padding:16,marginBottom:16}}><div style={{fontWeight:700,color:"#14532d",marginBottom:12,fontSize:13}}>📋 OF en cours</div>{flux.length===0?(<div style={{textAlign:"center",color:"#9ca3af",padding:20}}>Aucun OF en cours</div>):(flux.map(f=>{const sc=STATUT_OF[f.at3_statut_zone]||STATUT_OF["nouveau"];const pct=f.at3_poids_cible_kg>0?Math.min(100,Math.round((f.poids_produit_kg/f.at3_poids_cible_kg)*100)):0;return(<div key={f.of_id} style={{borderBottom:"1px solid #f0fdf4",padding:"10px 0",display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8}}><div><div style={{display:"flex",gap:8,alignItems:"center",marginBottom:4}}><span style={{fontWeight:800,color:"#14532d"}}>{f.numero_of}</span><span style={{background:sc.bg,color:sc.tx,padding:"2px 8px",borderRadius:20,fontSize:11,fontWeight:700}}>{sc.label}</span></div><div style={{fontSize:12,color:"#374151"}}>{f.article_code} — {f.article_nom}</div>{f.at3_poids_cible_kg>0&&(<div style={{marginTop:4}}><div style={{fontSize:10,color:"#6b7280"}}>{parseFloat(f.poids_produit_kg||0).toFixed(1)} / {f.at3_poids_cible_kg} kg — {pct}%</div><div style={{background:"#e5e7eb",borderRadius:10,height:5,overflow:"hidden",width:180}}><div style={{background:pct>=100?"#15803d":"#1d4ed8",width:`${pct}%`,height:"100%",borderRadius:10}}/></div></div>)}</div><div style={{fontSize:12,display:"flex",gap:12}}><span>⚙ {f.nb_bobines_total||0}</span><span>📦 {f.nb_palettes||0}</span></div></div>);}))}</div>
+    {nbQuar>0&&(<div style={{background:"#fffbeb",borderRadius:12,border:"2px solid #fcd34d",padding:16}}><div style={{fontWeight:700,color:"#92400e",marginBottom:10,fontSize:13}}>⏳ Quarantaine — validation requise ({nbQuar})</div><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:8}}>{quarantaine.slice(0,6).map(b=>{const mins=Math.round(b.minutes_en_quarantaine||0);return(<div key={b.id} style={{background:"#fff",borderRadius:8,padding:"10px 12px",border:`1px solid ${mins>120?"#fca5a5":"#fcd34d"}`}}><div style={{fontWeight:700,fontSize:11,fontFamily:"monospace",color:"#92400e"}}>{b.numero_bobine}</div><div style={{fontSize:11,color:"#6b7280"}}>{b.numero_of} | {b.machine_code}</div><div style={{display:"flex",justifyContent:"space-between",marginTop:4}}><span style={{fontSize:12,fontWeight:700,color:"#15803d"}}>{parseFloat(b.poids_net_kg).toFixed(3)} kg</span><span style={{fontSize:10,color:mins>120?"#dc2626":"#9ca3af"}}>{mins>60?`${Math.floor(mins/60)}h${mins%60}m`:`${mins}min`}</span></div></div>);})}{nbQuar>6&&<div style={{background:"#fef3c7",borderRadius:8,padding:"10px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:"#92400e"}}>+{nbQuar-6} autres</div>}</div></div>)}
+  </div>);
+}
 function Dashboard() {
   const { user } = useAuth();
   const [data, setData] = useState({ sessions_actives:0, trs_moyen:0, poids_net_total:0, poids_dechets_total:0, nb_tickets:0, arrets_actifs:0, alertes_rebus:[] });
@@ -2233,7 +2287,7 @@ function Dashboard() {
               ['👥 Effectif actif', dashGeneral.effectif||'—', '#0891b2','#e0f2fe'],
               ['🏭 Machines en panne', dashGeneral.equipements_en_panne||0, dashGeneral.equipements_en_panne>0?'#dc2626':'#15803d', dashGeneral.equipements_en_panne>0?'#fee2e2':'#dcfce7'],
               ['⚠ NC ouvertes', dashGeneral.nc_ouvertes||0, dashGeneral.nc_ouvertes>0?'#d97706':'#15803d', dashGeneral.nc_ouvertes>0?'#fef3c7':'#dcfce7'],
-              ['📦 Valeur stock', dashGeneral.valeur_stock?`${parseFloat(dashGeneral.valeur_stock).toLocaleString('fr-FR')} FCFA`:'—', '#6d28d9','#f5f3ff'],
+                ['📦 Valeur stock', user?.role==='chef_atelier' ? '—' : (dashGeneral.valeur_stock ? `${parseFloat(dashGeneral.valeur_stock).toLocaleString('fr-FR')} FCFA` : '—'), '#6d28d9','#f5f3ff'],
             ].map(([label,value,color,bg])=>(
               <div key={label} style={{background:bg,borderRadius:12,padding:'12px 14px'}}>
                 <div style={{fontSize:10,color:'#6b7280',marginBottom:4}}>{label}</div>
@@ -7324,7 +7378,7 @@ function OrdresLivraison() {
     df:          <DemandesFabrication />,
     ol:          <OrdresLivraison />,
     of:          <OrdresFabrication />,
-    dashboard:   <Dashboard />,
+    dashboard:   user?.role === 'chef_atelier' ? <DashboardAT3 /> : <Dashboard />,
     production:  <SuiviProduction />,
     planning:    <PlanningMachines />,
     rapportjour: <RapportsJournaliers />,
@@ -7345,6 +7399,7 @@ function OrdresLivraison() {
     users:       <Utilisateurs />,
     import:      <ImportSage />,
     alertes:     <Alertes />,
+    at3flux:     <Atelier3Flux />,
     referentiels:<Referentiels />,
   };
 

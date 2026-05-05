@@ -82,6 +82,7 @@ app.use((err, req, res, next) => {
   res.status(err.status || 500).json({ error: err.message || 'Erreur serveur' });
 });
 
+app.use('/api/at3', require('./routes/at3_flux'));
 app.listen(PORT, () => console.log(`NAIdo v3 démarré sur le port ${PORT}`));
 module.exports = app;
 

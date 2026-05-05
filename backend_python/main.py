@@ -2727,6 +2727,52 @@ async def df_pdf(df_id: str, token: str = ""):
 
 
 # ── PDF ORDRE DE FABRICATION ───────────────────────────────────
+def _compo_html(composition_raw):
+    """Transforme la composition JSON en HTML lisible pour le PDF OF"""
+    if not composition_raw:
+        return ''
+    import json
+    try:
+        if isinstance(composition_raw, str):
+            compo = json.loads(composition_raw)
+        else:
+            compo = composition_raw
+        if not compo or not isinstance(compo, list):
+            return ''
+        rows = ''
+        total_pct = 0
+        for i, c in enumerate(compo):
+            bg = '#f9fafb' if i % 2 == 0 else '#fff'
+            pct = float(c.get('pct') or 0)
+            total_pct += pct
+            rows += f"""<tr style="background:{bg};">
+                <td style="padding:4px 8px;font-weight:700;color:#92400e;">{c.get('code','—')}</td>
+                <td style="padding:4px 8px;">{c.get('designation','—')}</td>
+                <td style="padding:4px 8px;text-align:center;font-weight:700;">{pct:.1f}%</td>
+            </tr>"""
+        return f"""
+        <div style="margin-top:8px;">
+          <div style="background:#fef3c7;padding:4px 8px;font-size:7pt;font-weight:700;text-transform:uppercase;
+               color:#92400e;border:1px solid #fde68a;border-bottom:none;border-radius:4px 4px 0 0;">
+            🧪 Composition matières premières
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:8pt;border:1px solid #fde68a;">
+            <thead><tr style="background:#92400e;color:#fff;">
+              <th style="padding:4px 8px;text-align:left;">Code MP</th>
+              <th style="padding:4px 8px;text-align:left;">Désignation</th>
+              <th style="padding:4px 8px;text-align:center;">%</th>
+            </tr></thead>
+            <tbody>{rows}</tbody>
+            <tfoot><tr style="background:#fef3c7;font-weight:700;">
+              <td colspan="2" style="padding:4px 8px;color:#92400e;">TOTAL</td>
+              <td style="padding:4px 8px;text-align:center;color:#92400e;">{total_pct:.1f}%</td>
+            </tr></tfoot>
+          </table>
+        </div>"""
+    except Exception:
+        return ''
+
+
 @app.get("/api/of/{of_id}/pdf")
 async def of_pdf(of_id: str):
     try:
@@ -2738,14 +2784,17 @@ async def of_pdf(of_id: str):
                 SELECT o.*,
                        c.raison_sociale AS client_nom, c.telephone,
                        a.designation AS article_nom, a.code AS article_code,
-                       a.longueur_mm, a.largeur_mm, a.composition,
+                       a.longueur_mm, a.largeur_mm,
+                       COALESCE(o.at3_composition_of, a.composition, '[]'::jsonb) AS composition,
                        m.code AS machine_code, m.nom AS machine_nom,
-                       u.nom||' '||u.prenom AS chef_nom
+                       u.nom||' '||u.prenom AS chef_nom,
+                       at.libelle AS atelier_libelle
                 FROM ordres_fabrication o
                 LEFT JOIN clients_complet c ON c.id=o.client_id
                 LEFT JOIN articles a ON a.id=o.article_id
                 LEFT JOIN machines m ON m.id=o.machine_id
                 LEFT JOIN utilisateurs u ON u.login='admin'
+                LEFT JOIN ateliers at ON at.id::text = o.atelier_id::text
                 WHERE o.id=$1
             """, of_id)
             lots = await conn.fetch("""
@@ -2870,7 +2919,7 @@ async def of_pdf(of_id: str):
       <div class="row"><span class="lbl">Code</span><span class="val">{d['article_code'] or '—'}</span></div>
       <div class="row"><span class="lbl">Désignation</span><span class="val">{d['article_nom'] or '—'}</span></div>
       {f'<div class="row"><span class="lbl">Dimensions</span><span class="val">{d["longueur_mm"]}x{d["largeur_mm"]} mm</span></div>' if d.get('longueur_mm') else ''}
-      {f'<div class="row"><span class="lbl">Composition</span><span class="val" style="font-size:7pt;">{d["composition"]}</span></div>' if d.get('composition') else ''}
+      {_compo_html(d.get('composition'))}
     </div>
   </div>
   <div class="sec">
@@ -2887,7 +2936,7 @@ async def of_pdf(of_id: str):
   <div class="sec">
     <div class="sec-h">Production</div>
     <div class="sec-b">
-      <div class="row"><span class="lbl">Atelier</span><span class="val">{d.get('atelier_id') or '—'}</span></div>
+      <div class="row"><span class="lbl">Atelier</span><span class="val">{d.get('atelier_libelle') or d.get('atelier_id') or '—'}</span></div>
       <div class="row"><span class="lbl">Machine</span><span class="val">{d.get('machine_code') or '—'} {d.get('machine_nom') or ''}</span></div>
     </div>
   </div>
