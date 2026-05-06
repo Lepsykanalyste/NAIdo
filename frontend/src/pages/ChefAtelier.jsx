@@ -1762,7 +1762,7 @@ function DetailOF({ detail, machines, onClose, onRefresh, onStatut, setOngletAct
 
         {/* Liste lots */}
         {lots.length===0 ? (
-          <div style={{display:user?.role==='chef_atelier'?'none':'block',color:'#6b7280',fontSize:12,fontStyle:'italic'}}>Aucune matière saisie — la production doit sélectionner les lots</div>
+          <div style={{display:user?.role==='chef_atelier'?'none':'block',color:'#6b7280',fontSize:12,fontStyle:'italic'}}>Aucune matière saisie</div>
         ) : (
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
             <thead><tr style={{background:'#dcfce7'}}>

@@ -438,7 +438,7 @@ export function CompositionOF({ detail, configOf, setConfigOf, onSaved }) {
                 <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12, marginBottom:10 }}>
                   <thead>
                     <tr style={{ background:clr.light }}>
-                      {['MP sélectionnée','Stock AT3','% formule','Quantité (kg)',''].map(h=>(
+                      {['MP sélectionnée','Stock AT3','%','Quantité (kg)',''].map(h=>(
                         <th key={h} style={{ padding:'5px 8px', textAlign:'left', fontSize:10, fontWeight:600, color:clr.tx }}>{h}</th>
                       ))}
                     </tr>
