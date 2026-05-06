@@ -2634,7 +2634,7 @@ async def df_pdf(df_id: str, token: str = ""):
         etoiles = '⭐' * (d.get('priorite') or 1)
         
         qr_text = f"NAI DF\nN: {d['numero_df']}\nARTICLE: {d['article_code']} {d['article_nom']}\nQTE: {d['quantite_demandee']} kg\nCLIENT: {d['client_nom'] or '—'}\nSTATUT: {d['statut']}\nOF: {d.get('numero_of') or '—'}"
-        pdf_url = f"http://100.85.252.109:8095/api/df/{df_id}/pdf"
+        pdf_url = f"{os.environ.get('APP_BASE_URL','http://100.85.252.109:8095')}/api/df/{df_id}/view"
         qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=120x120&data={pdf_url.replace(':','%3A').replace('/','%2F')}&color=7c3aed"
         
         html_content = f"""<!DOCTYPE html>
@@ -2725,6 +2725,24 @@ async def df_pdf(df_id: str, token: str = ""):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
+
+@app.get("/api/df/{df_id}/view")
+async def df_view(df_id: str):
+    from fastapi.responses import HTMLResponse
+    pdf_url = f"{os.environ.get('APP_BASE_URL','http://100.85.252.109:8095')}/api/df/{df_id}/pdf"
+    html = f"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DF {df_id}</title>
+<style>*{{margin:0;padding:0;box-sizing:border-box;}}body{{background:#1f2937;display:flex;flex-direction:column;height:100vh;}}
+.bar{{background:#7c3aed;color:#fff;padding:12px 16px;font-family:Arial;font-size:14px;font-weight:700;display:flex;justify-content:space-between;align-items:center;}}
+a{{color:#fff;font-size:12px;background:rgba(255,255,255,0.2);padding:6px 12px;border-radius:6px;text-decoration:none;}}
+iframe{{flex:1;width:100%;border:none;}}</style></head>
+<body>
+<div class="bar"><span>📄 Demande de Fabrication</span><a href="{pdf_url}" download>⬇ Télécharger</a></div>
+<iframe src="{pdf_url}"></iframe>
+</body></html>"""
+    return HTMLResponse(html)
 
 # ── PDF ORDRE DE FABRICATION ───────────────────────────────────
 def _compo_html(composition_raw):
