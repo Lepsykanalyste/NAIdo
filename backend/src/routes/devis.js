@@ -69,8 +69,11 @@ router.post('/', auth, async (req, res) => {
           quantite_kg, prix_unitaire_ht, remise_pct, taux_tva,
           montant_ht, montant_tva, montant_ttc, ordre)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+      const qte_kg = parseFloat(l.quantite_kg||0) > 0 && parseFloat(l.quantite_kg||0) !== parseFloat(l.quantite_pieces||0)
+          ? parseFloat(l.quantite_kg||0)
+          : parseInt(l.quantite_pieces||0) * parseFloat(l.poids_piece_kg||0);
       `, [dv[0].id, l.article_id||null, l.designation||'', parseInt(l.quantite_pieces||0),
-          qte, pu_ht, rem, tva, ht, tva_amt, ttc, i]);
+          qte_kg, pu_ht, rem, tva, ht, tva_amt, ttc, i]);
     }
 
     // Mise à jour totaux
