@@ -1804,7 +1804,7 @@ function DetailOF({ detail, machines, onClose, onRefresh, onStatut, setOngletAct
         {detail.statut==='en_cours' && <button onClick={()=>{onStatut(detail.id,'pause');onClose();}} style={{background:'#6b7280',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer',fontSize:13,fontWeight:700}}>⏸ Pause</button>}
         {detail.statut==='pause' && <button onClick={()=>{onStatut(detail.id,'en_cours');onClose();}} style={{background:'#d97706',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer',fontSize:13,fontWeight:700}}>▶ Reprendre</button>}
         {detail.statut==='en_cours' && <button onClick={()=>{onStatut(detail.id,'termine');onClose();}} style={{background:'#15803d',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer',fontSize:13,fontWeight:700}}>✓ Terminer</button>}
-        {!['annule','termine'].includes(detail.statut) && <button onClick={()=>{onStatut(detail.id,'annule');onClose();}} style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer',fontSize:13}}>✕ Annuler</button>}
+        {!['annule','termine'].includes(detail.statut) && user?.role!=='chef_atelier' && <button onClick={()=>{onStatut(detail.id,'annule');onClose();}} style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer',fontSize:13}}>✕ Annuler</button>}
 
       </div>
     </div>
