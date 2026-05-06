@@ -1,3 +1,4 @@
+const { execSync } = require('child_process');
 const express = require('express');
 const QRCode = require('qrcode');
 const router = express.Router();
@@ -179,7 +180,8 @@ router.get('/:id/pdf', async (req, res) => {
 
     const base_url = process.env.APP_BASE_URL || req.protocol + '://' + req.get('host');
     const qr_text = `${base_url}/api/df/${d.id}/pdf`;
-    const qr_data_url = await QRCode.toDataURL(qr_text, {width:90,margin:1,color:{dark:'#7c3aed',light:'#ffffff'}});
+    const qr_b64 = require('child_process').execSync(`python3 /app/src/qr_gen.py "${qr_text}"`).toString().trim();
+    const qr_data_url = `data:image/png;base64,${qr_b64}`;
 
     const couleur = d.statut==='validee'?'#15803d':d.statut==='refusee'?'#dc2626':'#d97706';
     const bgCouleur = d.statut==='validee'?'#dcfce7':d.statut==='refusee'?'#fee2e2':'#fef3c7';
