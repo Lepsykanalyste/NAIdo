@@ -70,7 +70,7 @@ router.post('/:id/transformer-df', auth, async (req, res) => {
     `, [bc.client_id, article_id_df, quantite_df,
         bc.id, bc.date_livraison_souhaitee,
         (description_body || ('BC N°' + bc.numero_bc + (bc.reference_client?' — Réf. client: '+bc.reference_client:''))),
-        req.user.id]);
+        req.user.id, priorite_body]);
 
     await db.query(
       'UPDATE bons_commande SET df_id=$1, statut=$2, updated_at=NOW() WHERE id=$3',

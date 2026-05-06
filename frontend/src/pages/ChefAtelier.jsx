@@ -2097,6 +2097,7 @@ onClick={()=>window.open(`/api/of/${of.id}/pdf`,'_blank')}
 }
 
 function DashboardCommercial() {
+  const { user } = useAuth();
   const [dfs, setDfs] = useState([]);
   const [stock, setStock] = useState({});
   const [loading, setLoading] = useState(true);
