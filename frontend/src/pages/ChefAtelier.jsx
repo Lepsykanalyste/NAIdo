@@ -1492,7 +1492,7 @@ function DetailOF({ detail, machines, onClose, onRefresh, onStatut, setOngletAct
       const base = art.composition_familles||[];
       const src = saved.length>0?saved:base;
       setCompoFamilles(src.map(f=>({famille_id:f.famille_id,famille_code:f.famille_code,famille_libelle:f.famille_libelle,pct_famille:f.pct_famille||f.pct,mp_choisies:f.mp_choisies||[]})));
-      setConfigOf({at3_poids_cible_kg:detail.at3_poids_cible_kg||'',at3_nb_bobines_cibles:detail.at3_nb_bobines_cibles||'',at3_notes_regleur:detail.at3_notes_regleur||'',at3_machine_assignee_id:detail.at3_machine_assignee_id||''});
+      setConfigOf({at3_poids_cible_kg:detail.at3_poids_cible_kg?parseFloat(detail.at3_poids_cible_kg).toString():'',at3_nb_bobines_cibles:detail.at3_nb_bobines_cibles||'',at3_notes_regleur:detail.at3_notes_regleur||'',at3_machine_assignee_id:detail.at3_machine_assignee_id||''});
     } catch(e) { console.error('chargerComposition error',e); }
   };
   const mpDeFamille = (famille_id) => mpStock.filter(mp=>mp.famille_id===famille_id);
