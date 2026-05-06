@@ -2832,15 +2832,16 @@ function Articles() {
 
   const chargerRefs = async () => {
     try {
-      const [f, u, a] = await Promise.all([
+      const [f, u, a, grp] = await Promise.all([
         axios.get(`${API}/referentiels/familles?type=article`),
         axios.get(`${API}/referentiels/unites`),
         axios.get(`${API}/ateliers`),
-      axios.get(`${API}/machines`),
+        axios.get(`${API}/referentiels/groupes`),
       ]);
       setFamilles(f.data);
       setUnites(u.data);
       setAteliers(a.data);
+      setGroupesMp(grp.data||[]);
     } catch {}
   };
 
@@ -2905,20 +2906,20 @@ function Articles() {
     setModeEditArt(false);
     setEditArtId(null);
     setComposition([]);
-    setNewComp({ mp_id:'', quantite:'', unite_id:'', pct:'' });
+    setNewComp({ groupe_id:'', pct:'' });
     setForm({ code:'', designation:'', famille_id:'', unite_mesure_id:'', type_article:'produit_fini', tracabilite_type:'lot', format_lot:'LOT-YYYYMMDD-001', matieres_principales:[], couleur:'', longueur_mm:'', largeur_mm:'', hauteur_mm:'', poids_theorique_kg:'', poids_reel_kg:'', poids_mandrin_kg:'', cadence_theorique_kg_h:'', temps_reglage_min:'30', prix_achat:'0', prix_vente:'0', prix_cession_interne:'0', stock_mini:'0', dlc_jours:'', allergenes:'', normes_iso:'', points_ccp:false, atelier_production_id:'' });
     setShowForm(true);
     setTimeout(() => document.getElementById('art-code')?.focus(), 100);
   };
 
   const ajouterCompo = () => {
-    if (!newComp.mp_id) return toast.error('Sélectionnez une matière première');
-    if (!newComp.quantite && !newComp.pct) return toast.error('Indiquez une quantité ou un pourcentage');
-    const mp = matieresPremiers.find(m => m.id === newComp.mp_id);
-    if (!mp) return;
-    if (composition.find(c => c.mp_id === newComp.mp_id)) return toast.error('Cette matière est déjà dans la composition');
-    setComposition([...composition, { ...newComp, code: mp.code, designation: mp.designation }]);
-    setNewComp({ mp_id:'', quantite:'', unite_id:'', pct:'' });
+    if (!newComp.groupe_id) return toast.error('Sélectionnez un groupe');
+    if (!newComp.pct) return toast.error('Indiquez le pourcentage');
+    const grp2 = groupesMp.find(g => String(g.id) === String(newComp.groupe_id));
+    if (!grp2) return;
+    if (composition.find(x => String(x.groupe_id) === String(newComp.groupe_id))) return toast.error('Ce groupe est déjà dans la composition');
+    setComposition([...composition, { groupe_id: grp2.id, groupe_code: grp2.code, groupe_libelle: grp2.libelle, famille_id: grp2.famille_id, famille_libelle: grp2.famille_libelle, pct: parseFloat(newComp.pct), mp_id: null, code: grp2.code, designation: grp2.libelle, quantite:'', unite_id:'' }]);
+    setNewComp({ groupe_id:'', pct:'' });
   };
 
   const totalPct = composition.reduce((s, c) => s + parseFloat(c.pct || 0), 0);
