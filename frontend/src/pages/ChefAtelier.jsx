@@ -5824,6 +5824,8 @@ function Referentiels() {
   const [familles, setFamilles] = useState([]);
   const [unites, setUnites] = useState([]);
   const [ateliers, setAteliers] = useState([]);
+  const [groupes, setGroupes] = useState([]);
+  const [formG, setFormG] = useState({ famille_id:'', code:'', libelle:'' });
   const [formF, setFormF] = useState({ code:'', libelle:'' });
   const [formU, setFormU] = useState({ code:'', libelle:'', type:'masse' });
   const [formA, setFormA] = useState({ code:'', libelle:'', type:'production', localisation:'' });
@@ -5833,9 +5835,20 @@ function Referentiels() {
       axios.get(`${API}/referentiels/familles`),
       axios.get(`${API}/referentiels/unites`),
       axios.get(`${API}/ateliers`),
-    ]).then(([f,u,a]) => { setFamilles(f.data); setUnites(u.data); setAteliers(a.data); }).catch(() => {});
+      axios.get(`${API}/referentiels/groupes`),
+    ]).then(([f,u,a,g]) => { setFamilles(f.data); setUnites(u.data); setAteliers(a.data); setGroupes(g.data); }).catch(() => {});
   }, []);
 
+  const creerGroupe = async () => {
+    if (!formG.famille_id || !formG.code || !formG.libelle) return toast.error('Famille, code et libellé requis');
+    try {
+      await axios.post(`${API}/referentiels/groupes`, formG);
+      toast.success('Groupe créé');
+      setFormG({famille_id:'',code:'',libelle:''});
+      const {data} = await axios.get(`${API}/referentiels/groupes`);
+      setGroupes(data);
+    } catch(e) { toast.error(e.response?.data?.error||'Erreur'); }
+  };
   const creerFamille = async () => {
     try { await axios.post(`${API}/referentiels/familles`, formF); toast.success('Famille créée'); setFormF({code:'',libelle:''}); const {data}=await axios.get(`${API}/referentiels/familles`); setFamilles(data); } catch(e){ toast.error(e.response?.data?.error||'Erreur'); }
   };
@@ -5849,9 +5862,9 @@ function Referentiels() {
   return (
     <div>
       <div style={{ display:'flex', gap:8, marginBottom:20, borderBottom:'2px solid #e5e7eb', paddingBottom:0 }}>
-        {['familles','unites','ateliers'].map(t => (
+        {['familles','groupes','unites','ateliers'].map(t => (
           <button key={t} onClick={() => setOnglet(t)} style={{ padding:'10px 18px', border:'none', background:'none', cursor:'pointer', fontWeight:onglet===t?700:400, color:onglet===t?'#14532d':'#6b7280', borderBottom:onglet===t?'3px solid #14532d':'3px solid transparent', fontSize:13 }}>
-            {t==='familles'?'Familles articles':t==='unites'?'Unités de mesure':'Ateliers / Services'}
+            {t==='familles'?'📁 Familles':t==='groupes'?'📂 Groupes MP':t==='unites'?'📏 Unités':'🏭 Ateliers'}
           </button>
         ))}
       </div>
@@ -5871,6 +5884,60 @@ function Referentiels() {
             <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
               <thead><tr style={{ background:'#f0fdf4' }}>{['Code','Libellé','Nb articles'].map(h => <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:600, color:'#14532d', borderBottom:'2px solid #dcfce7' }}>{h}</th>)}</tr></thead>
               <tbody>{familles.map((f,i) => <tr key={f.id} style={{ borderBottom:'1px solid #f0fdf4', background:i%2===0?'#fff':'#f9fefb' }}><td style={{ padding:'10px 14px', fontFamily:'monospace', fontWeight:700 }}>{f.code}</td><td style={{ padding:'10px 14px' }}>{f.libelle}</td><td style={{ padding:'10px 14px', color:'#6b7280' }}>{f.nb_articles}</td></tr>)}</tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {onglet === 'groupes' && (
+        <div>
+          <div style={{background:'#fff',borderRadius:12,padding:16,border:'1px solid #e5e7eb',marginBottom:14}}>
+            <div style={{fontWeight:700,fontSize:13,color:'#374151',marginBottom:12}}>
+              Créer un groupe de matières premières
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr auto',gap:10,alignItems:'flex-end'}}>
+              <div>
+                <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>Famille *</label>
+                <select value={formG.famille_id} onChange={e=>setFormG({...formG,famille_id:e.target.value})}
+                  style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'8px',fontSize:13}}>
+                  <option value="">-- Choisir --</option>
+                  {familles.map(f=><option key={f.id} value={f.id}>{f.libelle}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>Code *</label>
+                <input value={formG.code} onChange={e=>setFormG({...formG,code:e.target.value.toUpperCase()})}
+                  placeholder="ex: GRP-RESINE" style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'8px',fontSize:13,boxSizing:'border-box'}}/>
+              </div>
+              <div>
+                <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>Libellé *</label>
+                <input value={formG.libelle} onChange={e=>setFormG({...formG,libelle:e.target.value})}
+                  placeholder="ex: Résine PP" style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'8px',fontSize:13,boxSizing:'border-box'}}/>
+              </div>
+              <button onClick={creerGroupe} style={{background:'#14532d',color:'#fff',border:'none',padding:'9px 18px',borderRadius:8,cursor:'pointer',fontWeight:600}}>+ Créer</button>
+            </div>
+            <div style={{marginTop:10,fontSize:11,color:'#6b7280'}}>
+              💡 Exemple : Famille = "Matières Premières" → Groupe = "Résine PP" → Articles = PP-EXXO, PP-LOTRENE, PP-SHELL
+            </div>
+          </div>
+          <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',overflow:'hidden'}}>
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+              <thead><tr style={{background:'#f0fdf4'}}>
+                {['Famille','Code Groupe','Libellé Groupe','Nb MP'].map(h=>(
+                  <th key={h} style={{padding:'10px 14px',textAlign:'left',fontWeight:600,color:'#14532d',borderBottom:'2px solid #dcfce7'}}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {groupes.map((g,i)=>(
+                  <tr key={g.id} style={{borderBottom:'1px solid #f0fdf4',background:i%2===0?'#fff':'#f9fefb'}}>
+                    <td style={{padding:'10px 14px',color:'#6b7280',fontSize:12}}>{g.famille_libelle||'—'}</td>
+                    <td style={{padding:'10px 14px',fontFamily:'monospace',fontWeight:700,color:'#14532d'}}>{g.code}</td>
+                    <td style={{padding:'10px 14px',fontWeight:600}}>{g.libelle}</td>
+                    <td style={{padding:'10px 14px',color:'#6b7280'}}>{g.nb_articles||0}</td>
+                  </tr>
+                ))}
+                {groupes.length===0&&<tr><td colSpan={4} style={{padding:24,textAlign:'center',color:'#9ca3af'}}>Aucun groupe — créez-en ci-dessus</td></tr>}
+              </tbody>
             </table>
           </div>
         </div>
