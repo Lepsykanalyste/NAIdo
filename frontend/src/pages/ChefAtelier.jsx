@@ -1608,7 +1608,7 @@ function DetailOF({ detail, machines, onClose, onRefresh, onStatut, setOngletAct
         {[
           ['Article', detail.article_nom+' ('+detail.article_code+')'],
           ['Client', detail.client_nom||'—'],
-          ['Atelier', detail.atelier_id||'—'],
+          ['Atelier', detail.atelier_libelle||detail.atelier_id||'—'],
           ['Statut', {'planifie':'Planifié','lance':'Lancé','en_cours':'En cours','termine':'Terminé','annule':'Annulé'}[detail.statut]||detail.statut],
           ['Qté cible', parseFloat(detail.quantite_cible||0).toFixed(0)+' kg'],
           ['Qté produite', parseFloat(detail.quantite_produite||0).toFixed(0)+' kg'],

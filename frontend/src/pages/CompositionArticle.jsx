@@ -212,7 +212,7 @@ export function CompositionFicheArticle({ articleId }) {
 // 2. COMPOSITION DANS L'OF (Chef AT3)
 //    Affiche les groupes de l'article → chef choisit les MP
 // ══════════════════════════════════════════════════════════════
-export function CompositionOF({ detail, configOf, setConfigOf, onSaved, onClose }) {
+export function CompositionOF({ detail, configOf, setConfigOf, onSaved, onClose, userRole }) {
   const [groupes, setGroupes]           = useState([]);  // groupes de la composition article
   const [choixMp, setChoixMp]           = useState({});  // { groupe_id: [{mp_id, code, pct, quantite}] }
   const [loading, setLoading]           = useState(false);
@@ -429,7 +429,7 @@ export function CompositionOF({ detail, configOf, setConfigOf, onSaved, onClose 
                 <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12, marginBottom:10 }}>
                   <thead>
                     <tr style={{ background:clr.light }}>
-                      {['MP sélectionnée','Stock AT3','Stock Mag.','% dans OF','Quantité (kg)',''].map(h=>(
+                      {['MP sélectionnée','Stock AT3',...(userRole!=='chef_atelier'?['Stock Mag.']:[]),'% dans OF','Quantité (kg)',''].map(h=>(
                         <th key={h} style={{ padding:'5px 8px', textAlign:'left', fontSize:10, fontWeight:600, color:clr.tx }}>{h}</th>
                       ))}
                     </tr>
@@ -452,9 +452,9 @@ export function CompositionOF({ detail, configOf, setConfigOf, onSaved, onClose 
                             {stockAt3Live>0?`${stockAt3Live.toFixed(1)} kg`:'—'}
                             {insuf&&' ⚠'}
                           </td>
-                          <td style={{ padding:'6px 8px', color:'#0369a1', fontSize:11 }}>
+                          {userRole!=='chef_atelier' && <td style={{ padding:'6px 8px', color:'#0369a1', fontSize:11 }}>
                             {stockMagLive>0?`${stockMagLive.toFixed(1)} kg`:'—'}
-                          </td>
+                          </td>}
                           <td style={{ padding:'6px 8px', width:90 }}>
                             <div style={{ display:'flex', alignItems:'center', gap:3 }}>
                               <input type="number" value={m.pct} min="0" max="100" step="0.1"
@@ -494,7 +494,7 @@ export function CompositionOF({ detail, configOf, setConfigOf, onSaved, onClose 
                     + {a.code}
                     <span style={{ fontSize:9, marginLeft:4, opacity:0.8 }}>
                       AT3: {parseFloat(a.stock_at3||0).toFixed(0)}kg
-                      {parseFloat(a.stock_magasin||0)>0 && ` | Mag: ${parseFloat(a.stock_magasin).toFixed(0)}kg`}
+                      {userRole!=='chef_atelier' && parseFloat(a.stock_magasin||0)>0 && ` | Mag: ${parseFloat(a.stock_magasin).toFixed(0)}kg`}
                     </span>
                   </button>
                 ))}
