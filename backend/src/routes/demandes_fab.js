@@ -281,8 +281,7 @@ ${d.numero_of ? `
 `}
 
 <div class="qr-wrap">
-  <img src="https://api.qrserver.com/v1/create-qr-code/?size=90x90&data=${encodeURIComponent(qr_text)}&color=7c3aed" 
-       alt="QR" width="90" height="90"/>
+  <img src="${qr_data_url}" alt="QR" width="90" height="90"/>
   <div style="font-size:6pt;color:#9ca3af;margin-top:2px;">${d.numero_df}</div>
 </div>
 
