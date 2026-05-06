@@ -212,7 +212,7 @@ export function CompositionFicheArticle({ articleId }) {
 // 2. COMPOSITION DANS L'OF (Chef AT3)
 //    Affiche les groupes de l'article → chef choisit les MP
 // ══════════════════════════════════════════════════════════════
-export function CompositionOF({ detail, configOf, setConfigOf, onSaved }) {
+export function CompositionOF({ detail, configOf, setConfigOf, onSaved, onClose }) {
   const [groupes, setGroupes]           = useState([]);  // groupes de la composition article
   const [choixMp, setChoixMp]           = useState({});  // { groupe_id: [{mp_id, code, pct, quantite}] }
   const [loading, setLoading]           = useState(false);
@@ -340,6 +340,7 @@ export function CompositionOF({ detail, configOf, setConfigOf, onSaved }) {
       });
       toast.success(valider ? '✅ Composition validée — Extrusion lancée !' : '💾 Composition sauvegardée');
       if (onSaved) onSaved();
+      if (valider && onClose) onClose();
     } catch(e) { toast.error(e.response?.data?.error || 'Erreur'); }
     setLoading(false);
   };
