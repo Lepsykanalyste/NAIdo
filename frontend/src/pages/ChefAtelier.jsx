@@ -1623,7 +1623,7 @@ function DetailOF({ detail, machines, onClose, onRefresh, onStatut, setOngletAct
       </div>
 
       {/* Machine — saisie par production */}
-      <div style={{background:'#fffbeb',borderRadius:10,padding:14,marginBottom:16,border:'1px solid #fde68a'}}>
+      <div style={{background:'#fffbeb',borderRadius:10,padding:14,marginBottom:16,border:'1px solid #fde68a',display:user?.role==='chef_atelier'?'none':'block'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:editMachine?10:0}}>
           <div style={{fontWeight:700,fontSize:13,color:'#92400e'}}>
             🏭 Machine : {detail.machine_nom||<span style={{color:'#d97706'}}>Non assignée — à définir par la production</span>}
