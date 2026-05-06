@@ -1479,6 +1479,48 @@ function DetailOF({ detail, machines, onClose, onRefresh, onStatut, setOngletAct
   const [mpStock, setMpStock] = useState([]);
   const [configOf, setConfigOf] = useState({ at3_poids_cible_kg:'', at3_nb_bobines_cibles:'', at3_notes_regleur:'', at3_machine_assignee_id:'' });
   const [savingCompo, setSavingCompo] = useState(false);
+
+  const chargerComposition = async () => {
+    try {
+      const { data: mp } = await axios.get(`${API}/articles?type_article=matiere_premiere`);
+      const { data: stocks } = await axios.get(`${API}/stock/matieres`).catch(() => ({ data: [] }));
+      const enriched = (mp||[]).map(m=>({...m,qte_disponible:parseFloat(stocks.find(s=>s.article_id===m.id)?.qte_disponible||0)}));
+      setMpStock(enriched);
+      const { data: art } = await axios.get(`${API}/articles/${detail.article_id}`);
+      const saved = Array.isArray(detail.at3_composition_familles)?detail.at3_composition_familles:[];
+      const base = art.composition_familles||[];
+      const src = saved.length>0?saved:base;
+      setCompoFamilles(src.map(f=>({famille_id:f.famille_id,famille_code:f.famille_code,famille_libelle:f.famille_libelle,pct_famille:f.pct_famille||f.pct,mp_choisies:f.mp_choisies||[]})));
+      setConfigOf({at3_poids_cible_kg:detail.at3_poids_cible_kg||'',at3_nb_bobines_cibles:detail.at3_nb_bobines_cibles||'',at3_notes_regleur:detail.at3_notes_regleur||'',at3_machine_assignee_id:detail.at3_machine_assignee_id||''});
+    } catch(e) { console.error('chargerComposition error',e); }
+  };
+  const mpDeFamille = (famille_id) => mpStock.filter(mp=>mp.famille_id===famille_id);
+  const ajouterMpDansFamille = (fi,mp_id) => {
+    const mp=mpStock.find(m=>m.id===mp_id); if(!mp)return;
+    setCompoFamilles(prev=>prev.map((f,i)=>i!==fi||f.mp_choisies.find(m=>m.mp_id===mp_id)?f:{...f,mp_choisies:[...f.mp_choisies,{mp_id:mp.id,code:mp.code,designation:mp.designation,pct:'',quantite:'',qte_dispo:mp.qte_disponible}]}));
+  };
+  const majPctMpOf = (fi,mi,val) => {
+    const poids=parseFloat(configOf.at3_poids_cible_kg||0);
+    setCompoFamilles(prev=>prev.map((f,fii)=>fii!==fi?f:{...f,mp_choisies:f.mp_choisies.map((m,mii)=>mii!==mi?m:{...m,pct:val,quantite:poids>0?((parseFloat(val||0)/100)*poids).toFixed(3):''})}));
+  };
+  const supprimerMpOf = (fi,mi) => {
+    setCompoFamilles(prev=>prev.map((f,fii)=>fii!==fi?f:{...f,mp_choisies:f.mp_choisies.filter((_,mii)=>mii!==mi)}));
+  };
+  const totalPctOf = compoFamilles.reduce((s,f)=>s+f.mp_choisies.reduce((sf,m)=>sf+parseFloat(m.pct||0),0),0);
+  const sauvegarderCompoOf = async (valider=false) => {
+    if(valider&&Math.abs(totalPctOf-100)>0.1)return toast.error(`Total ${totalPctOf.toFixed(1)}% — doit être 100%`);
+    if(valider&&!configOf.at3_poids_cible_kg)return toast.error('Poids cible requis');
+    setSavingCompo(true);
+    try {
+      await axios.put(`${API}/at3/of/${detail.id}/configurer`,{...configOf,
+        composition_of:compoFamilles.flatMap(f=>f.mp_choisies.map(m=>({mp_id:m.mp_id,code:m.code,designation:m.designation,pct:m.pct,quantite:m.quantite,famille_id:f.famille_id,famille_libelle:f.famille_libelle}))),
+        at3_composition_familles:compoFamilles,valider});
+      toast.success(valider?'✅ Composition validée — Extrusion lancée !':'💾 Sauvegardé');
+      onRefresh();
+    } catch(e){toast.error(e.response?.data?.error||'Erreur');}
+    setSavingCompo(false);
+  };
+
   const [lotsDispo, setLotsDispo] = useState([]);
   const [mpArticles, setMpArticles] = useState([]);
   const [showAddLot, setShowAddLot] = useState(false);
@@ -1876,7 +1918,7 @@ function DetailOF({ detail, machines, onClose, onRefresh, onStatut, setOngletAct
 // ══════════════════════════════════════════════════════════════
 // MODULE ORDRES DE FABRICATION
 // ══════════════════════════════════════════════════════════════
-function OrdresFabrication() {
+function OrdresFabrication({ setOngletActif }) {
   const { user } = useAuth();
   const [ofs, setOfs] = useState([]);
   const [articles, setArticles] = useState([]);
@@ -3693,7 +3735,7 @@ function MatieresPremières() {
         <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13, minWidth:700 }}>
           <thead>
             <tr style={{ background:'#eff6ff' }}>
-              {['Code','Désignation','Fournisseur','Unité','Prix achat','Stock','Temp. fusion','Docs','Actions'].map(h => (
+              {['Code','Désignation','Groupe MP','Fournisseur','Unité','Stock','Actions'].map(h => (
                 <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:700, color:'#1d4ed8', borderBottom:'2px solid #bfdbfe', whiteSpace:'nowrap' }}>{h}</th>
               ))}
             </tr>
@@ -7499,7 +7541,7 @@ function OrdresLivraison() {
     bc:          <GestionBC />,
     df:          <DemandesFabrication />,
     ol:          <OrdresLivraison />,
-    of:          <OrdresFabrication />,
+    of:          <OrdresFabrication setOngletActif={setOngletActif} />,
     dashboard:   user?.role === 'chef_atelier' ? <DashboardAT3 /> : <Dashboard />,
     production:  <SuiviProduction />,
     planning:    <PlanningMachines />,

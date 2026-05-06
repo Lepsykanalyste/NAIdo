@@ -55,11 +55,15 @@ router.put('/unites/:id', auth, async (req, res) => {
 
 router.get('/familles', auth, async (req, res) => {
   try {
+    const { type } = req.query;
+    // type=mp : groupes MP uniquement (id >= 9)
+    // type=article : familles génériques (id <= 7)
+    const whereExtra = type === 'mp' ? 'AND f.id >= 9' : type === 'article' ? 'AND f.id <= 7' : '';
     const { rows } = await db.query(`
       SELECT f.*, COUNT(a.id) AS nb_articles
       FROM familles_articles f
       LEFT JOIN articles a ON a.famille_id = f.id AND a.actif = true
-      WHERE f.actif = true
+      WHERE f.actif = true ${whereExtra}
       GROUP BY f.id ORDER BY f.libelle
     `);
     res.json(rows);
