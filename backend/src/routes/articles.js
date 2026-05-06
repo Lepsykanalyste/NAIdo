@@ -50,8 +50,9 @@ router.get('/', auth, async (req, res) => {
         a.temperature_fusion, a.temperature_traitement,
         a.conditions_stockage, a.risques_securite, a.epi_requis,
         a.composition, a.notes, a.atelier_production_id,
-        a.famille_id, a.unite_mesure_id, a.created_at,
+        a.famille_id, a.sous_famille_id, a.unite_mesure_id, a.created_at,
         f.libelle AS famille_libelle, f.code AS famille_code,
+        sf.libelle AS groupe_libelle, sf.code AS groupe_code,
         um.code AS unite_code, um.libelle AS unite_libelle,
         COALESCE(SUM(sa.qte_disponible),0) AS stock_total
       FROM articles a
@@ -222,6 +223,63 @@ router.delete('/:id', auth, async (req, res) => {
     await db.query('UPDATE articles SET actif=false WHERE id=$1',[req.params.id]);
     res.json({ success:true });
   } catch(err) { res.status(500).json({ error:err.message }); }
+});
+
+
+// GET /api/articles/:id/composition — composition par groupes
+router.get('/:id/composition', auth, async (req, res) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT ca.*,
+             sf.code AS groupe_code, sf.libelle AS groupe_libelle,
+             f.libelle AS famille_libelle, f.code AS famille_code
+      FROM composition_article ca
+      JOIN sous_familles_articles sf ON sf.id = ca.groupe_id
+      JOIN familles_articles f ON f.id = ca.famille_id
+      WHERE ca.article_id = $1
+      ORDER BY ca.ordre, sf.libelle
+    `, [req.params.id]);
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /api/articles/:id/composition — sauvegarder composition
+router.put('/:id/composition', auth, async (req, res) => {
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const { lignes } = req.body; // [{groupe_id, famille_id, pct, ordre}]
+    // Supprimer l'ancienne composition
+    await client.query('DELETE FROM composition_article WHERE article_id=$1', [req.params.id]);
+    // Insérer la nouvelle
+    for (let i=0; i<lignes.length; i++) {
+      const l = lignes[i];
+      await client.query(`
+        INSERT INTO composition_article (article_id, groupe_id, famille_id, pct, poids_kg, ordre, notes)
+        VALUES ($1,$2,$3,$4,$5,$6,$7)
+      `, [req.params.id, l.groupe_id, l.famille_id, l.pct||0, l.poids_kg||null, i, l.notes||'']);
+    }
+    // Mettre à jour le JSONB composition_familles pour compatibilité
+    const { rows } = await client.query(`
+      SELECT ca.*, sf.code AS groupe_code, sf.libelle AS groupe_libelle
+      FROM composition_article ca
+      JOIN sous_familles_articles sf ON sf.id = ca.groupe_id
+      WHERE ca.article_id=$1 ORDER BY ca.ordre
+    `, [req.params.id]);
+    const compoJson = rows.map(r => ({
+      famille_id: r.famille_id, groupe_id: r.groupe_id,
+      famille_code: r.groupe_code, famille_libelle: r.groupe_libelle,
+      pct: parseFloat(r.pct), pct_famille: parseFloat(r.pct),
+      mp_choisies: []
+    }));
+    await client.query(
+      'UPDATE articles SET composition_familles=$1 WHERE id=$2',
+      [JSON.stringify(compoJson), req.params.id]
+    );
+    await client.query('COMMIT');
+    res.json({ message: 'Composition sauvegardée', lignes: rows });
+  } catch(e) { await client.query('ROLLBACK'); res.status(500).json({ error: e.message }); }
+  finally { client.release(); }
 });
 
 module.exports = router;

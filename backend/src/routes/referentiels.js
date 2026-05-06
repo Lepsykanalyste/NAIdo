@@ -156,4 +156,50 @@ router.post('/categories', auth, async (req, res) => {
   }
 });
 
+
+// GET /api/referentiels/groupes — groupes par famille
+router.get('/groupes', auth, async (req, res) => {
+  try {
+    const { famille_id } = req.query;
+    let q = `
+      SELECT sf.*, f.libelle AS famille_libelle,
+             COUNT(a.id) AS nb_articles
+      FROM sous_familles_articles sf
+      LEFT JOIN familles_articles f ON f.id = sf.famille_id
+      LEFT JOIN articles a ON a.sous_famille_id = sf.id AND a.actif = true
+      WHERE sf.actif = true
+    `;
+    const params = [];
+    if (famille_id) { params.push(parseInt(famille_id)); q += ` AND sf.famille_id = $${params.length}`; }
+    q += ' GROUP BY sf.id, f.libelle ORDER BY f.libelle, sf.libelle';
+    const { rows } = await db.query(q, params);
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/referentiels/groupes
+router.post('/groupes', auth, async (req, res) => {
+  try {
+    const { famille_id, code, libelle } = req.body;
+    if (!famille_id || !code || !libelle) return res.status(400).json({ error: 'famille_id, code et libelle requis' });
+    const { rows } = await db.query(
+      'INSERT INTO sous_familles_articles (famille_id, code, libelle) VALUES ($1,$2,$3) RETURNING *',
+      [parseInt(famille_id), code.toUpperCase(), libelle]
+    );
+    res.json(rows[0]);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// PUT /api/referentiels/groupes/:id
+router.put('/groupes/:id', auth, async (req, res) => {
+  try {
+    const { libelle, actif } = req.body;
+    const { rows } = await db.query(
+      'UPDATE sous_familles_articles SET libelle=$1, actif=$2 WHERE id=$3 RETURNING *',
+      [libelle, actif !== false, req.params.id]
+    );
+    res.json(rows[0]);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;
