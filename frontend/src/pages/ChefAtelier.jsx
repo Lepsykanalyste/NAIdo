@@ -2811,6 +2811,7 @@ function Articles() {
   const [unites, setUnites] = useState([]);
   const [ateliers, setAteliers] = useState([]);
   const [matieresPremiers, setMatieresPremiers] = useState([]);
+  const [groupesMp, setGroupesMp] = useState([]);
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [detail, setDetail] = useState(null);
@@ -3090,99 +3091,76 @@ function Articles() {
               </div>
             </div>
 
-            {/* BLOC 4 — Composition / Nomenclature */}
+            {/* BLOC 4 — Composition / Nomenclature par groupe */}
             <div>
               <div style={{ fontSize:11, fontWeight:700, color:'#b45309', letterSpacing:1, textTransform:'uppercase', borderBottom:'2px solid #fde68a', paddingBottom:6, marginBottom:14 }}>
-                4 · Composition / Nomenclature (matières premières)
+                4 · Composition par groupe de matières
               </div>
-
-              {matieresPremiers.length === 0 ? (
-                <div style={{ background:'#fefce8', border:'1px solid #fde68a', borderRadius:10, padding:16, fontSize:13, color:'#92400e' }}>
-                  ℹ Créez d'abord des articles de type <strong>Matière première</strong> pour les sélectionner ici.
+              <div style={{ background:'#fffbeb', borderRadius:10, padding:14, marginBottom:12, border:'1px solid #fde68a' }}>
+                <div style={{ fontSize:12, color:'#92400e', marginBottom:10 }}>
+                  Définissez les groupes de matières nécessaires et leur pourcentage dans la formule.<br/>
+                  <span style={{ fontSize:11, color:'#6b7280' }}>Exemple : Résine PP 85% + Colorant 5% + Additif 10% = 100%</span>
                 </div>
-              ) : (
-                <>
-                  {/* Ligne ajout composition */}
-                  <div style={{ background:'#fffbeb', borderRadius:10, padding:14, marginBottom:12, border:'1px solid #fde68a' }}>
-                    <div style={{ display:'grid', gridTemplateColumns:'2.5fr 1fr 1fr 1fr auto', gap:10, alignItems:'flex-end' }}>
-                      <div>
-                        <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Matière première *</label>
-                        <select value={newComp.mp_id} onChange={e => setNewComp({...newComp, mp_id:e.target.value})}
-                          style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13 }}>
-                          <option value="">-- Sélectionner --</option>
-                          {matieresPremiers.map(m => <option key={m.id} value={m.id}>{m.code} — {m.designation}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Quantité</label>
-                        <input type="number" step="0.001" value={newComp.quantite}
-                          onChange={e => setNewComp({...newComp, quantite:e.target.value})}
-                          placeholder="0.000" style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13, textAlign:'center', boxSizing:'border-box' }}/>
-                      </div>
-                      <div>
-                        <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Unité</label>
-                        <select value={newComp.unite_id} onChange={e => setNewComp({...newComp, unite_id:e.target.value})}
-                          style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13 }}>
-                          <option value="">—</option>
-                          {unites.map(u => <option key={u.id} value={u.id}>{u.code}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>% dans prod.</label>
-                        <input type="number" step="0.1" min="0" max="100" value={newComp.pct}
-                          onChange={e => setNewComp({...newComp, pct:e.target.value})}
-                          placeholder="0.0" style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13, textAlign:'center', boxSizing:'border-box' }}/>
-                      </div>
-                      <button onClick={ajouterCompo}
-                        style={{ background:'#b45309', color:'#fff', border:'none', padding:'9px 14px', borderRadius:8, cursor:'pointer', fontWeight:700 }}>
-                        + Ajouter
-                      </button>
-                    </div>
+                <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr auto', gap:10, alignItems:'flex-end' }}>
+                  <div>
+                    <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Groupe de matière *</label>
+                    <select value={newComp.groupe_id||''} onChange={e=>setNewComp({...newComp,groupe_id:e.target.value})}
+                      style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13 }}>
+                      <option value="">-- Sélectionner un groupe --</option>
+                      {groupesMp.filter(g=>!composition.find(c=>String(c.groupe_id)===String(g.id))).map(g=>(
+                        <option key={g.id} value={g.id}>{g.famille_libelle} → {g.libelle}</option>
+                      ))}
+                    </select>
                   </div>
-
-                  {/* Tableau composition */}
-                  {composition.length > 0 && (
-                    <div style={{ border:'1px solid #fde68a', borderRadius:10, overflow:'hidden' }}>
-                      <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
-                        <thead>
-                          <tr style={{ background:'#fef3c7' }}>
-                            {['Code','Matière première','Quantité','Unité','% compo','Supprimer'].map(h => (
-                              <th key={h} style={{ padding:'8px 12px', textAlign:'left', fontWeight:600, color:'#92400e', borderBottom:'1px solid #fde68a' }}>{h}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {composition.map((c, i) => (
-                            <tr key={i} style={{ borderBottom:'1px solid #fefce8', background:i%2===0?'#fff':'#fffdf5' }}>
-                              <td style={{ padding:'8px 12px', fontFamily:'monospace', fontWeight:700, color:'#b45309' }}>{c.code}</td>
-                              <td style={{ padding:'8px 12px' }}>{c.designation}</td>
-                              <td style={{ padding:'8px 12px', textAlign:'center', fontWeight:600 }}>{c.quantite||'—'}</td>
-                              <td style={{ padding:'8px 12px', textAlign:'center' }}>{unites.find(u=>String(u.id)===String(c.unite_id))?.code||'—'}</td>
-                              <td style={{ padding:'8px 12px', textAlign:'center' }}>
-                                {c.pct ? <span style={{ background:'#fef3c7', color:'#92400e', padding:'2px 8px', borderRadius:20, fontWeight:700 }}>{c.pct}%</span> : '—'}
-                              </td>
-                              <td style={{ padding:'8px 12px' }}>
-                                <button onClick={() => setComposition(composition.filter((_,j) => j!==i))}
-                                  style={{ background:'#fee2e2', color:'#dc2626', border:'none', borderRadius:6, padding:'3px 10px', cursor:'pointer', fontSize:11 }}>✕</button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      <div style={{ padding:'10px 14px', fontSize:12, fontWeight:700,
-                        background: totalPct > 100 ? '#fee2e2' : totalPct === 100 ? '#dcfce7' : '#fef3c7',
-                        color: totalPct > 100 ? '#dc2626' : totalPct === 100 ? '#15803d' : '#92400e' }}>
-                        Total : {totalPct.toFixed(1)}%
-                        {totalPct > 100 && ' ⚠ Dépasse 100% !'}
-                        {totalPct === 100 && ' ✓ Parfait'}
-                        {totalPct < 100 && totalPct > 0 && ` — manque ${(100-totalPct).toFixed(1)}%`}
-                      </div>
-                    </div>
-                  )}
-                </>
+                  <div>
+                    <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>% dans formule *</label>
+                    <input type="number" step="0.1" min="0" max="100" value={newComp.pct||''}
+                      onChange={e=>setNewComp({...newComp,pct:e.target.value})}
+                      placeholder="0.0" style={{ width:'100%', border:'1px solid #fcd34d', borderRadius:8, padding:'8px', fontSize:14, textAlign:'center', fontWeight:700, boxSizing:'border-box' }}/>
+                  </div>
+                  <button onClick={ajouterCompo}
+                    style={{ background:'#b45309', color:'#fff', border:'none', padding:'9px 14px', borderRadius:8, cursor:'pointer', fontWeight:700 }}>
+                    + Ajouter
+                  </button>
+                </div>
+              </div>
+              {composition.length > 0 && (
+                <div style={{ border:'1px solid #fde68a', borderRadius:10, overflow:'hidden' }}>
+                  <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
+                    <thead>
+                      <tr style={{ background:'#fef3c7' }}>
+                        {['Groupe','Famille','% dans formule','Supprimer'].map(h=>(
+                          <th key={h} style={{ padding:'8px 12px', textAlign:'left', fontWeight:600, color:'#92400e', borderBottom:'1px solid #fde68a' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {composition.map((comp,i)=>(
+                        <tr key={i} style={{ borderBottom:'1px solid #fefce8', background:i%2===0?'#fff':'#fffdf5' }}>
+                          <td style={{ padding:'8px 12px', fontWeight:700, color:'#b45309' }}>{comp.groupe_libelle||comp.designation||comp.code}</td>
+                          <td style={{ padding:'8px 12px', fontSize:11, color:'#6b7280' }}>{comp.famille_libelle||'—'}</td>
+                          <td style={{ padding:'8px 12px', textAlign:'center' }}>
+                            <span style={{ background:'#fef3c7', color:'#92400e', padding:'2px 10px', borderRadius:20, fontWeight:700 }}>{comp.pct}%</span>
+                          </td>
+                          <td style={{ padding:'8px 12px' }}>
+                            <button onClick={()=>setComposition(composition.filter((_,j)=>j!==i))}
+                              style={{ background:'#fee2e2', color:'#dc2626', border:'none', borderRadius:6, padding:'3px 10px', cursor:'pointer', fontSize:11 }}>✕</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div style={{ padding:'10px 14px', fontSize:12, fontWeight:700,
+                    background:totalPct>100?'#fee2e2':totalPct===100?'#dcfce7':'#fef3c7',
+                    color:totalPct>100?'#dc2626':totalPct===100?'#15803d':'#92400e' }}>
+                    Total : {totalPct.toFixed(1)}%
+                    {totalPct>100&&' ⚠ Dépasse 100% !'}
+                    {totalPct===100&&' ✓ Parfait'}
+                    {totalPct<100&&totalPct>0&&` — manque ${(100-totalPct).toFixed(1)}%`}
+                  </div>
+                </div>
               )}
             </div>
-
             {/* Boutons finaux */}
             <div style={{ display:'flex', gap:12, paddingTop:16, borderTop:'2px solid #f3f4f6' }}>
               <button onClick={sauvegarderArticle}
