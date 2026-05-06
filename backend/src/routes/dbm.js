@@ -182,65 +182,59 @@ router.put('/:id/livrer', auth, async (req, res) => {
 // GET /api/dbm/of/:of_id/besoins — calcul besoins MP pour un OF
 router.get('/of/:of_id/besoins', auth, async (req, res) => {
   try {
-    // Récupérer OF + composition
     const ofRes = await db.query(`
-      SELECT o.*, a.composition_familles, a.composition,
-             o.at3_composition_familles, o.at3_composition_of
-      FROM ordres_fabrication o
-      LEFT JOIN articles a ON a.id = o.article_id
-      WHERE o.id = $1
+      SELECT o.at3_poids_cible_kg, o.quantite_cible, o.article_id, o.numero_of
+      FROM ordres_fabrication o WHERE o.id = $1
     `, [req.params.of_id]);
-
     if (!ofRes.rows.length) return res.status(404).json({ error: 'OF introuvable' });
     const of = ofRes.rows[0];
     const poidsCible = parseFloat(of.at3_poids_cible_kg || of.quantite_cible || 0);
 
-    // Utiliser la composition validée par le chef AT3 en priorité
-    const compoOf = of.at3_composition_of || of.at3_composition_familles || [];
-    const compoArr = Array.isArray(compoOf) ? compoOf : JSON.parse(compoOf || '[]');
+    const compoRows = await db.query(`
+      SELECT ca.groupe_id, ca.pct,
+             sf.code AS groupe_code, sf.libelle AS groupe_libelle,
+             f.id AS famille_id, f.libelle AS famille_libelle
+      FROM composition_article ca
+      JOIN sous_familles_articles sf ON sf.id = ca.groupe_id
+      JOIN familles_articles f ON f.id = ca.famille_id
+      WHERE ca.article_id = $1 ORDER BY ca.ordre
+    `, [of.article_id]);
 
-    if (!compoArr.length) {
-      return ok(res, { besoins: [], message: 'Aucune composition définie pour cet OF' });
-    }
+    if (!compoRows.rows.length)
+      return res.json({ besoins:[], groupes:[], message:'Aucune composition définie pour cet article' });
 
-    // Calculer besoins par MP
+    const groupes = [];
     const besoins = [];
-    for (const c of compoArr) {
-      const pct = parseFloat(c.pct || 0);
-      const qteNecessaire = (pct / 100) * poidsCible;
-
-      // Stock AT3 disponible
-      const stockRes = await db.query(`
-        SELECT COALESCE(SUM(qte_disponible - qte_reservee), 0) AS qte_dispo_at3
-        FROM stock_at3 WHERE article_id = $1
-      `, [c.mp_id]);
-      const qteDispo = parseFloat(stockRes.rows[0].qte_dispo_at3 || 0);
-
-      // Stock Magasin MP
-      const magRes = await db.query(`
-        SELECT COALESCE(SUM(qte_disponible), 0) AS qte_mag
-        FROM stock_articles WHERE article_id = $1
-      `, [c.mp_id]);
-      const qteMag = parseFloat(magRes.rows[0].qte_mag || 0);
-
+    for (const g of compoRows.rows) {
+      const pct = parseFloat(g.pct||0);
+      const qteNec = poidsCible > 0 ? (pct/100)*poidsCible : 0;
+      const artRes = await db.query(`
+        SELECT a.id, a.code, a.designation,
+               COALESCE(SUM(sa.qte_disponible),0) AS stock_magasin,
+               COALESCE((SELECT SUM(qte_disponible) FROM stock_at3 WHERE article_id=a.id),0) AS stock_at3
+        FROM articles a
+        LEFT JOIN stock_articles sa ON sa.article_id=a.id
+        WHERE a.sous_famille_id=$1 AND a.type_article='matiere_premiere'
+        GROUP BY a.id,a.code,a.designation ORDER BY a.code
+      `, [g.groupe_id]);
+      const totalAt3 = artRes.rows.reduce((s,a)=>s+parseFloat(a.stock_at3||0),0);
+      groupes.push({
+        groupe_id:g.groupe_id, groupe_code:g.groupe_code, groupe_libelle:g.groupe_libelle,
+        famille_id:g.famille_id, famille_libelle:g.famille_libelle,
+        pct, qte_necessaire:parseFloat(qteNec.toFixed(3)), articles:artRes.rows
+      });
       besoins.push({
-        article_id:       c.mp_id,
-        code:             c.code,
-        designation:      c.designation,
-        famille_id:       c.famille_id,
-        famille_libelle:  c.famille_libelle,
-        pct,
-        qte_necessaire:   parseFloat(qteNecessaire.toFixed(3)),
-        qte_dispo_at3:    parseFloat(qteDispo.toFixed(3)),
-        qte_dispo_mag:    parseFloat(qteMag.toFixed(3)),
-        qte_a_demander:   parseFloat(Math.max(0, qteNecessaire - qteDispo).toFixed(3)),
-        suffisant:        qteDispo >= qteNecessaire,
+        groupe_id:g.groupe_id, groupe_libelle:g.groupe_libelle, pct,
+        qte_necessaire:parseFloat(qteNec.toFixed(3)),
+        qte_dispo_at3:parseFloat(totalAt3.toFixed(3)),
+        qte_a_demander:parseFloat(Math.max(0,qteNec-totalAt3).toFixed(3)),
+        suffisant:totalAt3>=qteNec
       });
     }
-
-    ok(res, { besoins, poids_cible: poidsCible, of_numero: of.numero_of });
-  } catch(e) { err(res, e, 'Erreur calcul besoins'); }
+    res.json({ groupes, besoins, poids_cible:poidsCible, of_numero:of.numero_of });
+  } catch(e) { res.status(500).json({ error:e.message }); }
 });
+
 
 // ══════════════════════════════════════════════════════════════
 // 2. STOCK AT3

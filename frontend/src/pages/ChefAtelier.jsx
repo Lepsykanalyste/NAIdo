@@ -1663,7 +1663,7 @@ function DetailOF({ detail, machines, onClose, onRefresh, onStatut, setOngletAct
           <CompositionOF detail={detail} configOf={configOf} setConfigOf={setConfigOf} onSaved={onRefresh} />
         )}
         
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
+        <div style={{display:user?.role==='chef_atelier'?'none':'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
           <div style={{fontWeight:700,fontSize:13,color:'#15803d'}}>
             🧪 Composition matières premières
             {lots.length>0 && <span style={{marginLeft:8,fontSize:11,color:'#6b7280'}}>({totalPoids.toFixed(1)} kg total — {totalPct.toFixed(1)}%)</span>}
