@@ -61,7 +61,7 @@ router.post('/:id/transformer-df', auth, async (req, res) => {
     );
     const premiere_ligne = bc_lignes[0] || {};
     const article_id_df = bc.article_id || premiere_ligne.article_id || null;
-    const quantite_df = bc.quantite || bc.quantite_pieces || premiere_ligne.quantite_pieces || premiere_ligne.quantite_kg || 1;
+    const quantite_df = premiere_ligne.quantite_kg || premiere_ligne.quantite_pieces || bc.quantite || 1;
     const { rows: df } = await db.query(`
       INSERT INTO demandes_fabrication
         (client_id, article_id, quantite_demandee, bc_id,

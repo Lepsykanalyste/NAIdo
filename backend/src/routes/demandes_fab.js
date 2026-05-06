@@ -176,7 +176,8 @@ router.get('/:id/pdf', async (req, res) => {
       lignes_html = '<table style="width:100%;border-collapse:collapse;font-size:7.5pt;margin:8px 0;"><thead><tr style="background:#7c3aed;color:#fff;"><th style="padding:5px 8px;text-align:left;">Réf.</th><th style="padding:5px 8px;text-align:left;">Désignation</th><th style="padding:5px 8px;text-align:right;">Qté (pcs)</th><th style="padding:5px 8px;text-align:right;">Qté (kg)</th><th style="padding:5px 8px;text-align:right;">P.U. HT</th><th style="padding:5px 8px;text-align:right;">Montant TTC</th></tr></thead><tbody>'+rows_html+'</tbody></table>';
     }
 
-    const qr_text = `NAI DEMANDE FABRICATION\nN: ${d.numero_df}\nARTICLE: ${d.article_code} ${d.article_nom}\nQTE: ${d.quantite_demandee} kg\nCLIENT: ${d.client_nom||'—'}\nSTATUT: ${d.statut}\nOF: ${d.numero_of||'—'}\nDATE: ${new Date(d.created_at).toLocaleDateString('fr-FR')}`;
+    const base_url = req.protocol + '://' + req.get('host');
+    const qr_text = `${base_url}/api/df/${d.id}/pdf`;
 
     const couleur = d.statut==='validee'?'#15803d':d.statut==='refusee'?'#dc2626':'#d97706';
     const bgCouleur = d.statut==='validee'?'#dcfce7':d.statut==='refusee'?'#fee2e2':'#fef3c7';
