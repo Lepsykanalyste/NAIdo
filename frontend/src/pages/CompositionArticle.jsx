@@ -428,7 +428,7 @@ export function CompositionOF({ detail, configOf, setConfigOf, onSaved }) {
                 <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12, marginBottom:10 }}>
                   <thead>
                     <tr style={{ background:clr.light }}>
-                      {['MP sélectionnée','Stock AT3','Stock Mag.','% dans OF','Quantité (kg)',''].map(h=>(
+                      {['MP sélectionnée','Stock AT3','% dans OF','Quantité (kg)',''].map(h=>(
                         <th key={h} style={{ padding:'5px 8px', textAlign:'left', fontSize:10, fontWeight:600, color:clr.tx }}>{h}</th>
                       ))}
                     </tr>
@@ -506,12 +506,12 @@ export function CompositionOF({ detail, configOf, setConfigOf, onSaved }) {
 
       {/* Boutons */}
       <div style={{ display:'flex', gap:8, marginTop:14 }}>
-        <button onClick={() => sauvegarder(false)} disabled={loading}
+        {detail?.at3_statut_zone!=='extrusion' && <button onClick={() => sauvegarder(false)} disabled={loading}
           style={{ background:'#f0fdf4', color:'#15803d', border:'1px solid #86efac', padding:'9px 18px', borderRadius:8, cursor:'pointer', fontWeight:600 }}>
           💾 Sauvegarder
-        </button>
-        <button onClick={() => sauvegarder(true)}
-          disabled={loading || detail?.at3_statut_zone==='extrusion'}
+        </button>}
+        {detail?.at3_statut_zone!=='extrusion' && <button onClick={() => sauvegarder(true)}
+          disabled={loading}
           style={{
             background: Math.abs(totalPct-100)<0.1 && configOf?.at3_poids_cible_kg ? '#14532d' : '#9ca3af',
             color:'#fff', border:'none', padding:'9px 22px', borderRadius:8,
@@ -519,7 +519,7 @@ export function CompositionOF({ detail, configOf, setConfigOf, onSaved }) {
             fontWeight:700, fontSize:14
           }}>
           {loading ? '...' : '✅ Valider & Lancer Extrusion'}
-        </button>
+        </button>}
         {detail?.at3_statut_zone === 'extrusion' && (
           <span style={{ background:'#fef3c7', color:'#92400e', padding:'9px 16px', borderRadius:8, fontSize:12, fontWeight:600 }}>
             ⚙ Déjà en extrusion
