@@ -310,6 +310,16 @@ export function CompositionOF({ detail, configOf, setConfigOf, onSaved }) {
       for (const g of groupes) {
         const gmp = choixMp[String(g.groupe_id)] || [];
         if (gmp.length === 0) return toast.error(`Groupe "${g.groupe_libelle}" : aucune MP sélectionnée`);
+        const tG=gmp.reduce((s,m)=>s+parseFloat(m.pct||0),0);
+        if(Math.abs(tG-g.pct)>0.1)return toast.error(g.groupe_libelle+' : total '+tG.toFixed(1)+'% attendu '+g.pct+'%');
+        for(const m of gmp){
+          const artLive=g.articles?.find(a=>a.id===m.mp_id);
+          const stockAt3=artLive?parseFloat(artLive.stock_at3||0):0;
+          const qte=parseFloat(m.quantite||0);
+          if(stockAt3<qte){
+            return toast.error(m.code+' : besoin '+qte+'kg mais stock AT3 = '+stockAt3+'kg — créez une DBM');
+          }
+        }
         const totalG = gmp.reduce((s,m)=>s+parseFloat(m.pct||0),0);
         if (Math.abs(totalG - g.pct) > 0.1) return toast.error(`Groupe "${g.groupe_libelle}" : total ${totalG.toFixed(1)}% ≠ ${g.pct}% attendu`);
       }
