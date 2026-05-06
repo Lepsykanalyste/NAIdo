@@ -2784,27 +2784,46 @@ async def of_pdf(of_id: str):
                 SELECT o.*,
                        c.raison_sociale AS client_nom, c.telephone,
                        a.designation AS article_nom, a.code AS article_code,
-                       a.longueur_mm, a.largeur_mm,
-                       COALESCE(o.at3_composition_of, a.composition, '[]'::jsonb) AS composition,
+                       a.longueur_mm, a.largeur_mm, a.couleur,
+                       o.at3_composition_of,
+                       o.at3_poids_cible_kg,
+                       o.at3_notes_regleur,
                        m.code AS machine_code, m.nom AS machine_nom,
                        u.nom||' '||u.prenom AS chef_nom,
                        at.libelle AS atelier_libelle
                 FROM ordres_fabrication o
                 LEFT JOIN clients_complet c ON c.id=o.client_id
                 LEFT JOIN articles a ON a.id=o.article_id
-                LEFT JOIN machines m ON m.id=o.machine_id
-                LEFT JOIN utilisateurs u ON u.login='admin'
+                LEFT JOIN machines m ON m.id=o.at3_machine_assignee_id
+                LEFT JOIN utilisateurs u ON u.id=o.at3_valide_par
                 LEFT JOIN ateliers at ON at.id::text = o.atelier_id::text
                 WHERE o.id=$1
             """, of_id)
-            lots = await conn.fetch("""
-                SELECT ocl.*, a.code AS mp_code, a.designation AS mp_nom,
-                       ocl.nom_matiere, ocl.numero_lot,
-                       ocl.qte_prevue, ocl.pourcentage
-                FROM of_composition_lots ocl
-                LEFT JOIN articles a ON a.id=ocl.article_mp_id
-                WHERE ocl.of_id=$1 ORDER BY ocl.created_at
+            # Composition depuis composition_article (groupes)
+            compo_groupes = await conn.fetch("""
+                SELECT ca.pct,
+                       sf.code AS groupe_code, sf.libelle AS groupe_libelle,
+                       f.libelle AS famille_libelle
+                FROM composition_article ca
+                JOIN sous_familles_articles sf ON sf.id = ca.groupe_id
+                JOIN familles_articles f ON f.id = ca.famille_id
+                WHERE ca.article_id = (SELECT article_id FROM ordres_fabrication WHERE id=$1)
+                ORDER BY ca.ordre
             """, of_id)
+            # MP choisies par chef AT3
+            compo_mp = await conn.fetch("""
+                SELECT a.code AS mp_code, a.designation AS mp_nom,
+                       sf.libelle AS groupe_libelle,
+                       elem->>'pct' AS pct,
+                       elem->>'quantite' AS quantite_kg
+                FROM ordres_fabrication o,
+                     jsonb_array_elements(COALESCE(o.at3_composition_of, '[]'::jsonb)) AS elem
+                JOIN articles a ON a.id = (elem->>'mp_id')::uuid
+                LEFT JOIN sous_familles_articles sf ON sf.id = a.sous_famille_id
+                WHERE o.id=$1
+                ORDER BY sf.libelle, a.code
+            """, of_id)
+            lots = []
 
         if not row:
             raise HTTPException(status_code=404, detail="OF introuvable")
@@ -2828,39 +2847,32 @@ async def of_pdf(of_id: str):
         label_statut = {'planifie':'Planifié','lance':'Lancé','en_cours':'En cours','pause':'En pause','termine':'Terminé','annule':'Annulé'}.get(d['statut'],d['statut'])
         etoiles = '★' * (d.get('priorite') or 1)
 
+        # Composition HTML
+        compo_groupes_list = [dict(r) for r in compo_groupes]
+        compo_mp_list = [dict(r) for r in compo_mp]
+        poids_cible = float(d.get('at3_poids_cible_kg') or d.get('quantite_cible') or 0)
         lots_html = ''
-        if lots_list:
+        if compo_groupes_list or compo_mp_list:
             rows_html = ''
-            for i,l in enumerate(lots_list):
-                bg_row = '#f9fafb' if i%2==0 else '#fff'
-                rows_html += f"""<tr style="background:{bg_row};">
-                    <td style="padding:5px 8px;">{l.get('mp_code') or '—'}</td>
-                    <td style="padding:5px 8px;font-weight:700;">{l.get('nom_matiere') or l.get('mp_nom') or '—'}</td>
-                    <td style="padding:5px 8px;font-family:monospace;">{l.get('numero_lot') or '—'}</td>
-                    <td style="padding:5px 8px;font-weight:700;">{float(l.get('qte_prevue') or 0):.1f} kg</td>
-                    <td style="padding:5px 8px;">{float(l.get('pourcentage') or 0):.1f}%</td>
-                </tr>"""
-            total_poids = sum(float(l.get('qte_prevue') or 0) for l in lots_list)
-            total_pct = sum(float(l.get('pourcentage') or 0) for l in lots_list)
-            lots_html = f"""
-            <div style="margin-top:10px;">
-              <div style="background:#f3f4f6;padding:4px 8px;font-size:7pt;font-weight:700;text-transform:uppercase;color:#374151;border:1px solid #e5e7eb;border-bottom:none;border-radius:4px 4px 0 0;">🧪 Composition matières premières</div>
-              <table style="width:100%;border-collapse:collapse;font-size:8pt;border:1px solid #e5e7eb;">
-                <thead><tr style="background:#15803d;color:#fff;">
-                  <th style="padding:5px 8px;text-align:left;">Type MP</th>
-                  <th style="padding:5px 8px;text-align:left;">Marque/Fournisseur</th>
-                  <th style="padding:5px 8px;text-align:left;">N° Lot</th>
-                  <th style="padding:5px 8px;text-align:left;">Qté prévue</th>
-                  <th style="padding:5px 8px;text-align:left;">%</th>
-                </tr></thead>
-                <tbody>{rows_html}</tbody>
-                <tfoot><tr style="background:#dcfce7;font-weight:700;">
-                  <td colspan="3" style="padding:5px 8px;color:#15803d;">TOTAL</td>
-                  <td style="padding:5px 8px;">{total_poids:.1f} kg</td>
-                  <td style="padding:5px 8px;">{total_pct:.1f}%</td>
-                </tr></tfoot>
-              </table>
-            </div>"""
+            total_pct = 0
+            total_kg = 0
+            src = compo_mp_list if compo_mp_list else compo_groupes_list
+            for item in src:
+                pct = float(item.get('pct') or 0)
+                qte = float(item.get('quantite_kg') or 0)
+                if qte == 0 and poids_cible > 0:
+                    qte = round((pct/100)*poids_cible, 1)
+                total_pct += pct
+                total_kg += qte
+                groupe = item.get('groupe_libelle') or item.get('famille_libelle') or '-'
+                code = item.get('mp_code') or groupe
+                nom = item.get('mp_nom') or item.get('groupe_libelle') or '-'
+                pct_str = str(round(pct,1)) + '%'
+                qte_str = str(round(qte,1)) + ' kg'
+                rows_html += '<tr style="background:#fff;"><td style="padding:5px 8px;font-size:7pt;color:#6b7280;">' + groupe + '</td><td style="padding:5px 8px;font-weight:700;color:#92400e;">' + code + '</td><td style="padding:5px 8px;">' + nom + '</td><td style="padding:5px 8px;text-align:center;font-weight:700;">' + pct_str + '</td><td style="padding:5px 8px;text-align:center;font-weight:700;color:#15803d;">' + qte_str + '</td></tr>'
+            notes_regleur = d.get('at3_notes_regleur') or ''
+            notes_html = '<div style="margin-top:6px;background:#fffbeb;border:1px solid #fde68a;border-radius:4px;padding:5px 8px;font-size:7.5pt;"><strong>Instructions régleur :</strong> ' + notes_regleur + '</div>' if notes_regleur else ''
+            lots_html = '<div style="margin-top:10px;"><div style="background:#92400e;color:#fff;padding:5px 8px;font-size:7pt;font-weight:700;text-transform:uppercase;border-radius:4px 4px 0 0;">🧪 Composition matières premières — Poids cible : ' + str(round(poids_cible,1)) + ' kg</div><table style="width:100%;border-collapse:collapse;font-size:8pt;border:1px solid #fde68a;"><thead><tr style="background:#fef3c7;"><th style="padding:5px 8px;text-align:left;color:#92400e;">Groupe</th><th style="padding:5px 8px;text-align:left;color:#92400e;">Code MP</th><th style="padding:5px 8px;text-align:left;color:#92400e;">Désignation</th><th style="padding:5px 8px;text-align:center;color:#92400e;">%</th><th style="padding:5px 8px;text-align:center;color:#92400e;">Qté (kg)</th></tr></thead><tbody>' + rows_html + '</tbody><tfoot><tr style="background:#fef3c7;font-weight:700;"><td colspan="3" style="padding:5px 8px;color:#92400e;">TOTAL</td><td style="padding:5px 8px;text-align:center;">' + str(round(total_pct,1)) + '%</td><td style="padding:5px 8px;text-align:center;color:#15803d;">' + str(round(total_kg,1)) + ' kg</td></tr></tfoot></table>' + notes_html + '</div>'
 
         pdf_url = f"http://100.85.252.109:8095/api/of/{of_id}/pdf"
         qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=100x100&data={pdf_url.replace(':','%3A').replace('/','%2F')}&color=0369a1"

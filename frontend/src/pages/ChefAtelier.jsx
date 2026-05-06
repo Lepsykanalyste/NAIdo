@@ -1609,7 +1609,7 @@ function DetailOF({ detail, machines, onClose, onRefresh, onStatut, setOngletAct
           ['Article', detail.article_nom+' ('+detail.article_code+')'],
           ['Client', detail.client_nom||'—'],
           ['Atelier', detail.atelier_id||'—'],
-          ['Statut', detail.statut],
+          ['Statut', {'planifie':'Planifié','lance':'Lancé','en_cours':'En cours','termine':'Terminé','annule':'Annulé'}[detail.statut]||detail.statut],
           ['Qté cible', parseFloat(detail.quantite_cible||0).toFixed(0)+' kg'],
           ['Qté produite', parseFloat(detail.quantite_produite||0).toFixed(0)+' kg'],
           ['Temps prévu', detail.temps_prevu_min?detail.temps_prevu_min+' min':'—'],
@@ -1800,7 +1800,7 @@ function DetailOF({ detail, machines, onClose, onRefresh, onStatut, setOngletAct
       {/* Actions statut */}
       <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
         {detail.statut==='planifie' && <button onClick={()=>{onStatut(detail.id,'lance');onClose();}} style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer',fontSize:13,fontWeight:700}}>▶ Lancer</button>}
-        {detail.statut==='lance' && <button onClick={()=>{onStatut(detail.id,'en_cours');onClose();}} style={{background:'#d97706',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer',fontSize:13,fontWeight:700}}>⚙ Démarrer</button>}
+        {detail.statut==='lance' && detail.at3_statut_zone!=='extrusion' && <button onClick={()=>{onStatut(detail.id,'en_cours');onClose();}} style={{background:'#d97706',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer',fontSize:13,fontWeight:700}}>⚙ Démarrer</button>}
         {detail.statut==='en_cours' && <button onClick={()=>{onStatut(detail.id,'pause');onClose();}} style={{background:'#6b7280',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer',fontSize:13,fontWeight:700}}>⏸ Pause</button>}
         {detail.statut==='pause' && <button onClick={()=>{onStatut(detail.id,'en_cours');onClose();}} style={{background:'#d97706',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer',fontSize:13,fontWeight:700}}>▶ Reprendre</button>}
         {detail.statut==='en_cours' && <button onClick={()=>{onStatut(detail.id,'termine');onClose();}} style={{background:'#15803d',color:'#fff',border:'none',borderRadius:8,padding:'8px 16px',cursor:'pointer',fontSize:13,fontWeight:700}}>✓ Terminer</button>}
