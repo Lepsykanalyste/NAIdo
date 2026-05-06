@@ -2936,7 +2936,7 @@ function Articles() {
   const chargerRefs = async () => {
     try {
       const [f, u, a] = await Promise.all([
-        axios.get(`${API}/referentiels/familles`),
+        axios.get(`${API}/referentiels/familles?type=article`),
         axios.get(`${API}/referentiels/unites`),
         axios.get(`${API}/ateliers`),
       axios.get(`${API}/machines`),
@@ -3451,7 +3451,7 @@ function MatieresPremières() {
   const chargerRefs = async () => {
     try {
       const [f, u] = await Promise.all([
-        axios.get(`${API}/referentiels/familles`),
+        axios.get(`${API}/referentiels/familles?type=mp`),
         axios.get(`${API}/referentiels/unites`),
       ]);
       setFamilles(f.data);
@@ -3747,13 +3747,19 @@ function MatieresPremières() {
                 onClick={() => setDetail(detail?.id === m.id ? null : m)}>
                 <td style={{ padding:'9px 14px', fontFamily:'monospace', fontWeight:800, color:'#1d4ed8', fontSize:12 }}>{m.code}</td>
                 <td style={{ padding:'9px 14px', fontWeight:500 }}>{m.designation}</td>
+                <td style={{ padding:'9px 14px' }}>
+                  {m.famille_libelle ? (
+                    <span style={{ background:'#fef3c7', color:'#92400e', padding:'2px 8px', borderRadius:20, fontSize:11, fontWeight:700 }}>
+                      {m.famille_libelle}
+                    </span>
+                  ) : <span style={{ color:'#dc2626', fontSize:11 }}>⚠ Sans groupe</span>}
+                </td>
                 <td style={{ padding:'9px 14px', color:'#6b7280', fontSize:12 }}>{m.fournisseur||'—'}</td>
                 <td style={{ padding:'9px 14px' }}>
                   <span style={{ fontFamily:'monospace', background:'#dbeafe', color:'#1d4ed8', padding:'2px 6px', borderRadius:4, fontSize:12, fontWeight:700 }}>
                     {m.unite_code||'—'}
                   </span>
                 </td>
-                <td style={{ padding:'9px 14px', fontWeight:600 }}>{m.prix_achat ? `${m.prix_achat} FCFA` : '—'}</td>
                 <td style={{ padding:'9px 14px', fontWeight:700,
                   color: parseFloat(m.stock_mini||0) > 0 && parseFloat(m.stock_total||0) <= parseFloat(m.stock_mini||0) ? '#dc2626' : '#15803d' }}>
                   {parseFloat(m.stock_total||0).toFixed(1)}
