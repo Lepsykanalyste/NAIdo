@@ -2059,7 +2059,7 @@ function OrdresFabrication({ setOngletActif }) {
                 <td style={{padding:'9px 12px',fontSize:12}}>{of.client_nom||'—'}</td>
                 <td style={{padding:'9px 12px',fontSize:12}}>{of.machine_nom||of.machine_code||'—'}</td>
                 <td style={{padding:'9px 12px',fontSize:12}}>{of.atelier_nom||of.atelier_libelle||of.atelier_id||'—'}</td>
-                <td style={{padding:'9px 12px',fontWeight:600}}>{parseFloat(of.quantite_cible||0).toFixed(0)} kg</td>
+                <td style={{padding:'9px 12px',fontWeight:600}}>{parseFloat(of.quantite_cible||0).toLocaleString('fr-FR')} {of.unite_code||of.article_unite||'pcs'}</td>
                 <td style={{padding:'9px 12px',fontSize:12}}>{of.temps_prevu_min?of.temps_prevu_min+'min':'—'}</td>
                 <td style={{padding:'9px 12px',fontSize:12}}>{of.date_livraison_prevue?new Date(of.date_livraison_prevue).toLocaleDateString('fr-FR'):'—'}</td>
                 <td style={{padding:'9px 12px',textAlign:'center'}}>
