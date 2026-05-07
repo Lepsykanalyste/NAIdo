@@ -2808,7 +2808,7 @@ async def of_pdf(of_id: str):
                 SELECT o.*,
                        c.raison_sociale AS client_nom, c.telephone,
                        a.designation AS article_nom, a.code AS article_code,
-                       a.longueur_mm, a.largeur_mm, a.couleur,
+                       a.longueur_mm, a.largeur_mm, a.couleur, a.poids_theorique_kg,
                        o.at3_composition_of,
                        o.at3_poids_cible_kg,
                        o.at3_notes_regleur,
@@ -2874,7 +2874,7 @@ async def of_pdf(of_id: str):
         # Composition HTML
         compo_groupes_list = [dict(r) for r in compo_groupes]
         compo_mp_list = [dict(r) for r in compo_mp]
-        poids_cible = float(d.get('at3_poids_cible_kg') or d.get('quantite_cible') or 0)
+        poids_cible = float(d.get('at3_poids_cible_kg') or 0) or round(float(d.get('quantite_cible') or 0) * float(d.get('poids_theorique_kg') or 0), 1)
         lots_html = ''
         if compo_groupes_list or compo_mp_list:
             rows_html = ''
