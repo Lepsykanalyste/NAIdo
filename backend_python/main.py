@@ -2977,7 +2977,7 @@ async def of_pdf(of_id: str):
     </div>
   </div>
   <div>
-    <div class="qte-big">{float(d['quantite_cible'] or 0):.0f} kg</div>
+    <div class="qte-big">{int(float(d['quantite_cible'] or 0)):,} pcs / {round(poids_cible,1)} kg</div>
     <div style="text-align:center;font-size:7pt;color:#6b7280;">QUANTITÉ CIBLE</div>
   </div>
   <div class="sec">
