@@ -499,7 +499,6 @@ export function CompositionOF({ detail, configOf, setConfigOf, onSaved }) {
                     + {a.code}
                     <span style={{ fontSize:9, marginLeft:4, opacity:0.8 }}>
                       AT3: {parseFloat(a.stock_at3||0).toFixed(0)}kg
-                      {parseFloat(a.stock_magasin||0)>0 && ` | Mag: ${parseFloat(a.stock_magasin).toFixed(0)}kg`}
                     </span>
                   </button>
                 ))}
