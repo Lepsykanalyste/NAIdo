@@ -225,8 +225,16 @@ export function ModuleDBM() {
                   {lignes.map((l, i) => (
                     <tr key={i} style={{ borderBottom:'1px solid #fef3c7', background: i%2===0?'#fff':'#fffbeb' }}>
                       <td style={{ padding:'8px 10px' }}>
-                        <div style={{ fontWeight:700 }}>{l.code}</div>
-                        <div style={{ fontSize:10, color:'#6b7280' }}>{l.designation}</div>
+                        <div style={{ fontWeight:700, color:'#92400e', marginBottom:2 }}>{l.famille_libelle||l.code}</div>
+                        <select value={l.article_id||''} onChange={e => {
+                          const art = (besoins.find(b=>String(b.groupe_id||b.famille_id)===String(l.famille_id))?.articles||[]).find(a=>a.id===e.target.value);
+                          setLignes(prev=>prev.map((x,j)=>j!==i?x:{...x,article_id:e.target.value,code:art?.code||x.code,designation:art?.designation||x.designation,qte_dispo_mag:parseFloat(art?.stock_magasin||0)}));
+                        }} style={{fontSize:11,border:'1px solid #fcd34d',borderRadius:5,padding:'3px 6px',width:'100%'}}>
+                          <option value="">-- Choisir MP --</option>
+                          {(besoins.find(b=>String(b.groupe_id||b.famille_id)===String(l.famille_id))?.articles||[]).map(a=>(
+                            <option key={a.id} value={a.id}>{a.code} (mag: {parseFloat(a.stock_magasin||0).toFixed(0)}kg)</option>
+                          ))}
+                        </select>
                       </td>
                       <td style={{ padding:'8px 10px', fontSize:11, color:'#6b7280' }}>{l.famille_libelle}</td>
                       <td style={{ padding:'8px 10px', fontWeight:600 }}>{l.qte_necessaire} kg</td>
