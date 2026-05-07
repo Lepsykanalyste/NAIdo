@@ -2949,12 +2949,24 @@ function Articles() {
         if (payload[k] === '') payload[k] = null;
       });
 
+      let articleId = editArtId;
       if (modeEditArt && editArtId) {
         await axios.put(`${API}/articles/${editArtId}`, payload);
         toast.success(`✓ ${form.designation} mis à jour`);
       } else {
-        await axios.post(`${API}/articles`, payload);
+        const { data: newArt } = await axios.post(`${API}/articles`, payload);
+        articleId = newArt.id;
         toast.success(`✓ Article ${form.code} créé`);
+      }
+      // Sauvegarder la composition par groupe dans composition_article
+      if (articleId && composition.length > 0) {
+        const lignes = composition.map((comp, i) => ({
+          groupe_id: comp.groupe_id,
+          famille_id: comp.famille_id,
+          pct: parseFloat(comp.pct) || 0,
+          ordre: i,
+        }));
+        await axios.put(`${API}/articles/${articleId}/composition`, { lignes });
       }
       setShowForm(false);
       setModeEditArt(false);
