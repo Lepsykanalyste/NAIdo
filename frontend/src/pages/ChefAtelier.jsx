@@ -1660,7 +1660,7 @@ function DetailOF({ detail, machines, onClose, onRefresh, onStatut, setOngletAct
       {/* Composition matières */}
       <div style={{background:'#f0fdf4',borderRadius:10,padding:14,marginBottom:16,border:'1px solid #bbf7d0'}}>
         {user?.role==='chef_atelier' && (
-          <CompositionOF detail={detail} configOf={configOf} setConfigOf={setConfigOf} onSaved={onRefresh} />
+          <CompositionOF detail={detail} configOf={configOf} setConfigOf={setConfigOf} onSaved={onRefresh} userRole={user?.role} />
         )}
         
         <div style={{display:user?.role==='chef_atelier'?'none':'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}}>
