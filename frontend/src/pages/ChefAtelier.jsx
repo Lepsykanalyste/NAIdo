@@ -2976,7 +2976,7 @@ function Articles() {
         toast.success(`✓ Article ${form.code} créé`);
       }
       // Sauvegarder la composition par groupe dans composition_article
-      if (articleId && composition.length > 0) {
+      console.log("DEBUG compo save:", articleId, JSON.stringify(composition)); console.log("DEBUG compo save:", articleId, JSON.stringify(composition)); if (articleId && composition.length > 0) {
         const lignes = composition.map((comp, i) => ({
           groupe_id: comp.groupe_id,
           famille_id: comp.famille_id,
