@@ -1610,7 +1610,7 @@ function DetailOF({ detail, machines, onClose, onRefresh, onStatut, setOngletAct
           ['Client', detail.client_nom||'—'],
           ['Atelier', detail.atelier_libelle||detail.atelier_id||'—'],
           ['Statut', {'planifie':'Planifié','lance':'Lancé','en_cours':'En cours','termine':'Terminé','annule':'Annulé'}[detail.statut]||detail.statut],
-          ['Qté cible', parseFloat(detail.quantite_cible||0).toFixed(0)+' kg'],
+          ['Qté cible', parseFloat(detail.quantite_cible||0).toFixed(0)+' pcs'+(detail.at3_poids_cible_kg?' — '+parseFloat(detail.at3_poids_cible_kg).toFixed(0)+' kg':'')],
           ['Qté produite', parseFloat(detail.quantite_produite||0).toFixed(0)+' kg'],
           ['Temps prévu', detail.temps_prevu_min?detail.temps_prevu_min+' min':'—'],
           ['Livraison', detail.date_livraison_prevue?new Date(detail.date_livraison_prevue).toLocaleDateString('fr-FR'):'—'],
@@ -2053,7 +2053,7 @@ function OrdresFabrication({ setOngletActif }) {
             )}
             {ofs.map((of,i) => (
               <tr key={of.id} style={{borderBottom:'1px solid #f3f4f6',background:i%2===0?'#fff':'#fafafa',cursor:'pointer'}}
-                  onClick={()=>setDetail(detail?.id===of.id?null:of)}>
+                  onClick={async()=>{if(detail?.id===of.id){setDetail(null);}else{try{const r=await axios.get(`${API}/of/${of.id}`);setDetail({...of,...r.data});}catch{setDetail(of);}}}}>
                 <td style={{padding:'9px 12px',fontWeight:700,color:'#0369a1'}}>{of.numero_of}</td>
                 <td style={{padding:'9px 12px'}}>{of.article_nom||'—'}<br/><span style={{fontSize:10,color:'#6b7280'}}>{of.article_code}</span></td>
                 <td style={{padding:'9px 12px',fontSize:12}}>{of.client_nom||'—'}</td>
