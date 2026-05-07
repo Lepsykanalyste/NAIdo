@@ -2870,7 +2870,7 @@ function Articles() {
     setDetail(null);
     // Charger la composition depuis composition_article (nouvelle table)
     try {
-      const { data: compoData } = await axios.get(`${API}/articles/${a.id}/composition`);
+      const { data: compoData } = await axios.get(`${API}/composition/${a.id}`);
       if (compoData && compoData.length > 0) {
         setComposition(compoData.map(l => ({
           groupe_id: l.groupe_id,
@@ -2983,7 +2983,7 @@ function Articles() {
           pct: parseFloat(comp.pct) || 0,
           ordre: i,
         }));
-        await axios.put(`${API}/articles/${articleId}/composition`, { lignes });
+        await axios.put(`${API}/composition/${articleId}`, { lignes });
       }
       setShowForm(false);
       setModeEditArt(false);

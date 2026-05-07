@@ -25,26 +25,8 @@ app.use('/api/auth',           require('./routes/auth'));
 app.use('/api/users',          require('./routes/users'));
 app.use('/api/ateliers',       require('./routes/ateliers'));
 app.use('/api/articles',       require('./routes/articles'));
+app.use('/api/composition',     require('./routes/composition'));
 
-// Route composition directe (bypass conflit /:id)
-const db = require('./db');
-const auth = require('./middleware/auth');
-app.put('/api/articles/:id/composition', auth, async (req,res) => {
-  const client = await db.connect();
-  try {
-    await client.query('BEGIN');
-    const { lignes } = req.body;
-    await client.query('DELETE FROM composition_article WHERE article_id=$1', [req.params.id]);
-    for (let i=0; i<lignes.length; i++) {
-      const l = lignes[i];
-      await client.query('INSERT INTO composition_article (article_id,groupe_id,famille_id,pct,ordre) VALUES ($1,$2,$3,$4,$5)',
-        [req.params.id, l.groupe_id, l.famille_id, l.pct||0, i]);
-    }
-    await client.query('COMMIT');
-    res.json({ message: 'Composition sauvegardée' });
-  } catch(e) { await client.query('ROLLBACK'); res.status(500).json({ error: e.message }); }
-  finally { client.release(); }
-});
 app.use('/api/referentiels',   require('./routes/referentiels'));
 app.use('/api/emplacements',   require('./routes/emplacements'));
 // Production

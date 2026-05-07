@@ -46,7 +46,7 @@ export function CompositionFicheArticle({ articleId }) {
       const [fam, grp, compo] = await Promise.all([
         axios.get(`${API}/referentiels/familles`),
         axios.get(`${API}/referentiels/groupes`),
-        axios.get(`${API}/articles/${articleId}/composition`),
+        axios.get(`${API}/composition/${articleId}`),
       ]);
       setFamilles(fam.data || []);
       setGroupes(grp.data || []);
@@ -93,7 +93,7 @@ export function CompositionFicheArticle({ articleId }) {
     }
     setLoading(true);
     try {
-      await axios.put(`${API}/articles/${articleId}/composition`, { lignes });
+      await axios.put(`${API}/composition/${articleId}`, { lignes });
       toast.success('✓ Composition sauvegardée');
       charger();
     } catch(e) { toast.error(e.response?.data?.error || 'Erreur'); }
