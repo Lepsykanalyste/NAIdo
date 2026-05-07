@@ -225,6 +225,7 @@ router.get('/of/:of_id/besoins', auth, async (req, res) => {
       });
       besoins.push({
         groupe_id:g.groupe_id, groupe_libelle:g.groupe_libelle, pct,
+        famille_id:g.famille_id, famille_libelle:g.famille_libelle,
         qte_necessaire:parseFloat(qteNec.toFixed(3)),
         qte_dispo_at3:parseFloat(totalAt3.toFixed(3)),
         qte_a_demander:parseFloat(Math.max(0,qteNec-totalAt3).toFixed(3)),

@@ -79,14 +79,14 @@ export function ModuleDBM() {
       setLignes((data.besoins || [])
         .filter(b => b.qte_a_demander > 0)
         .map(b => ({
-          article_id:      b.article_id,
-          famille_id:      b.famille_id,
-          code:            b.code,
-          designation:     b.designation,
-          famille_libelle: b.famille_libelle,
+          article_id:      null,
+          famille_id:      b.famille_id || b.groupe_id,
+          code:            b.groupe_code || b.groupe_libelle,
+          designation:     b.groupe_libelle,
+          famille_libelle: b.groupe_libelle,
           qte_necessaire:  b.qte_necessaire,
           qte_dispo_at3:   b.qte_dispo_at3,
-          qte_dispo_mag:   b.qte_dispo_mag,
+          qte_dispo_mag:   b.qte_dispo_mag || 0,
           qte_demandee:    b.qte_a_demander,
           unite:           'kg',
         }))
