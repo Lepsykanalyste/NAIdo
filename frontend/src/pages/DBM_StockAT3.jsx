@@ -231,8 +231,8 @@ export function ModuleDBM() {
                           setLignes(prev=>prev.map((x,j)=>j!==i?x:{...x,article_id:e.target.value,code:art?.code||x.code,designation:art?.designation||x.designation,qte_dispo_mag:parseFloat(art?.stock_magasin||0)}));
                         }} style={{fontSize:11,border:'1px solid #fcd34d',borderRadius:5,padding:'3px 6px',width:'100%'}}>
                           <option value="">-- Choisir MP --</option>
-                          {(besoins.find(b=>String(b.groupe_id||b.famille_id)===String(l.famille_id))?.articles||[]).map(a=>(
-                            <option key={a.id} value={a.id}>{a.code} (mag: {parseFloat(a.stock_magasin||0).toFixed(0)}kg)</option>
+                          {(besoins.find(b=>String(b.groupe_id||b.famille_id)===String(l.famille_id))?.articles||[]).filter(a=>parseFloat(a.stock_magasin||0)>0).map(a=>(
+                            <option key={a.id} value={a.id}>{a.code} — {parseFloat(a.stock_magasin||0).toFixed(0)} kg dispo</option>
                           ))}
                         </select>
                       </td>
@@ -248,16 +248,19 @@ export function ModuleDBM() {
                       <td style={{ padding:'8px 10px', width:110 }}>
                         <div style={{ display:'flex', alignItems:'center', gap:4 }}>
                           <input type="number" value={l.qte_demandee} min="0" step="0.1"
-                            onChange={e => majQte(i, e.target.value)}
+                            max={l.qte_dispo_mag||undefined}
+                            onChange={e => { const v=parseFloat(e.target.value||0); const max=parseFloat(l.qte_dispo_mag||0); if(max>0&&v>max){majQte(i,max);}else{majQte(i,e.target.value);} }}
                             style={{ width:80, border:'2px solid #fcd34d', borderRadius:6, padding:'5px', fontSize:13, textAlign:'center', fontWeight:700 }} />
                           <span style={{ fontSize:11 }}>kg</span>
                         </div>
                       </td>
                       <td style={{ padding:'8px 10px' }}>
+                        <div style={{display:'flex',gap:4}}>
+                        <button onClick={() => setLignes(prev=>[...prev.slice(0,i+1),{...prev[i],article_id:'',code:'',designation:'',qte_dispo_mag:0},...prev.slice(i+1)])}
+                          style={{ background:'#dcfce7', color:'#15803d', border:'none', borderRadius:6, padding:'4px 8px', cursor:'pointer', fontSize:12 }}>+</button>
                         <button onClick={() => supprimerLigne(i)}
-                          style={{ background:'#fee2e2', color:'#dc2626', border:'none', borderRadius:6, padding:'4px 8px', cursor:'pointer', fontSize:12 }}>
-                          🗑
-                        </button>
+                          style={{ background:'#fee2e2', color:'#dc2626', border:'none', borderRadius:6, padding:'4px 8px', cursor:'pointer', fontSize:12 }}>🗑</button>
+                        </div>
                       </td>
                     </tr>
                   ))}
