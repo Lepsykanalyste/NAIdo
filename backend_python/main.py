@@ -2635,7 +2635,13 @@ async def df_pdf(df_id: str, token: str = ""):
         
         qr_text = f"NAI DF\nN: {d['numero_df']}\nARTICLE: {d['article_code']} {d['article_nom']}\nQTE: {d['quantite_demandee']} kg\nCLIENT: {d['client_nom'] or '—'}\nSTATUT: {d['statut']}\nOF: {d.get('numero_of') or '—'}"
         pdf_url = f"{os.environ.get('APP_BASE_URL','http://100.85.252.109:8095')}/api/df/{df_id}/view"
-        qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=120x120&data={pdf_url.replace(':','%3A').replace('/','%2F')}&color=7c3aed"
+        import qrcode as _qr, base64 as _b64
+        from io import BytesIO as _BIO
+        _q = _qr.QRCode(version=1, box_size=5, border=2)
+        _q.add_data(pdf_url); _q.make(fit=True)
+        _img = _q.make_image(fill_color="black", back_color="white")
+        _buf = _BIO(); _img.save(_buf, format="PNG"); _buf.seek(0)
+        qr_url = "data:image/png;base64," + _b64.b64encode(_buf.getvalue()).decode()
         
         html_content = f"""<!DOCTYPE html>
 <html lang="fr">
