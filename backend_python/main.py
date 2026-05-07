@@ -2634,10 +2634,10 @@ async def df_pdf(df_id: str, token: str = ""):
         etoiles = '⭐' * (d.get('priorite') or 1)
         
         qr_text = f"NAI DF\nN: {d['numero_df']}\nARTICLE: {d['article_code']} {d['article_nom']}\nQTE: {d['quantite_demandee']} kg\nCLIENT: {d['client_nom'] or '—'}\nSTATUT: {d['statut']}\nOF: {d.get('numero_of') or '—'}"
-        pdf_url = f"{os.environ.get('APP_BASE_URL','http://100.85.252.109:8095')}/api/df/{df_id}/view"
-        import qrcode as _qr, base64 as _b64
+        pdf_url = f"{os.environ.get('APP_BASE_URL','http://100.85.252.109:8095')}/api/df/{df_id}/pdf"
+        import qrcode as _qr, base64 as _b64, urllib.parse as _up
         from io import BytesIO as _BIO
-        _q = _qr.QRCode(version=1, box_size=5, border=2)
+        _q = _qr.QRCode(version=1, box_size=3, border=2, error_correction=_qr.constants.ERROR_CORRECT_M)
         _q.add_data(pdf_url); _q.make(fit=True)
         _img = _q.make_image(fill_color="black", back_color="white")
         _buf = _BIO(); _img.save(_buf, format="PNG"); _buf.seek(0)
