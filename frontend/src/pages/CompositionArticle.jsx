@@ -305,7 +305,6 @@ export function CompositionOF({ detail, configOf, setConfigOf, onSaved }) {
 
   const sauvegarder = async (valider = false) => {
     if (valider && Math.abs(totalPct-100) > 0.1) return toast.error(`Total ${totalPct.toFixed(1)}% — doit être 100%`);
-    if (valider && !configOf?.at3_poids_cible_kg) return toast.error('Poids cible requis');
     if (valider) {
       for (const g of groupes) {
         const gmp = choixMp[String(g.groupe_id)] || [];
@@ -371,9 +370,7 @@ export function CompositionOF({ detail, configOf, setConfigOf, onSaved }) {
         </div>
         <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8, marginBottom:8 }}>
           {[
-            ['Poids cible (kg) *', 'at3_poids_cible_kg'],
             ['Nb bobines prévues', 'at3_nb_bobines_cibles'],
-            ['Machine (ID)', 'at3_machine_assignee_id'],
           ].map(([label, key]) => (
             <div key={key}>
               <label style={{ fontSize:10, fontWeight:600, display:'block', marginBottom:2 }}>{label}</label>
