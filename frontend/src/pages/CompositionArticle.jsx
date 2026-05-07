@@ -489,7 +489,7 @@ export function CompositionOF({ detail, configOf, setConfigOf, onSaved }) {
                 <span style={{ fontSize:10, fontWeight:600, color:'#6b7280', whiteSpace:'nowrap' }}>
                   + Ajouter une MP :
                 </span>
-                {g.articles?.filter(a => !mpsChoisis.find(m => m.mp_id === a.id)).map(a => (
+                {g.articles?.filter(a => !mpsChoisis.find(m => m.mp_id === a.id) && parseFloat(a.stock_at3||0)>0).map(a => (
                   <button key={a.id} onClick={() => ajouterMp(g.groupe_id, a)} style={{
                     background: parseFloat(a.stock_at3||0)>0 ? clr.bg : '#f3f4f6',
                     color:      parseFloat(a.stock_at3||0)>0 ? clr.tx : '#9ca3af',
