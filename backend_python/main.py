@@ -2631,7 +2631,7 @@ async def df_pdf(df_id: str, token: str = ""):
         couleur = '#15803d' if d['statut']=='validee' else '#dc2626' if d['statut']=='refusee' else '#d97706'
         bg_couleur = '#dcfce7' if d['statut']=='validee' else '#fee2e2' if d['statut']=='refusee' else '#fef3c7'
         label_statut = {'en_attente':'En attente','validee':'Validée','refusee':'Refusée','annulee':'Annulée'}.get(d['statut'],d['statut'])
-        etoiles = 'P' + str(d.get('priorite') or 1) + '/5'
+        etoiles = {1:'Basse',2:'Normale',3:'Haute',4:'Urgente',5:'Critique'}.get(d.get('priorite') or 1,'Normale')
         
         qr_text = f"NAI DF\nN: {d['numero_df']}\nARTICLE: {d['article_code']} {d['article_nom']}\nQTE: {d['quantite_demandee']} kg\nCLIENT: {d['client_nom'] or '—'}\nSTATUT: {d['statut']}\nOF: {d.get('numero_of') or '—'}"
         pdf_url = f"{os.environ.get('APP_BASE_URL','http://100.85.252.109:8095')}/api/df/{df_id}/pdf"
@@ -2869,7 +2869,7 @@ async def of_pdf(of_id: str):
         }
         col, bg = statut_colors.get(d['statut'], ('#6b7280','#f3f4f6'))
         label_statut = {'planifie':'Planifié','lance':'Lancé','en_cours':'En cours','pause':'En pause','termine':'Terminé','annule':'Annulé'}.get(d['statut'],d['statut'])
-        etoiles = 'P' + str(d.get('priorite') or 1) + '/5'
+        etoiles = {1:'Basse',2:'Normale',3:'Haute',4:'Urgente',5:'Critique'}.get(d.get('priorite') or 1,'Normale')
 
         # Composition HTML
         compo_groupes_list = [dict(r) for r in compo_groupes]
