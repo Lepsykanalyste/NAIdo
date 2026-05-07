@@ -2868,7 +2868,24 @@ function Articles() {
     setModeEditArt(true);
     setEditArtId(a.id);
     setDetail(null);
-    setComposition(Array.isArray(a.composition) ? a.composition : []);
+    // Charger la composition depuis composition_article (nouvelle table)
+    try {
+      const { data: compoData } = await axios.get(`${API}/articles/${a.id}/composition`);
+      if (compoData && compoData.length > 0) {
+        setComposition(compoData.map(l => ({
+          groupe_id: l.groupe_id,
+          groupe_code: l.groupe_code,
+          groupe_libelle: l.groupe_libelle,
+          famille_id: l.famille_id,
+          famille_libelle: l.famille_libelle,
+          pct: parseFloat(l.pct),
+          mp_id: null, code: l.groupe_code, designation: l.groupe_libelle,
+          quantite:'', unite_id:''
+        })));
+      } else {
+        setComposition([]);
+      }
+    } catch { setComposition([]); }
     setForm({
       code: a.code || '',
       designation: a.designation || '',
