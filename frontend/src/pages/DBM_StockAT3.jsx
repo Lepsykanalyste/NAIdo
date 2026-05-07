@@ -323,8 +323,8 @@ export function ModuleDBM() {
             <tbody>
               {(detail.lignes || []).map((l, i) => (
                 <tr key={i} style={{ borderBottom:'1px solid #fef3c7', background: i%2===0?'#fff':'#fffbeb' }}>
-                  <td style={{ padding:'7px 10px', fontWeight:700 }}>{l.code}</td>
-                  <td style={{ padding:'7px 10px', fontSize:11, color:'#6b7280' }}>{l.famille_libelle}</td>
+                  <td style={{ padding:'7px 10px', fontWeight:700 }}>{l.code||l.designation||l.famille_libelle||'—'}</td>
+                  <td style={{ padding:'7px 10px', fontSize:11, color:'#6b7280' }}>{l.famille_libelle||l.groupe_libelle||'—'}</td>
                   <td style={{ padding:'7px 10px', fontWeight:600 }}>{parseFloat(l.qte_demandee).toFixed(1)} kg</td>
                   <td style={{ padding:'7px 10px', color:'#15803d', fontWeight:600 }}>{parseFloat(l.qte_livree||0).toFixed(1)} kg</td>
                   <td style={{ padding:'7px 10px', color: parseFloat(l.qte_restante||0) > 0 ? '#d97706' : '#15803d', fontWeight:600 }}>
