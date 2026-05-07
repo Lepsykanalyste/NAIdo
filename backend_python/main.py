@@ -20,7 +20,7 @@ pool = None
 async def lifespan(app: FastAPI):
     global pool
     pool = await asyncpg.create_pool(DB_URL, min_size=3, max_size=10)
-    print("NAIdo Python API démarré ✓")
+    print("NAIdo Python API démarré OK")
     yield
     await pool.close()
 
@@ -2631,7 +2631,7 @@ async def df_pdf(df_id: str, token: str = ""):
         couleur = '#15803d' if d['statut']=='validee' else '#dc2626' if d['statut']=='refusee' else '#d97706'
         bg_couleur = '#dcfce7' if d['statut']=='validee' else '#fee2e2' if d['statut']=='refusee' else '#fef3c7'
         label_statut = {'en_attente':'En attente','validee':'Validée','refusee':'Refusée','annulee':'Annulée'}.get(d['statut'],d['statut'])
-        etoiles = '⭐' * (d.get('priorite') or 1)
+        etoiles = '&#9733;' * (d.get('priorite') or 1)
         
         qr_text = f"NAI DF\nN: {d['numero_df']}\nARTICLE: {d['article_code']} {d['article_nom']}\nQTE: {d['quantite_demandee']} kg\nCLIENT: {d['client_nom'] or '—'}\nSTATUT: {d['statut']}\nOF: {d.get('numero_of') or '—'}"
         pdf_url = f"{os.environ.get('APP_BASE_URL','http://100.85.252.109:8095')}/api/df/{df_id}/pdf"
@@ -2679,7 +2679,7 @@ async def df_pdf(df_id: str, token: str = ""):
   <div><div class="company">NAI</div><div style="font-size:7pt;color:#6b7280;">Atelier 3 — Système de Production</div></div>
   <div style="text-align:right;"><div style="font-size:7pt;color:#6b7280;">Date : {date_str}</div><div style="font-size:7pt;color:#6b7280;">Demandeur : {d.get('demandeur_nom') or '—'}</div></div>
 </div>
-<div class="banner">📝 Demande de Fabrication</div>
+<div class="banner">DEMANDE DE FABRICATION</div>
 <div class="df-num">{d['numero_df']}</div>
 <div style="text-align:center;margin-bottom:8px;"><span class="badge">{label_statut}</span></div>
 <div class="grid">
@@ -2703,7 +2703,7 @@ async def df_pdf(df_id: str, token: str = ""):
 <div class="qte-big">{float(d['quantite_demandee']):.0f} kg</div>
 <div class="qte-lbl">QUANTITÉ DEMANDÉE</div>
 {f'<div style="background:#faf5ff;border:1px solid #e9d5ff;border-radius:4px;padding:8px;margin:6px 0;font-size:8pt;"><strong>Spécifications :</strong> {d["description"]}</div>' if d.get('description') else ''}
-{f'<div class="of-link"><div style="font-size:7pt;color:#6b7280;margin-bottom:2px;">Ordre de fabrication généré</div><div style="font-size:13pt;font-weight:800;color:#0369a1;">→ {d["numero_of"]}</div><div style="font-size:7pt;color:#6b7280;">Validé par : {d.get("valideur_nom") or "—"} — {val_str}</div></div>' if d.get('numero_of') else '<div style="background:#fef3c7;border:1px solid #fde68a;border-radius:4px;padding:6px;text-align:center;font-size:8pt;color:#92400e;margin:6px 0;">⏳ En attente de validation</div>'}
+{f'<div class="of-link"><div style="font-size:7pt;color:#6b7280;margin-bottom:2px;">Ordre de fabrication généré</div><div style="font-size:13pt;font-weight:800;color:#0369a1;">→ {d["numero_of"]}</div><div style="font-size:7pt;color:#6b7280;">Validé par : {d.get("valideur_nom") or "—"} — {val_str}</div></div>' if d.get('numero_of') else '<div style="background:#fef3c7;border:1px solid #fde68a;border-radius:4px;padding:6px;text-align:center;font-size:8pt;color:#92400e;margin:6px 0;">... En attente de validation</div>'}
 <div style="text-align:center;margin:8px 0;">
   <img src="{qr_url}" width="90" height="90" alt="QR"/>
   <div style="font-size:6pt;color:#9ca3af;margin-top:2px;">{d['numero_df']}</div>
@@ -2869,7 +2869,7 @@ async def of_pdf(of_id: str):
         }
         col, bg = statut_colors.get(d['statut'], ('#6b7280','#f3f4f6'))
         label_statut = {'planifie':'Planifié','lance':'Lancé','en_cours':'En cours','pause':'En pause','termine':'Terminé','annule':'Annulé'}.get(d['statut'],d['statut'])
-        etoiles = '★' * (d.get('priorite') or 1)
+        etoiles = '&#9733;' * (d.get('priorite') or 1)
 
         # Composition HTML
         compo_groupes_list = [dict(r) for r in compo_groupes]
@@ -2944,7 +2944,7 @@ async def of_pdf(of_id: str):
   </div>
 </div>
 
-<div class="banner">📋 Ordre de Fabrication</div>
+<div class="banner">ORDRE DE FABRICATION</div>
 <div class="of-num">{d['numero_of']}</div>
 <div style="text-align:center;margin-bottom:10px;"><span class="badge">{label_statut}</span> <span style="font-size:12pt;">{etoiles}</span></div>
 
@@ -3056,7 +3056,7 @@ async def ticket_prod_pdf(ticket_id: str):
             'extrusion': ('🏭 EXTRUSION', '#0369a1'),
             'soudure': ('🔧 SOUDURE', '#d97706'),
             'impression': ('🖨 IMPRESSION', '#0891b2'),
-            'emballage': ('📦 EMBALLAGE', '#7c3aed'),
+            'emballage': (' EMBALLAGE', '#7c3aed'),
             'of_recap': ('📋 RÉCAP OF', '#15803d'),
         }
         type_label, couleur = type_labels.get(t.get('type_ticket','extrusion'), ('🏭 PRODUCTION', '#0369a1'))
