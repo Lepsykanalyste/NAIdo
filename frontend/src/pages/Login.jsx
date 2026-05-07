@@ -132,8 +132,7 @@ export default function Login() {
     @keyframes slideUp{from{opacity:0;transform:translateY(28px) scale(0.97)}to{opacity:1;transform:translateY(0) scale(1)}}
     .nai-brand{font-family:'Orbitron',monospace;font-size:2.5rem;font-weight:900;letter-spacing:0.18em;line-height:1;margin-bottom:0.45rem;background:linear-gradient(135deg,#1A6BFF 0%,#6BA4FF 40%,#FF2D4B 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;filter:drop-shadow(0 0 18px rgba(26,107,255,0.25));}
     .nai-tagline{font-size:0.68rem;letter-spacing:0.3em;text-transform:uppercase;color:rgba(26,107,255,0.6);font-weight:300;}
-    .nai-powered{margin-top:0.5rem;font-size:0.58rem;letter-spacing:0.22em;text-transform:uppercase;color:rgba(255,45,75,0.45);}
-    .nai-powered strong{color:#FF2D4B;font-weight:600;}
+    
     .nai-sep{display:flex;align-items:center;gap:1rem;margin-bottom:2rem;}
     .nai-sep::before{content:'';flex:1;height:1px;background:linear-gradient(90deg,transparent,rgba(26,107,255,0.3));}
     .nai-sep::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,rgba(255,45,75,0.3),transparent);}
@@ -183,23 +182,12 @@ export default function Login() {
               <div style={{width:60,height:60,margin:'0 auto 1.2rem',position:'relative',display:'flex',alignItems:'center',justifyContent:'center'}}>
                 <div className="ring-blue"/>
                 <div className="ring-red"/>
-                <svg viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg" style={{width:'100%',height:'100%',filter:'drop-shadow(0 0 10px rgba(26,107,255,0.4))'}}>
-                  <polygon points="30,4 54,18 54,42 30,56 6,42 6,18" stroke="#1A6BFF" strokeWidth="1.5" fill="none"/>
-                  <polygon points="30,14 46,23.5 46,36.5 30,46 14,36.5 14,23.5" stroke="#FF2D4B" strokeWidth="1" fill="rgba(255,45,75,0.05)"/>
-                  <polygon points="30,22 38,30 30,38 22,30" fill="rgba(26,107,255,0.15)" stroke="#1A6BFF" strokeWidth="1"/>
-                  <circle cx="30" cy="30" r="4" fill="#1A6BFF"/>
-                  <circle cx="30" cy="30" r="2" fill="#FF2D4B"/>
-                  <line x1="30" y1="14" x2="30" y2="22" stroke="#1A6BFF" strokeWidth="1"/>
-                  <line x1="30" y1="38" x2="30" y2="46" stroke="#1A6BFF" strokeWidth="1"/>
-                  <line x1="14" y1="23.5" x2="21" y2="27.5" stroke="#FF2D4B" strokeWidth="1"/>
-                  <line x1="39" y1="32.5" x2="46" y2="36.5" stroke="#FF2D4B" strokeWidth="1"/>
-                  <line x1="46" y1="23.5" x2="39" y2="27.5" stroke="#1A6BFF" strokeWidth="1"/>
-                  <line x1="21" y1="32.5" x2="14" y2="36.5" stroke="#1A6BFF" strokeWidth="1"/>
-                </svg>
+                <img src="https://nai-ci.com/wp-content/uploads/2026/02/cropped-LOGO-NAI-165x162.jpg" 
+                     alt="NAI" style={{width:'100%',height:'100%',objectFit:'contain',filter:'drop-shadow(0 0 8px rgba(26,107,255,0.2))',borderRadius:'8px'}}/>
               </div>
               <div className="nai-brand">NAIdo</div>
               <div className="nai-tagline">NAI — Digital Operations</div>
-              <div className="nai-powered">Powered by <strong>SOPHOPSY.COM</strong></div>
+              
             </div>
 
             <div className="nai-sep"><span>Accès sécurisé</span></div>
