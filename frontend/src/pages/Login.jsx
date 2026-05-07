@@ -112,7 +112,7 @@ export default function Login() {
 
   const css = `
     @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Syne:wght@300;400;600&display=swap');
-    .nai-root{position:fixed;inset:0;background:#03050F;font-family:'Syne',sans-serif;color:#E2EAFF;overflow:hidden;}
+    .nai-root{position:fixed;inset:0;background:#ffffff;font-family:'Syne',sans-serif;color:#E2EAFF;overflow:hidden;}
     .nai-grid{position:fixed;inset:0;z-index:1;background-image:linear-gradient(rgba(26,107,255,0.04) 1px,transparent 1px),linear-gradient(90deg,rgba(26,107,255,0.04) 1px,transparent 1px);background-size:60px 60px;pointer-events:none;}
     .nai-vignette{position:fixed;inset:0;z-index:2;background:radial-gradient(ellipse at center,transparent 40%,rgba(3,5,15,0.9) 100%);pointer-events:none;}
     .nai-glow-b{position:fixed;top:-15%;left:-10%;width:500px;height:500px;border-radius:50%;background:radial-gradient(circle,rgba(26,107,255,0.08) 0%,transparent 70%);z-index:1;pointer-events:none;animation:drift 12s ease-in-out infinite alternate;}
