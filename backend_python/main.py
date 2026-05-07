@@ -2874,7 +2874,7 @@ async def of_pdf(of_id: str):
         # Composition HTML
         compo_groupes_list = [dict(r) for r in compo_groupes]
         compo_mp_list = [dict(r) for r in compo_mp]
-        poids_cible = float(d.get('at3_poids_cible_kg') or d.get('quantite_cible') or 0)
+        poids_cible = float(d.get('at3_poids_cible_kg') or 0)
         lots_html = ''
         if compo_groupes_list or compo_mp_list:
             rows_html = ''
