@@ -99,83 +99,69 @@ router.post('/', auth, async (req, res) => {
   finally { client.release(); }
 });
 
-// PUT /api/dbm/:id/livrer — Magasinier MP livre les MP
+// PUT /api/dbm/:id/livrer — Magasinier MP envoie les MP (en transit)
 router.put('/:id/livrer', auth, async (req, res) => {
   const client = await db.connect();
   try {
     await client.query('BEGIN');
     const { livraisons, notes_magasin } = req.body;
-    // livraisons = [{ ligne_id, article_id, famille_id, qte_livree, numero_lot }]
     const mag_id = req.user?.id;
+    const dbmRes = await client.query('SELECT * FROM dbm WHERE id=$1', [req.params.id]);
+    if (!dbmRes.rows.length) throw new Error('DBM introuvable');
+    for (const l of livraisons) {
+      if (!l.qte_livree || parseFloat(l.qte_livree) <= 0) continue;
+      await client.query(`
+        UPDATE dbm_lignes SET qte_en_transit=$1, numero_lot=$2 WHERE id=$3
+      `, [parseFloat(l.qte_livree), l.numero_lot||'', l.ligne_id]);
+      await client.query(`
+        UPDATE stock_articles SET qte_disponible=GREATEST(0,qte_disponible-$1) WHERE article_id=$2
+      `, [parseFloat(l.qte_livree), l.article_id]);
+    }
+    await client.query(`
+      UPDATE dbm SET statut='en_preparation', livre_par=$1, date_livraison=NOW(), notes_magasin=$2 WHERE id=$3
+    `, [mag_id, notes_magasin||'', req.params.id]);
+    await client.query('COMMIT');
+    ok(res, { message: "Livraison envoyée — en attente de réception par l'Atelier 3 ✓" });
+  } catch(e) { await client.query('ROLLBACK'); err(res, e, 'Erreur livraison DBM'); }
+  finally { client.release(); }
+});
 
-    // Récupérer la DBM
+// PUT /api/dbm/:id/receptionner — Chef AT3 réceptionne et valide les MP
+router.put('/:id/receptionner', auth, async (req, res) => {
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const { receptions } = req.body;
+    const chef_id = req.user?.id;
     const dbmRes = await client.query('SELECT * FROM dbm WHERE id=$1', [req.params.id]);
     if (!dbmRes.rows.length) throw new Error('DBM introuvable');
     const dbm = dbmRes.rows[0];
-
-    let toutLivre = true;
-
-    for (const l of livraisons) {
-      if (!l.qte_livree || parseFloat(l.qte_livree) <= 0) continue;
-
-      // Mettre à jour la ligne DBM
+    let toutRecu = true;
+    for (const r of receptions) {
+      if (!r.qte_recue || parseFloat(r.qte_recue) <= 0) continue;
+      const qte = parseFloat(r.qte_recue);
+      const ligneRes = await client.query('SELECT * FROM dbm_lignes WHERE id=$1', [r.ligne_id]);
+      const ligne = ligneRes.rows[0];
       await client.query(`
-        UPDATE dbm_lignes
-        SET qte_livree = qte_livree + $1
-        WHERE id = $2
-      `, [l.qte_livree, l.ligne_id]);
-
-      // Vérifier si tout est livré
-      const ligneRes = await client.query(
-        'SELECT qte_demandee, qte_livree FROM dbm_lignes WHERE id=$1', [l.ligne_id]
-      );
-      if (parseFloat(ligneRes.rows[0].qte_livree) < parseFloat(ligneRes.rows[0].qte_demandee)) {
-        toutLivre = false;
-      }
-
-      // Créditer le stock AT3
-      const stockRes = await client.query(
-        'SELECT id FROM stock_at3 WHERE article_id=$1 LIMIT 1', [l.article_id]
-      );
+        UPDATE dbm_lignes SET qte_livree=qte_livree+$1, qte_en_transit=GREATEST(0,qte_en_transit-$1) WHERE id=$2
+      `, [qte, r.ligne_id]);
+      const ligneUpd = await client.query('SELECT qte_demandee,qte_livree FROM dbm_lignes WHERE id=$1', [r.ligne_id]);
+      if (parseFloat(ligneUpd.rows[0].qte_livree) < parseFloat(ligneUpd.rows[0].qte_demandee)) toutRecu = false;
+      const stockRes = await client.query('SELECT id FROM stock_at3 WHERE article_id=$1 LIMIT 1', [r.article_id]);
       if (stockRes.rows.length) {
-        await client.query(`
-          UPDATE stock_at3
-          SET qte_disponible = qte_disponible + $1, updated_at = NOW()
-          WHERE article_id = $2
-        `, [l.qte_livree, l.article_id]);
+        await client.query(`UPDATE stock_at3 SET qte_disponible=qte_disponible+$1,updated_at=NOW() WHERE article_id=$2`, [qte, r.article_id]);
       } else {
-        await client.query(`
-          INSERT INTO stock_at3 (article_id, famille_id, qte_disponible, numero_lot, dbm_id)
-          VALUES ($1,$2,$3,$4,$5)
-        `, [l.article_id, l.famille_id||null, l.qte_livree, l.numero_lot||'', dbm.id]);
+        await client.query(`INSERT INTO stock_at3 (article_id,famille_id,qte_disponible,numero_lot,dbm_id) VALUES ($1,$2,$3,$4,$5)`,
+          [r.article_id, r.famille_id||null, qte, ligne?.numero_lot||'', dbm.id]);
       }
-
-      // Déduire du stock Magasin MP (stock_articles)
-      await client.query(`
-        UPDATE stock_articles
-        SET qte_disponible = GREATEST(0, qte_disponible - $1)
-        WHERE article_id = $2
-      `, [l.qte_livree, l.article_id]);
-
-      // Mouvement stock AT3
-      const numMvt = await client.query(
-        "SELECT 'MSAT3-' || TO_CHAR(NOW(),'YYYYMMDD') || '-' || LPAD(nextval('seq_mvt_stock_at3_num')::text,4,'0') AS num"
-      );
-      await client.query(`
-        INSERT INTO mouvements_stock_at3 (numero_mvt, type_mvt, article_id, quantite, dbm_id, of_id, operateur_id, notes)
-        VALUES ($1,'entree_dbm',$2,$3,$4,$5,$6,$7)
-      `, [numMvt.rows[0].num, l.article_id, l.qte_livree, dbm.id, dbm.of_id, mag_id, `Livraison DBM ${dbm.numero_dbm}`]);
+      const numMvt = await client.query("SELECT 'MSAT3-'||TO_CHAR(NOW(),'YYYYMMDD')||'-'||LPAD(nextval('seq_mvt_stock_at3_num')::text,4,'0') AS num");
+      await client.query(`INSERT INTO mouvements_stock_at3 (numero_mvt,type_mvt,article_id,quantite,dbm_id,of_id,operateur_id,notes) VALUES ($1,'entree_dbm',$2,$3,$4,$5,$6,$7)`,
+        [numMvt.rows[0].num, r.article_id, qte, dbm.id, dbm.of_id, chef_id, `Réception DBM ${dbm.numero_dbm}`]);
     }
-
-    // Mettre à jour statut DBM
-    const nouveauStatut = toutLivre ? 'livre' : 'partiel';
-    await client.query(`
-      UPDATE dbm SET statut=$1, livre_par=$2, date_livraison=NOW(), notes_magasin=$3 WHERE id=$4
-    `, [nouveauStatut, mag_id, notes_magasin||'', req.params.id]);
-
+    await client.query(`UPDATE dbm SET statut=$1 WHERE id=$2`, [toutRecu?'livre':'partiel', req.params.id]);
     await client.query('COMMIT');
-    ok(res, { message: `Livraison enregistrée — statut : ${nouveauStatut} ✓` });
-  } catch(e) { await client.query('ROLLBACK'); err(res, e, 'Erreur livraison DBM'); }
+    ok(res, { message: `Réception validée ✓` });
+  } catch(e) { await client.query('ROLLBACK'); err(res, e, 'Erreur réception DBM'); }
   finally { client.release(); }
 });
 
@@ -241,6 +227,136 @@ router.get('/of/:of_id/besoins', auth, async (req, res) => {
 // 2. STOCK AT3
 // ══════════════════════════════════════════════════════════════
 
+
+// PUT /api/dbm/:id/annuler — Annuler une DBM avec motif obligatoire
+router.put('/:id/annuler', auth, async (req, res) => {
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const { motif } = req.body;
+    if (!motif || motif.trim().length < 5) throw new Error('Motif obligatoire (min 5 caractères)');
+    const dbmRes = await client.query('SELECT * FROM dbm WHERE id=$1', [req.params.id]);
+    if (!dbmRes.rows.length) throw new Error('DBM introuvable');
+    const dbm = dbmRes.rows[0];
+    if (['livre','annule'].includes(dbm.statut)) throw new Error('DBM non annulable dans ce statut');
+    // Remettre le stock en_transit dans stock_articles
+    const lignes = await client.query('SELECT * FROM dbm_lignes WHERE dbm_id=$1', [req.params.id]);
+    for (const l of lignes.rows) {
+      if (parseFloat(l.qte_en_transit||0) > 0) {
+        await client.query(`
+          UPDATE stock_articles SET qte_disponible=qte_disponible+$1 WHERE article_id=$2
+        `, [l.qte_en_transit, l.article_id]);
+        await client.query(`UPDATE dbm_lignes SET qte_en_transit=0 WHERE id=$1`, [l.id]);
+      }
+    }
+    await client.query(`
+      UPDATE dbm SET statut='annule', notes_magasin=COALESCE(notes_magasin||' | ','') || 'ANNULÉ: ' || $1 WHERE id=$2
+    `, [motif.trim(), req.params.id]);
+    await client.query('COMMIT');
+    ok(res, { message: 'DBM annulée ✓' });
+  } catch(e) { await client.query('ROLLBACK'); err(res, e, 'Erreur annulation DBM'); }
+  finally { client.release(); }
+});
+
+// GET /api/dbm/lots/:article_id — lots disponibles pour un article
+router.get('/lots/:article_id', auth, async (req, res) => {
+  try {
+    const { data } = await db.query(`
+      SELECT id, numero_lot, qte_disponible, date_reception, fournisseur_nom
+      FROM lots_stock
+      WHERE article_id=$1 AND statut='disponible' AND qte_disponible>0
+      ORDER BY date_reception ASC
+    `, [req.params.article_id]);
+    ok(res, data.rows);
+  } catch(e) { err(res, e, 'Erreur lots'); }
+});
+
+
+// GET /api/dbm/stock-mp/liste — Stock MP avec lots
+router.get('/stock-mp/liste', auth, async (req, res) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT a.id, a.code, a.designation, f.libelle AS famille_libelle,
+             COALESCE(SUM(sa.qte_disponible),0) AS qte_disponible,
+             COALESCE(SUM(sa.qte_reservee),0) AS qte_reservee,
+             COUNT(ls.id) FILTER (WHERE ls.statut='disponible' AND ls.qte_disponible>0) AS nb_lots
+      FROM articles a
+      JOIN familles_articles f ON f.id=a.famille_id
+      LEFT JOIN stock_articles sa ON sa.article_id=a.id
+      LEFT JOIN lots_stock ls ON ls.article_id=a.id
+      WHERE a.type_article='matiere_premiere'
+      GROUP BY a.id, a.code, a.designation, f.libelle
+      ORDER BY f.libelle, a.code
+    `);
+    ok(res, rows);
+  } catch(e) { err(res, e, 'Erreur stock MP liste'); }
+});
+
+// GET /api/dbm/stock-mp/lots/:article_id — Lots d'un article
+router.get('/stock-mp/lots/:article_id', auth, async (req, res) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT ls.*, f.nom AS fournisseur_nom2
+      FROM lots_stock ls
+      LEFT JOIN clients f ON f.id=ls.fournisseur_id
+      WHERE ls.article_id=$1 AND ls.statut='disponible' AND ls.qte_disponible>0
+      ORDER BY ls.date_reception ASC
+    `, [req.params.article_id]);
+    ok(res, rows);
+  } catch(e) { err(res, e, 'Erreur lots MP'); }
+});
+
+// POST /api/dbm/stock-mp/entree — Réception fournisseur
+router.post('/stock-mp/entree', auth, async (req, res) => {
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const { article_id, numero_lot, qte, prix_unitaire, fournisseur_nom, date_reception, date_dluo, notes } = req.body;
+    if (!article_id || !numero_lot || !qte) throw new Error('article_id, numero_lot et qte obligatoires');
+    const qteNum = parseFloat(qte);
+    
+    // Créer le lot
+    await client.query(`
+      INSERT INTO lots_stock (article_id, numero_lot, qte_initiale, qte_disponible, prix_unitaire, fournisseur_nom, date_reception, date_dluo, statut)
+      VALUES ($1,$2,$3,$3,$4,$5,$6,$7,'disponible')
+      ON CONFLICT (numero_lot) DO UPDATE SET qte_disponible=lots_stock.qte_disponible+$3
+    `, [article_id, numero_lot, qteNum, prix_unitaire||0, fournisseur_nom||'', date_reception||new Date().toISOString().split('T')[0], date_dluo||null]);
+
+    // Mettre à jour stock_articles
+    const stockRes = await client.query('SELECT id FROM stock_articles WHERE article_id=$1 LIMIT 1', [article_id]);
+    if (stockRes.rows.length) {
+      await client.query(`UPDATE stock_articles SET qte_disponible=qte_disponible+$1, derniere_entree=NOW() WHERE article_id=$2`, [qteNum, article_id]);
+    } else {
+      await client.query(`INSERT INTO stock_articles (article_id, qte_disponible, derniere_entree) VALUES ($1,$2,NOW())`, [article_id, qteNum]);
+    }
+
+    // Mouvement journal
+    await client.query(`
+      INSERT INTO journal_stock (article_id, type_mvt, quantite, numero_lot, operateur_id, notes, date_mvt)
+      VALUES ($1,'entree_fournisseur',$2,$3,$4,$5,NOW())
+    `, [article_id, qteNum, numero_lot, req.user?.id, notes||'Réception fournisseur']).catch(()=>{});
+
+    await client.query('COMMIT');
+    ok(res, { message: `Entrée de ${qteNum} kg enregistrée — lot ${numero_lot} ✓` });
+  } catch(e) { await client.query('ROLLBACK'); err(res, e, 'Erreur entrée stock MP'); }
+  finally { client.release(); }
+});
+// GET /api/dbm/stock-mp/resume — Stock magasin MP par famille
+router.get('/stock-mp/resume', auth, async (req, res) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT f.libelle AS famille_libelle, 
+             COALESCE(SUM(sa.qte_disponible),0) AS qte_totale
+      FROM familles_articles f
+      LEFT JOIN articles a ON a.famille_id=f.id AND a.type_article='matiere_premiere'
+      LEFT JOIN stock_articles sa ON sa.article_id=a.id
+      GROUP BY f.id, f.libelle
+      HAVING COALESCE(SUM(sa.qte_disponible),0) > 0
+      ORDER BY f.libelle
+    `);
+    ok(res, rows);
+  } catch(e) { err(res, e, 'Erreur stock MP'); }
+});
 // GET /api/dbm/stock-at3 — stock MP interne AT3
 router.get('/stock-at3/liste', auth, async (req, res) => {
   try {
@@ -258,6 +374,136 @@ router.get('/stock-at3/liste', auth, async (req, res) => {
   } catch(e) { err(res, e, 'Erreur stock AT3'); }
 });
 
+
+// PUT /api/dbm/:id/annuler — Annuler une DBM avec motif obligatoire
+router.put('/:id/annuler', auth, async (req, res) => {
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const { motif } = req.body;
+    if (!motif || motif.trim().length < 5) throw new Error('Motif obligatoire (min 5 caractères)');
+    const dbmRes = await client.query('SELECT * FROM dbm WHERE id=$1', [req.params.id]);
+    if (!dbmRes.rows.length) throw new Error('DBM introuvable');
+    const dbm = dbmRes.rows[0];
+    if (['livre','annule'].includes(dbm.statut)) throw new Error('DBM non annulable dans ce statut');
+    // Remettre le stock en_transit dans stock_articles
+    const lignes = await client.query('SELECT * FROM dbm_lignes WHERE dbm_id=$1', [req.params.id]);
+    for (const l of lignes.rows) {
+      if (parseFloat(l.qte_en_transit||0) > 0) {
+        await client.query(`
+          UPDATE stock_articles SET qte_disponible=qte_disponible+$1 WHERE article_id=$2
+        `, [l.qte_en_transit, l.article_id]);
+        await client.query(`UPDATE dbm_lignes SET qte_en_transit=0 WHERE id=$1`, [l.id]);
+      }
+    }
+    await client.query(`
+      UPDATE dbm SET statut='annule', notes_magasin=COALESCE(notes_magasin||' | ','') || 'ANNULÉ: ' || $1 WHERE id=$2
+    `, [motif.trim(), req.params.id]);
+    await client.query('COMMIT');
+    ok(res, { message: 'DBM annulée ✓' });
+  } catch(e) { await client.query('ROLLBACK'); err(res, e, 'Erreur annulation DBM'); }
+  finally { client.release(); }
+});
+
+// GET /api/dbm/lots/:article_id — lots disponibles pour un article
+router.get('/lots/:article_id', auth, async (req, res) => {
+  try {
+    const { data } = await db.query(`
+      SELECT id, numero_lot, qte_disponible, date_reception, fournisseur_nom
+      FROM lots_stock
+      WHERE article_id=$1 AND statut='disponible' AND qte_disponible>0
+      ORDER BY date_reception ASC
+    `, [req.params.article_id]);
+    ok(res, data.rows);
+  } catch(e) { err(res, e, 'Erreur lots'); }
+});
+
+
+// GET /api/dbm/stock-mp/liste — Stock MP avec lots
+router.get('/stock-mp/liste', auth, async (req, res) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT a.id, a.code, a.designation, f.libelle AS famille_libelle,
+             COALESCE(SUM(sa.qte_disponible),0) AS qte_disponible,
+             COALESCE(SUM(sa.qte_reservee),0) AS qte_reservee,
+             COUNT(ls.id) FILTER (WHERE ls.statut='disponible' AND ls.qte_disponible>0) AS nb_lots
+      FROM articles a
+      JOIN familles_articles f ON f.id=a.famille_id
+      LEFT JOIN stock_articles sa ON sa.article_id=a.id
+      LEFT JOIN lots_stock ls ON ls.article_id=a.id
+      WHERE a.type_article='matiere_premiere'
+      GROUP BY a.id, a.code, a.designation, f.libelle
+      ORDER BY f.libelle, a.code
+    `);
+    ok(res, rows);
+  } catch(e) { err(res, e, 'Erreur stock MP liste'); }
+});
+
+// GET /api/dbm/stock-mp/lots/:article_id — Lots d'un article
+router.get('/stock-mp/lots/:article_id', auth, async (req, res) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT ls.*, f.nom AS fournisseur_nom2
+      FROM lots_stock ls
+      LEFT JOIN clients f ON f.id=ls.fournisseur_id
+      WHERE ls.article_id=$1 AND ls.statut='disponible' AND ls.qte_disponible>0
+      ORDER BY ls.date_reception ASC
+    `, [req.params.article_id]);
+    ok(res, rows);
+  } catch(e) { err(res, e, 'Erreur lots MP'); }
+});
+
+// POST /api/dbm/stock-mp/entree — Réception fournisseur
+router.post('/stock-mp/entree', auth, async (req, res) => {
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const { article_id, numero_lot, qte, prix_unitaire, fournisseur_nom, date_reception, date_dluo, notes } = req.body;
+    if (!article_id || !numero_lot || !qte) throw new Error('article_id, numero_lot et qte obligatoires');
+    const qteNum = parseFloat(qte);
+    
+    // Créer le lot
+    await client.query(`
+      INSERT INTO lots_stock (article_id, numero_lot, qte_initiale, qte_disponible, prix_unitaire, fournisseur_nom, date_reception, date_dluo, statut)
+      VALUES ($1,$2,$3,$3,$4,$5,$6,$7,'disponible')
+      ON CONFLICT (numero_lot) DO UPDATE SET qte_disponible=lots_stock.qte_disponible+$3
+    `, [article_id, numero_lot, qteNum, prix_unitaire||0, fournisseur_nom||'', date_reception||new Date().toISOString().split('T')[0], date_dluo||null]);
+
+    // Mettre à jour stock_articles
+    const stockRes = await client.query('SELECT id FROM stock_articles WHERE article_id=$1 LIMIT 1', [article_id]);
+    if (stockRes.rows.length) {
+      await client.query(`UPDATE stock_articles SET qte_disponible=qte_disponible+$1, derniere_entree=NOW() WHERE article_id=$2`, [qteNum, article_id]);
+    } else {
+      await client.query(`INSERT INTO stock_articles (article_id, qte_disponible, derniere_entree) VALUES ($1,$2,NOW())`, [article_id, qteNum]);
+    }
+
+    // Mouvement journal
+    await client.query(`
+      INSERT INTO journal_stock (article_id, type_mvt, quantite, numero_lot, operateur_id, notes, date_mvt)
+      VALUES ($1,'entree_fournisseur',$2,$3,$4,$5,NOW())
+    `, [article_id, qteNum, numero_lot, req.user?.id, notes||'Réception fournisseur']).catch(()=>{});
+
+    await client.query('COMMIT');
+    ok(res, { message: `Entrée de ${qteNum} kg enregistrée — lot ${numero_lot} ✓` });
+  } catch(e) { await client.query('ROLLBACK'); err(res, e, 'Erreur entrée stock MP'); }
+  finally { client.release(); }
+});
+// GET /api/dbm/stock-mp/resume — Stock magasin MP par famille
+router.get('/stock-mp/resume', auth, async (req, res) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT f.libelle AS famille_libelle, 
+             COALESCE(SUM(sa.qte_disponible),0) AS qte_totale
+      FROM familles_articles f
+      LEFT JOIN articles a ON a.famille_id=f.id AND a.type_article='matiere_premiere'
+      LEFT JOIN stock_articles sa ON sa.article_id=a.id
+      GROUP BY f.id, f.libelle
+      HAVING COALESCE(SUM(sa.qte_disponible),0) > 0
+      ORDER BY f.libelle
+    `);
+    ok(res, rows);
+  } catch(e) { err(res, e, 'Erreur stock MP'); }
+});
 // GET /api/dbm/stock-at3/resume — résumé par famille
 router.get('/stock-at3/resume', auth, async (req, res) => {
   try {
@@ -275,6 +521,136 @@ router.get('/stock-at3/resume', auth, async (req, res) => {
   } catch(e) { err(res, e, 'Erreur résumé stock AT3'); }
 });
 
+
+// PUT /api/dbm/:id/annuler — Annuler une DBM avec motif obligatoire
+router.put('/:id/annuler', auth, async (req, res) => {
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const { motif } = req.body;
+    if (!motif || motif.trim().length < 5) throw new Error('Motif obligatoire (min 5 caractères)');
+    const dbmRes = await client.query('SELECT * FROM dbm WHERE id=$1', [req.params.id]);
+    if (!dbmRes.rows.length) throw new Error('DBM introuvable');
+    const dbm = dbmRes.rows[0];
+    if (['livre','annule'].includes(dbm.statut)) throw new Error('DBM non annulable dans ce statut');
+    // Remettre le stock en_transit dans stock_articles
+    const lignes = await client.query('SELECT * FROM dbm_lignes WHERE dbm_id=$1', [req.params.id]);
+    for (const l of lignes.rows) {
+      if (parseFloat(l.qte_en_transit||0) > 0) {
+        await client.query(`
+          UPDATE stock_articles SET qte_disponible=qte_disponible+$1 WHERE article_id=$2
+        `, [l.qte_en_transit, l.article_id]);
+        await client.query(`UPDATE dbm_lignes SET qte_en_transit=0 WHERE id=$1`, [l.id]);
+      }
+    }
+    await client.query(`
+      UPDATE dbm SET statut='annule', notes_magasin=COALESCE(notes_magasin||' | ','') || 'ANNULÉ: ' || $1 WHERE id=$2
+    `, [motif.trim(), req.params.id]);
+    await client.query('COMMIT');
+    ok(res, { message: 'DBM annulée ✓' });
+  } catch(e) { await client.query('ROLLBACK'); err(res, e, 'Erreur annulation DBM'); }
+  finally { client.release(); }
+});
+
+// GET /api/dbm/lots/:article_id — lots disponibles pour un article
+router.get('/lots/:article_id', auth, async (req, res) => {
+  try {
+    const { data } = await db.query(`
+      SELECT id, numero_lot, qte_disponible, date_reception, fournisseur_nom
+      FROM lots_stock
+      WHERE article_id=$1 AND statut='disponible' AND qte_disponible>0
+      ORDER BY date_reception ASC
+    `, [req.params.article_id]);
+    ok(res, data.rows);
+  } catch(e) { err(res, e, 'Erreur lots'); }
+});
+
+
+// GET /api/dbm/stock-mp/liste — Stock MP avec lots
+router.get('/stock-mp/liste', auth, async (req, res) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT a.id, a.code, a.designation, f.libelle AS famille_libelle,
+             COALESCE(SUM(sa.qte_disponible),0) AS qte_disponible,
+             COALESCE(SUM(sa.qte_reservee),0) AS qte_reservee,
+             COUNT(ls.id) FILTER (WHERE ls.statut='disponible' AND ls.qte_disponible>0) AS nb_lots
+      FROM articles a
+      JOIN familles_articles f ON f.id=a.famille_id
+      LEFT JOIN stock_articles sa ON sa.article_id=a.id
+      LEFT JOIN lots_stock ls ON ls.article_id=a.id
+      WHERE a.type_article='matiere_premiere'
+      GROUP BY a.id, a.code, a.designation, f.libelle
+      ORDER BY f.libelle, a.code
+    `);
+    ok(res, rows);
+  } catch(e) { err(res, e, 'Erreur stock MP liste'); }
+});
+
+// GET /api/dbm/stock-mp/lots/:article_id — Lots d'un article
+router.get('/stock-mp/lots/:article_id', auth, async (req, res) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT ls.*, f.nom AS fournisseur_nom2
+      FROM lots_stock ls
+      LEFT JOIN clients f ON f.id=ls.fournisseur_id
+      WHERE ls.article_id=$1 AND ls.statut='disponible' AND ls.qte_disponible>0
+      ORDER BY ls.date_reception ASC
+    `, [req.params.article_id]);
+    ok(res, rows);
+  } catch(e) { err(res, e, 'Erreur lots MP'); }
+});
+
+// POST /api/dbm/stock-mp/entree — Réception fournisseur
+router.post('/stock-mp/entree', auth, async (req, res) => {
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const { article_id, numero_lot, qte, prix_unitaire, fournisseur_nom, date_reception, date_dluo, notes } = req.body;
+    if (!article_id || !numero_lot || !qte) throw new Error('article_id, numero_lot et qte obligatoires');
+    const qteNum = parseFloat(qte);
+    
+    // Créer le lot
+    await client.query(`
+      INSERT INTO lots_stock (article_id, numero_lot, qte_initiale, qte_disponible, prix_unitaire, fournisseur_nom, date_reception, date_dluo, statut)
+      VALUES ($1,$2,$3,$3,$4,$5,$6,$7,'disponible')
+      ON CONFLICT (numero_lot) DO UPDATE SET qte_disponible=lots_stock.qte_disponible+$3
+    `, [article_id, numero_lot, qteNum, prix_unitaire||0, fournisseur_nom||'', date_reception||new Date().toISOString().split('T')[0], date_dluo||null]);
+
+    // Mettre à jour stock_articles
+    const stockRes = await client.query('SELECT id FROM stock_articles WHERE article_id=$1 LIMIT 1', [article_id]);
+    if (stockRes.rows.length) {
+      await client.query(`UPDATE stock_articles SET qte_disponible=qte_disponible+$1, derniere_entree=NOW() WHERE article_id=$2`, [qteNum, article_id]);
+    } else {
+      await client.query(`INSERT INTO stock_articles (article_id, qte_disponible, derniere_entree) VALUES ($1,$2,NOW())`, [article_id, qteNum]);
+    }
+
+    // Mouvement journal
+    await client.query(`
+      INSERT INTO journal_stock (article_id, type_mvt, quantite, numero_lot, operateur_id, notes, date_mvt)
+      VALUES ($1,'entree_fournisseur',$2,$3,$4,$5,NOW())
+    `, [article_id, qteNum, numero_lot, req.user?.id, notes||'Réception fournisseur']).catch(()=>{});
+
+    await client.query('COMMIT');
+    ok(res, { message: `Entrée de ${qteNum} kg enregistrée — lot ${numero_lot} ✓` });
+  } catch(e) { await client.query('ROLLBACK'); err(res, e, 'Erreur entrée stock MP'); }
+  finally { client.release(); }
+});
+// GET /api/dbm/stock-mp/resume — Stock magasin MP par famille
+router.get('/stock-mp/resume', auth, async (req, res) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT f.libelle AS famille_libelle, 
+             COALESCE(SUM(sa.qte_disponible),0) AS qte_totale
+      FROM familles_articles f
+      LEFT JOIN articles a ON a.famille_id=f.id AND a.type_article='matiere_premiere'
+      LEFT JOIN stock_articles sa ON sa.article_id=a.id
+      GROUP BY f.id, f.libelle
+      HAVING COALESCE(SUM(sa.qte_disponible),0) > 0
+      ORDER BY f.libelle
+    `);
+    ok(res, rows);
+  } catch(e) { err(res, e, 'Erreur stock MP'); }
+});
 // GET /api/dbm/stock-at3/mouvements — historique mouvements
 router.get('/stock-at3/mouvements', auth, async (req, res) => {
   try {

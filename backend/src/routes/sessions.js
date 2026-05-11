@@ -42,6 +42,7 @@ router.post('/:id/valider-regleur', auth, role('regleur', 'chef_atelier'), async
     const { rows } = await db.query(`
       UPDATE sessions_production SET
         regleur_id=$1, regleur_valide=true, regleur_validation_at=NOW(),
+        numero_ticket_reglage='TKR-'||TO_CHAR(NOW(),'YYYY')||'-'||LPAD(nextval('seq_ticket_reglage')::text,4,'0'),
         regleur_temperature=$2, regleur_pression=$3,
         regleur_vitesse=$4, regleur_notes=$5
       WHERE id=$6 RETURNING *

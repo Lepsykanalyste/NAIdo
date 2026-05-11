@@ -22,7 +22,7 @@ const API = '/api';
 const STATUT_DBM = {
   en_attente:    { bg:'#fef3c7', tx:'#92400e', label:'En attente' },
   approuve:      { bg:'#dbeafe', tx:'#1d4ed8', label:'Approuvé' },
-  en_preparation:{ bg:'#f3e8ff', tx:'#6d28d9', label:'En préparation' },
+  en_preparation:{ bg:'#f3e8ff', tx:'#6d28d9', label:'En transit → AT3' },
   livre:         { bg:'#dcfce7', tx:'#15803d', label:'Livré ✓' },
   partiel:       { bg:'#fef9c3', tx:'#854d0e', label:'Partiel' },
   annule:        { bg:'#fee2e2', tx:'#dc2626', label:'Annulé' },
@@ -61,7 +61,8 @@ export function ModuleDBM() {
         axios.get(`${API}/at3/of`),
       ]);
       setDbms(d.data || []);
-      setOfs((o.data || []).filter(o => o.at3_composition_validee));
+      // Charger aussi les DBM en transit (en_preparation) pour réception
+      setOfs((o.data || []).filter(o => ['planifie','assigne','en_attente'].includes(o.statut)));
     } catch { toast.error('Erreur chargement'); }
   };
 
@@ -74,20 +75,28 @@ export function ModuleDBM() {
     if (!of_id) return;
     try {
       const { data } = await axios.get(`${API}/dbm/of/${of_id}/besoins`);
-      setBesoins(data.besoins || []);
-      // Pré-remplir lignes avec quantités à demander
-      setLignes((data.besoins || [])
+      // Fusionner groupes (articles+stock mag) avec besoins (calculs AT3)
+      const besoinsMap = {};
+      (data.besoins || []).forEach(b => { besoinsMap[b.groupe_id] = b; });
+      const groupesFusionnes = (data.groupes || []).map(g => ({
+        ...g,
+        ...(besoinsMap[g.groupe_id] || {}),
+      }));
+      setBesoins(groupesFusionnes);
+      setLignes(groupesFusionnes
         .filter(b => b.qte_a_demander > 0)
         .map(b => ({
           article_id:      null,
-          famille_id:      b.famille_id || b.groupe_id,
+          groupe_id:       b.groupe_id,
+          famille_id:      b.famille_id,
           code:            b.groupe_code || b.groupe_libelle,
           designation:     b.groupe_libelle,
           famille_libelle: b.groupe_libelle,
           qte_necessaire:  b.qte_necessaire,
-          qte_dispo_at3:   b.qte_dispo_at3,
-          qte_dispo_mag:   b.qte_dispo_mag || 0,
+          qte_dispo_at3:   b.qte_dispo_at3 || 0,
+          qte_dispo_mag:   0,
           qte_demandee:    b.qte_a_demander,
+          qte_max:         b.qte_a_demander,
           unite:           'kg',
         }))
       );
@@ -216,7 +225,7 @@ export function ModuleDBM() {
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
                 <thead>
                   <tr style={{ background:'#fef3c7' }}>
-                    {['MP', 'Famille', 'Besoin total', 'Stock AT3', 'Stock Mag. MP', 'Qté à demander', ''].map(h => (
+                    {['MP', 'Famille', 'Besoin total', 'Stock AT3', 'Qté à demander', ''].map(h => (
                       <th key={h} style={{ padding:'8px 10px', textAlign:'left', fontSize:11, fontWeight:600, color:'#92400e' }}>{h}</th>
                     ))}
                   </tr>
@@ -227,12 +236,12 @@ export function ModuleDBM() {
                       <td style={{ padding:'8px 10px' }}>
                         <div style={{ fontWeight:700, color:'#92400e', marginBottom:2 }}>{l.famille_libelle||l.code}</div>
                         <select value={l.article_id||''} onChange={e => {
-                          const art = (besoins.find(b=>String(b.groupe_id||b.famille_id)===String(l.famille_id))?.articles||[]).find(a=>a.id===e.target.value);
+                          const art = (besoins.find(b=>String(b.groupe_id)===String(l.groupe_id))?.articles||[]).find(a=>a.id===e.target.value);
                           setLignes(prev=>prev.map((x,j)=>j!==i?x:{...x,article_id:e.target.value,code:art?.code||x.code,designation:art?.designation||x.designation,qte_dispo_mag:parseFloat(art?.stock_magasin||0)}));
                         }} style={{fontSize:11,border:'1px solid #fcd34d',borderRadius:5,padding:'3px 6px',width:'100%'}}>
                           <option value="">-- Choisir MP --</option>
-                          {(besoins.find(b=>String(b.groupe_id||b.famille_id)===String(l.famille_id))?.articles||[]).filter(a=>parseFloat(a.stock_magasin||0)>0).map(a=>(
-                            <option key={a.id} value={a.id}>{a.code} — {parseFloat(a.stock_magasin||0).toFixed(0)} kg dispo</option>
+                          {(besoins.find(b=>String(b.groupe_id)===String(l.groupe_id))?.articles||[]).filter(a=>parseFloat(a.stock_magasin||0)>0).map(a=>(
+                            <option key={a.id} value={a.id}>{a.code}</option>
                           ))}
                         </select>
                       </td>
@@ -241,15 +250,12 @@ export function ModuleDBM() {
                       <td style={{ padding:'8px 10px', color: l.qte_dispo_at3 > 0 ? '#15803d' : '#9ca3af' }}>
                         {l.qte_dispo_at3} kg
                       </td>
-                      <td style={{ padding:'8px 10px', color: l.qte_dispo_mag > 0 ? '#0369a1' : '#dc2626' }}>
-                        {l.qte_dispo_mag} kg
-                        {l.qte_dispo_mag < l.qte_demandee && <span style={{ color:'#dc2626', fontSize:10 }}> ⚠</span>}
-                      </td>
+                
                       <td style={{ padding:'8px 10px', width:110 }}>
                         <div style={{ display:'flex', alignItems:'center', gap:4 }}>
                           <input type="number" value={l.qte_demandee} min="0" step="0.1"
                             max={l.qte_dispo_mag||undefined}
-                            onChange={e => { const v=parseFloat(e.target.value||0); const max=parseFloat(l.qte_dispo_mag||0); if(max>0&&v>max){majQte(i,max);}else{majQte(i,e.target.value);} }}
+                            onChange={e => majQte(i, e.target.value)}
                             style={{ width:80, border:'2px solid #fcd34d', borderRadius:6, padding:'5px', fontSize:13, textAlign:'center', fontWeight:700 }} />
                           <span style={{ fontSize:11 }}>kg</span>
                         </div>
@@ -395,21 +401,53 @@ export function ModuleReceptionDBM() {
   const [notesMag, setNotesMag] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const [onglet, setOnglet] = useState('alivrer');
+  const [historique, setHistorique] = useState([]);
+  const [showAnnuler, setShowAnnuler] = useState(null);
+  const [motifAnnul, setMotifAnnul] = useState('');
+
   const charger = async () => {
     try {
-      const { data } = await axios.get(`${API}/dbm?statut=en_attente`);
-      // Aussi partielles
-      const { data: partiel } = await axios.get(`${API}/dbm?statut=partiel`);
-      setDbms([...data, ...partiel]);
+      const [r1, r2, r3, r4, r5] = await Promise.all([
+        axios.get(`${API}/dbm?statut=en_attente`),
+        axios.get(`${API}/dbm?statut=partiel`),
+        axios.get(`${API}/dbm?statut=en_preparation`),
+        axios.get(`${API}/dbm?statut=livre`),
+        axios.get(`${API}/dbm?statut=annule`),
+      ]);
+      setDbms([...(r1.data||[]), ...(r2.data||[])]);
+      setHistorique([...(r2.data||[]), ...(r3.data||[]), ...(r4.data||[]), ...(r5.data||[])]);
     } catch { toast.error('Erreur'); }
   };
 
+  const annulerDbm = async (id) => {
+    if (!motifAnnul || motifAnnul.trim().length < 5) return toast.error('Motif obligatoire (min 5 caractères)');
+    try {
+      const { data } = await axios.put(`${API}/dbm/${id}/annuler`, { motif: motifAnnul });
+      toast.success(data.message);
+      setShowAnnuler(null);
+      setMotifAnnul('');
+      charger();
+    } catch(e) { toast.error(e.response?.data?.error || 'Erreur annulation'); }
+  };
+
   useEffect(() => { charger(); }, []);
+
+  const [lots, setLots] = useState({});
 
   const ouvrirDetail = async (id) => {
     try {
       const { data } = await axios.get(`${API}/dbm/${id}`);
       setDetail(data);
+      // Charger les lots pour chaque article
+      const lotsMap = {};
+      for (const l of (data.lignes||[])) {
+        if (l.article_id && !lotsMap[l.article_id]) {
+          const { data: lotsData } = await axios.get(`${API}/dbm/lots/${l.article_id}`).catch(()=>({data:[]}));
+          lotsMap[l.article_id] = lotsData;
+        }
+      }
+      setLots(lotsMap);
       setLivraisons((data.lignes || []).map(l => ({
         ligne_id:   l.id,
         article_id: l.article_id,
@@ -419,9 +457,19 @@ export function ModuleReceptionDBM() {
         qte_demandee: l.qte_demandee,
         qte_restante: l.qte_restante,
         qte_livree:  parseFloat(l.qte_restante || 0).toFixed(1),
+        lot_id: '',
         numero_lot: '',
       })));
     } catch { toast.error('Erreur'); }
+  };
+
+  const ajouterLigneParLot = (i) => {
+    const l = livraisons[i];
+    setLivraisons(prev => [
+      ...prev.slice(0, i+1),
+      { ...l, lot_id:'', numero_lot:'', qte_livree:'0' },
+      ...prev.slice(i+1)
+    ]);
   };
 
   const livrer = async () => {
@@ -488,10 +536,28 @@ export function ModuleReceptionDBM() {
                       <span style={{ fontSize:11 }}>kg</span>
                     </div>
                   </td>
-                  <td style={{ padding:'7px 10px', width:130 }}>
-                    <input type="text" value={l.numero_lot} placeholder="N° lot"
-                      onChange={e => setLivraisons(prev => prev.map((x,xi) => xi===i?{...x,numero_lot:e.target.value}:x))}
-                      style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:6, padding:'5px', fontSize:12, boxSizing:'border-box' }} />
+                  <td style={{ padding:'7px 10px', width:160 }}>
+                    <select value={l.lot_id||''} onChange={e => {
+                      const lot = (lots[l.article_id]||[]).find(x=>x.id===e.target.value);
+                      setLivraisons(prev => prev.map((x,xi) => xi===i?{...x,lot_id:e.target.value,numero_lot:lot?.numero_lot||'',qte_livree:Math.min(parseFloat(l.qte_restante||0),parseFloat(lot?.qte_disponible||0)).toFixed(1)}:x));
+                    }} style={{ width:'100%', border:'1px solid #7dd3fc', borderRadius:6, padding:'5px', fontSize:12, boxSizing:'border-box', marginBottom:3 }}>
+                      <option value="">-- Choisir lot --</option>
+                      {(lots[l.article_id]||[]).map(lot => (
+                        <option key={lot.id} value={lot.id}>{lot.numero_lot} ({parseFloat(lot.qte_disponible).toFixed(0)} kg)</option>
+                      ))}
+                    </select>
+                    <div style={{ display:'flex', gap:4, marginTop:2 }}>
+                      <button onClick={() => ajouterLigneParLot(i)}
+                        style={{ fontSize:10, background:'#e0f2fe', color:'#0369a1', border:'none', borderRadius:4, padding:'2px 8px', cursor:'pointer' }}>
+                        + autre lot
+                      </button>
+                      {livraisons.filter(x=>x.ligne_id===l.ligne_id).length > 1 && (
+                        <button onClick={() => setLivraisons(prev => prev.filter((_,xi) => xi!==i))}
+                          style={{ fontSize:10, background:'#fee2e2', color:'#dc2626', border:'none', borderRadius:4, padding:'2px 8px', cursor:'pointer' }}>
+                          🗑
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -506,47 +572,115 @@ export function ModuleReceptionDBM() {
 
           <div style={{ display:'flex', gap:8 }}>
             <button onClick={livrer} disabled={loading}
-              style={{ background:'#0369a1', color:'#fff', border:'none', padding:'10px 24px', borderRadius:8, cursor:'pointer', fontWeight:700 }}>
-              {loading ? '...' : '✅ Valider Livraison → AT3'}
+              style={{ background: loading ? '#9ca3af' : '#0369a1', color:'#fff', border:'none', padding:'10px 24px', borderRadius:8, cursor: loading ? 'not-allowed' : 'pointer', fontWeight:700 }}
+              onDoubleClick={e => e.preventDefault()}>
+              {loading ? '⏳ Envoi en cours...' : '✅ Valider Livraison → AT3'}
             </button>
             <button onClick={() => setDetail(null)} style={{ background:'#f3f4f6', border:'none', padding:'10px 16px', borderRadius:8, cursor:'pointer' }}>Annuler</button>
           </div>
         </div>
       )}
 
-      {/* Liste DBM en attente */}
-      <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-        {dbms.map(d => (
-          <div key={d.id} style={{
-            background: d.urgence ? '#fff7f0' : '#fff',
-            borderRadius:10, padding:'12px 16px',
-            border:`2px solid ${d.urgence ? '#fed7aa' : '#bae6fd'}`,
-            cursor:'pointer'
-          }} onClick={() => ouvrirDetail(d.id)}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:8 }}>
-              <div>
-                <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:4, flexWrap:'wrap' }}>
-                  <span style={{ fontWeight:800, fontFamily:'monospace', color:'#0369a1' }}>{d.numero_dbm}</span>
-                  <Badge statut={d.statut} map={STATUT_DBM} />
-                  {d.urgence && <span style={{ background:'#fee2e2', color:'#dc2626', padding:'2px 6px', borderRadius:20, fontSize:10, fontWeight:700 }}>🚨 URGENT</span>}
+      {/* Onglets */}
+      <div style={{ display:'flex', gap:0, marginBottom:16, borderRadius:10, overflow:'hidden', border:'2px solid #e5e7eb', width:'fit-content' }}>
+        {[['alivrer','📦 À livrer'],['historique','📋 Historique']].map(([id,label]) => (
+          <button key={id} onClick={() => setOnglet(id)} style={{
+            padding:'8px 18px', border:'none', cursor:'pointer', fontSize:12, fontWeight:700,
+            background: onglet===id ? '#0369a1' : '#fff', color: onglet===id ? '#fff' : '#6b7280'
+          }}>{label}</button>
+        ))}
+      </div>
+
+      {/* Modal annulation */}
+      {showAnnuler && (
+        <div style={{ background:'#fff', borderRadius:12, border:'2px solid #fca5a5', padding:20, marginBottom:16 }}>
+          <div style={{ fontWeight:700, color:'#dc2626', marginBottom:12 }}>🚫 Annuler la DBM {showAnnuler.numero_dbm}</div>
+          <textarea value={motifAnnul} onChange={e => setMotifAnnul(e.target.value)} rows={3}
+            placeholder="Motif obligatoire (min 5 caractères)..."
+            style={{ width:'100%', border:'2px solid #fca5a5', borderRadius:8, padding:'8px', fontSize:13, resize:'vertical', boxSizing:'border-box', marginBottom:12 }} />
+          <div style={{ display:'flex', gap:8 }}>
+            <button onClick={() => annulerDbm(showAnnuler.id)}
+              style={{ background:'#dc2626', color:'#fff', border:'none', padding:'8px 20px', borderRadius:8, cursor:'pointer', fontWeight:700 }}>
+              🚫 Confirmer annulation
+            </button>
+            <button onClick={() => { setShowAnnuler(null); setMotifAnnul(''); }}
+              style={{ background:'#f3f4f6', border:'none', padding:'8px 16px', borderRadius:8, cursor:'pointer' }}>Annuler</button>
+          </div>
+        </div>
+      )}
+
+      {/* Liste DBM à livrer */}
+      {onglet === 'alivrer' && (
+        <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+          {dbms.map(d => (
+            <div key={d.id} style={{
+              background: d.urgence ? '#fff7f0' : '#fff',
+              borderRadius:10, padding:'12px 16px',
+              border:`2px solid ${d.urgence ? '#fed7aa' : '#bae6fd'}`,
+            }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:8 }}>
+                <div onClick={() => ouvrirDetail(d.id)} style={{ cursor:'pointer', flex:1 }}>
+                  <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:4, flexWrap:'wrap' }}>
+                    <span style={{ fontWeight:800, fontFamily:'monospace', color:'#0369a1' }}>{d.numero_dbm}</span>
+                    <Badge statut={d.statut} map={STATUT_DBM} />
+                    {d.urgence && <span style={{ background:'#fee2e2', color:'#dc2626', padding:'2px 6px', borderRadius:20, fontSize:10, fontWeight:700 }}>🚨 URGENT</span>}
+                  </div>
+                  <div style={{ fontSize:12, color:'#374151' }}>OF : {d.numero_of} | {d.nb_lignes} MP | AT3</div>
+                  <div style={{ fontSize:11, color:'#9ca3af' }}>{new Date(d.date_demande).toLocaleString('fr-FR', { dateStyle:'short', timeStyle:'short' })}</div>
                 </div>
-                <div style={{ fontSize:12, color:'#374151' }}>OF : {d.numero_of} | {d.nb_lignes} MP | AT3</div>
-                <div style={{ fontSize:11, color:'#9ca3af' }}>{new Date(d.date_demande).toLocaleString('fr-FR', { dateStyle:'short', timeStyle:'short' })}</div>
-              </div>
-              <div style={{ textAlign:'right' }}>
-                <div style={{ fontWeight:700, color:'#0369a1', fontSize:15 }}>{parseFloat(d.poids_total_demande||0).toFixed(1)} kg</div>
-                <div style={{ fontSize:12, color:'#1d4ed8', fontWeight:600 }}>→ Préparer</div>
+                <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                  <div style={{ textAlign:'right' }}>
+                    <div style={{ fontWeight:700, color:'#0369a1', fontSize:15 }}>{parseFloat(d.poids_total_demande||0).toFixed(1)} kg</div>
+                    <div style={{ fontSize:12, color:'#1d4ed8', fontWeight:600 }}>→ Préparer</div>
+                  </div>
+                  {d.statut === 'partiel' && (
+                    <button onClick={() => { setShowAnnuler(d); setMotifAnnul(''); }}
+                      style={{ background:'#fee2e2', color:'#dc2626', border:'1px solid #fca5a5', padding:'4px 10px', borderRadius:8, cursor:'pointer', fontSize:11, fontWeight:700 }}>
+                      🚫 Annuler
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
-        {dbms.length === 0 && (
-          <div style={{ padding:48, textAlign:'center', border:'1px solid #e0f2fe', borderRadius:12, color:'#9ca3af' }}>
-            <div style={{ fontSize:36, marginBottom:8 }}>✅</div>
-            <p>Aucune DBM en attente</p>
-          </div>
-        )}
-      </div>
+          ))}
+          {dbms.length === 0 && (
+            <div style={{ padding:48, textAlign:'center', border:'1px solid #e0f2fe', borderRadius:12, color:'#9ca3af' }}>
+              <div style={{ fontSize:36, marginBottom:8 }}>✅</div>
+              <p>Aucune DBM en attente</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Historique */}
+      {onglet === 'historique' && (
+        <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+          {historique.map(d => (
+            <div key={d.id} style={{ background:'#f8fafc', borderRadius:10, padding:'12px 16px', border:'1px solid #e5e7eb' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:8 }}>
+                <div>
+                  <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:4 }}>
+                    <span style={{ fontWeight:800, fontFamily:'monospace', color:'#374151' }}>{d.numero_dbm}</span>
+                    <Badge statut={d.statut} map={STATUT_DBM} />
+                  </div>
+                  <div style={{ fontSize:12, color:'#374151' }}>OF : {d.numero_of} | {d.nb_lignes} MP</div>
+                  <div style={{ fontSize:11, color:'#9ca3af' }}>{new Date(d.date_livraison||d.date_demande).toLocaleString('fr-FR', { dateStyle:'short', timeStyle:'short' })}</div>
+                </div>
+                <div style={{ textAlign:'right' }}>
+                  <div style={{ fontWeight:700, color:'#374151' }}>{parseFloat(d.poids_total_demande||0).toFixed(1)} kg demandé</div>
+                  <div style={{ fontSize:12, color:'#15803d' }}>Livré : {parseFloat(d.poids_total_livre||0).toFixed(1)} kg</div>
+                </div>
+              </div>
+            </div>
+          ))}
+          {historique.length === 0 && (
+            <div style={{ padding:48, textAlign:'center', border:'1px solid #e5e7eb', borderRadius:12, color:'#9ca3af' }}>
+              <div style={{ fontSize:36, marginBottom:8 }}>📋</div>
+              <p>Aucun historique</p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -700,6 +834,459 @@ export function ModuleStockAT3() {
   );
 }
 
+
+// ══════════════════════════════════════════════════════════════
+// MODULE RÉCEPTION AT3 — Chef AT3 valide les MP reçues
+// ══════════════════════════════════════════════════════════════
+export function ModuleReceptionAT3() {
+  const [dbms, setDbms]         = useState([]);
+  const [detail, setDetail]     = useState(null);
+  const [receptions, setReceptions] = useState([]);
+  const [loading, setLoading]   = useState(false);
+
+  const charger = async () => {
+    try {
+      const { data } = await axios.get(`${API}/dbm?statut=en_preparation`);
+      setDbms(data || []);
+    } catch { toast.error('Erreur chargement'); }
+  };
+
+  useEffect(() => { charger(); }, []);
+
+  const ouvrirDetail = async (id) => {
+    try {
+      const { data } = await axios.get(`${API}/dbm/${id}`);
+      setDetail(data);
+      setReceptions((data.lignes || []).map(l => ({
+        ligne_id:   l.id,
+        article_id: l.article_id,
+        famille_id: l.famille_id,
+        code:       l.code,
+        designation: l.designation,
+        qte_en_transit: parseFloat(l.qte_en_transit || 0),
+        qte_recue:  parseFloat(l.qte_en_transit || 0).toFixed(1),
+        numero_lot: l.numero_lot || '',
+      })));
+    } catch { toast.error('Erreur'); }
+  };
+
+  const receptionner = async () => {
+    if (!detail) return;
+    setLoading(true);
+    try {
+      const { data } = await axios.put(`${API}/dbm/${detail.id}/receptionner`, {
+        receptions: receptions.map(r => ({
+          ...r,
+          qte_recue: parseFloat(r.qte_recue || 0),
+        })),
+      });
+      toast.success(data.message);
+      setDetail(null);
+      charger();
+    } catch(e) { toast.error(e.response?.data?.error || 'Erreur réception'); }
+    setLoading(false);
+  };
+
+  return (
+    <div>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+        <h3 style={{ margin:0, fontSize:15, fontWeight:700, color:'#7c3aed' }}>
+          📥 Réception MP — En attente de validation
+        </h3>
+        <button onClick={charger} style={{ background:'#f3e8ff', border:'1px solid #c4b5fd', color:'#7c3aed', padding:'7px 12px', borderRadius:8, cursor:'pointer', fontSize:12 }}>🔄</button>
+      </div>
+
+      {detail && (
+        <div style={{ background:'#fff', borderRadius:12, border:'2px solid #c4b5fd', padding:20, marginBottom:16 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', marginBottom:14 }}>
+            <div>
+              <div style={{ fontWeight:800, fontSize:15, color:'#7c3aed', fontFamily:'monospace' }}>{detail.numero_dbm}</div>
+              <div style={{ fontSize:12, color:'#6b7280' }}>OF : {detail.numero_of} | Envoyé par Magasin MP</div>
+            </div>
+            <button onClick={() => setDetail(null)} style={{ background:'#f3f4f6', border:'none', padding:'4px 10px', borderRadius:6, cursor:'pointer' }}>✕</button>
+          </div>
+
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13, marginBottom:14 }}>
+            <thead>
+              <tr style={{ background:'#f3e8ff' }}>
+                {['MP', 'N° Lot', 'Envoyé', 'Qté reçue réelle'].map(h => (
+                  <th key={h} style={{ padding:'7px 10px', textAlign:'left', fontSize:11, fontWeight:600, color:'#7c3aed' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {receptions.map((r, i) => (
+                <tr key={i} style={{ borderBottom:'1px solid #f3e8ff' }}>
+                  <td style={{ padding:'7px 10px' }}>
+                    <div style={{ fontWeight:700 }}>{r.code}</div>
+                    <div style={{ fontSize:10, color:'#6b7280' }}>{r.designation}</div>
+                  </td>
+                  <td style={{ padding:'7px 10px', fontFamily:'monospace', fontSize:12, color:'#6b7280' }}>{r.numero_lot || '—'}</td>
+                  <td style={{ padding:'7px 10px', fontWeight:600, color:'#7c3aed' }}>{r.qte_en_transit} kg</td>
+                  <td style={{ padding:'7px 10px', width:130 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                      <input type="number" value={r.qte_recue} min="0" step="0.1"
+                        max={r.qte_en_transit}
+                        onChange={e => {
+                          const v = parseFloat(e.target.value||0);
+                          const max = r.qte_en_transit;
+                          setReceptions(prev => prev.map((x,xi) => xi===i ? {...x, qte_recue: v>max?max:e.target.value} : x));
+                        }}
+                        style={{ width:80, border:'2px solid #c4b5fd', borderRadius:6, padding:'5px', fontSize:13, textAlign:'center', fontWeight:700 }} />
+                      <span style={{ fontSize:11 }}>kg</span>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div style={{ display:'flex', gap:8 }}>
+            <button onClick={receptionner} disabled={loading}
+              style={{ background:'#7c3aed', color:'#fff', border:'none', padding:'10px 24px', borderRadius:8, cursor:'pointer', fontWeight:700 }}>
+              {loading ? '...' : '✅ Valider Réception → Stock AT3'}
+            </button>
+            <button onClick={() => setDetail(null)} style={{ background:'#f3f4f6', border:'none', padding:'10px 16px', borderRadius:8, cursor:'pointer' }}>Annuler</button>
+          </div>
+        </div>
+      )}
+
+      <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+        {dbms.map(d => (
+          <div key={d.id} style={{ background:'#faf5ff', borderRadius:10, padding:'12px 16px', border:'2px solid #c4b5fd', cursor:'pointer' }}
+            onClick={() => ouvrirDetail(d.id)}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <div>
+                <div style={{ fontWeight:800, fontFamily:'monospace', color:'#7c3aed' }}>{d.numero_dbm}</div>
+                <div style={{ fontSize:12, color:'#374151' }}>OF : {d.numero_of} | {d.nb_lignes} MP</div>
+                <div style={{ fontSize:11, color:'#9ca3af' }}>{new Date(d.date_livraison||d.date_demande).toLocaleString('fr-FR', { dateStyle:'short', timeStyle:'short' })}</div>
+              </div>
+              <div style={{ textAlign:'right' }}>
+                <div style={{ fontWeight:700, color:'#7c3aed' }}>{parseFloat(d.poids_total_demande||0).toFixed(1)} kg</div>
+                <div style={{ fontSize:12, color:'#7c3aed', fontWeight:600 }}>📥 À réceptionner</div>
+              </div>
+            </div>
+          </div>
+        ))}
+        {dbms.length === 0 && (
+          <div style={{ padding:48, textAlign:'center', border:'1px solid #f3e8ff', borderRadius:12, color:'#9ca3af' }}>
+            <div style={{ fontSize:36, marginBottom:8 }}>✅</div>
+            <p>Aucune livraison en attente de réception</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+// ══════════════════════════════════════════════════════════════
+// MODULE STOCK MAGASIN MP
+// ══════════════════════════════════════════════════════════════
+export function ModuleStockMP() {
+  const { user } = useAuth();
+  const [articles, setArticles] = useState([]);
+  const [lots, setLots] = useState([]);
+  const [artSel, setArtSel] = useState(null);
+  const [showEntree, setShowEntree] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [form, setForm] = useState({
+    article_id:'', numero_lot:'', qte:'', prix_unitaire:'',
+    fournisseur_nom:'', date_reception: new Date().toISOString().split('T')[0],
+    date_dluo:'', notes:''
+  });
+
+  const charger = async () => {
+    try {
+      const { data } = await axios.get(`${API}/dbm/stock-mp/liste`);
+      setArticles(data||[]);
+    } catch { toast.error('Erreur chargement stock MP'); }
+  };
+
+  const chargerLots = async (article) => {
+    setArtSel(article);
+    try {
+      const { data } = await axios.get(`${API}/dbm/stock-mp/lots/${article.id}`);
+      setLots(data||[]);
+    } catch { toast.error('Erreur lots'); }
+  };
+
+  useEffect(() => { if(user) setTimeout(charger,300); }, [user]);
+
+  const enregistrerEntree = async () => {
+    if (!form.article_id || !form.numero_lot || !form.qte) return toast.error('Article, lot et quantité obligatoires');
+    setLoading(true);
+    try {
+      const { data } = await axios.post(`${API}/dbm/stock-mp/entree`, {
+        ...form, qte: parseFloat(form.qte)
+      });
+      toast.success(data.message);
+      setShowEntree(false);
+      setForm({ article_id:'', numero_lot:'', qte:'', prix_unitaire:'', fournisseur_nom:'', date_reception: new Date().toISOString().split('T')[0], date_dluo:'', notes:'' });
+      charger();
+      if (artSel?.id === form.article_id) chargerLots(artSel);
+    } catch(e) { toast.error(e.response?.data?.error||'Erreur'); }
+    setLoading(false);
+  };
+
+  return (
+    <div>
+      <div style={{ background:'linear-gradient(135deg,#0369a1,#0284c7)', borderRadius:14, padding:'14px 20px', marginBottom:16, color:'#fff' }}>
+        <div style={{ fontWeight:800, fontSize:16 }}>📦 Stock Magasin MP</div>
+        <div style={{ fontSize:11, opacity:0.8, marginTop:2 }}>Inventaire et réceptions matières premières</div>
+      </div>
+
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+        <button onClick={charger} style={{ background:'#e0f2fe', border:'1px solid #7dd3fc', color:'#0369a1', padding:'7px 12px', borderRadius:8, cursor:'pointer', fontSize:12 }}>🔄</button>
+        <button onClick={() => setShowEntree(true)}
+          style={{ background:'#0369a1', color:'#fff', border:'none', padding:'8px 18px', borderRadius:8, cursor:'pointer', fontWeight:700, fontSize:13 }}>
+          + Réception fournisseur
+        </button>
+      </div>
+
+      {/* Formulaire entrée */}
+      {showEntree && (
+        <div style={{ background:'#fff', borderRadius:12, border:'2px solid #7dd3fc', padding:20, marginBottom:16 }}>
+          <div style={{ fontWeight:800, color:'#0369a1', fontSize:15, marginBottom:16 }}>📥 Nouvelle réception fournisseur</div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+            <div>
+              <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Article MP *</label>
+              <select value={form.article_id} onChange={e => setForm(f=>({...f,article_id:e.target.value}))}
+                style={{ width:'100%', border:'2px solid #7dd3fc', borderRadius:8, padding:'8px', fontSize:13, boxSizing:'border-box' }}>
+                <option value="">-- Choisir article --</option>
+                {articles.map(a => <option key={a.id} value={a.id}>{a.code} — {a.designation}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>N° Lot *</label>
+              <input type="text" value={form.numero_lot} onChange={e => setForm(f=>({...f,numero_lot:e.target.value}))}
+                placeholder="Ex: EXXO-2026-003"
+                style={{ width:'100%', border:'2px solid #7dd3fc', borderRadius:8, padding:'8px', fontSize:13, boxSizing:'border-box' }} />
+            </div>
+            <div>
+              <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Quantité (kg) *</label>
+              <input type="number" value={form.qte} onChange={e => setForm(f=>({...f,qte:e.target.value}))}
+                style={{ width:'100%', border:'2px solid #7dd3fc', borderRadius:8, padding:'8px', fontSize:13, boxSizing:'border-box' }} />
+            </div>
+            <div>
+              <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Prix unitaire (FCFA/kg)</label>
+              <input type="number" value={form.prix_unitaire} onChange={e => setForm(f=>({...f,prix_unitaire:e.target.value}))}
+                style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13, boxSizing:'border-box' }} />
+            </div>
+            <div>
+              <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Fournisseur</label>
+              <input type="text" value={form.fournisseur_nom} onChange={e => setForm(f=>({...f,fournisseur_nom:e.target.value}))}
+                style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13, boxSizing:'border-box' }} />
+            </div>
+            <div>
+              <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Date réception</label>
+              <input type="date" value={form.date_reception} onChange={e => setForm(f=>({...f,date_reception:e.target.value}))}
+                style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13, boxSizing:'border-box' }} />
+            </div>
+            <div>
+              <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Date DLUO</label>
+              <input type="date" value={form.date_dluo} onChange={e => setForm(f=>({...f,date_dluo:e.target.value}))}
+                style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13, boxSizing:'border-box' }} />
+            </div>
+            <div>
+              <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Notes</label>
+              <input type="text" value={form.notes} onChange={e => setForm(f=>({...f,notes:e.target.value}))}
+                style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13, boxSizing:'border-box' }} />
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:8, marginTop:16 }}>
+            <button onClick={enregistrerEntree} disabled={loading}
+              style={{ background:'#0369a1', color:'#fff', border:'none', padding:'10px 24px', borderRadius:8, cursor:'pointer', fontWeight:700 }}>
+              {loading ? '...' : '✅ Enregistrer réception'}
+            </button>
+            <button onClick={() => setShowEntree(false)}
+              style={{ background:'#f3f4f6', border:'none', padding:'10px 16px', borderRadius:8, cursor:'pointer' }}>Annuler</button>
+          </div>
+        </div>
+      )}
+
+      {/* Tableau stock */}
+      <div style={{ background:'#fff', borderRadius:12, border:'1px solid #e5e7eb', overflow:'hidden', marginBottom:16 }}>
+        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
+          <thead>
+            <tr style={{ background:'#e0f2fe' }}>
+              {['Famille','Article','Stock dispo','Réservé','Nb lots',''].map(h => (
+                <th key={h} style={{ padding:'9px 12px', textAlign:'left', fontSize:11, fontWeight:600, color:'#0369a1', borderBottom:'2px solid #bae6fd' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {articles.map((a,i) => (
+              <tr key={a.id} style={{ borderBottom:'1px solid #f0f9ff', background: i%2===0?'#fff':'#f0f9ff' }}>
+                <td style={{ padding:'8px 12px', fontSize:11, color:'#6b7280' }}>{a.famille_libelle}</td>
+                <td style={{ padding:'8px 12px' }}>
+                  <div style={{ fontWeight:700 }}>{a.code}</div>
+                  <div style={{ fontSize:10, color:'#6b7280' }}>{a.designation}</div>
+                </td>
+                <td style={{ padding:'8px 12px', fontWeight:700, color: parseFloat(a.qte_disponible||0)>0?'#0369a1':'#dc2626' }}>
+                  {parseFloat(a.qte_disponible||0).toFixed(3)} kg
+                </td>
+                <td style={{ padding:'8px 12px', color:'#d97706' }}>{parseFloat(a.qte_reservee||0).toFixed(3)} kg</td>
+                <td style={{ padding:'8px 12px', color:'#6b7280' }}>{a.nb_lots} lot(s)</td>
+                <td style={{ padding:'8px 12px' }}>
+                  <button onClick={() => artSel?.id===a.id ? setArtSel(null) : chargerLots(a)}
+                    style={{ background:'#e0f2fe', color:'#0369a1', border:'none', borderRadius:6, padding:'4px 10px', cursor:'pointer', fontSize:11 }}>
+                    {artSel?.id===a.id ? '▲ Masquer' : '▼ Lots'}
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {articles.length === 0 && (
+              <tr><td colSpan={6} style={{ padding:32, textAlign:'center', color:'#9ca3af' }}>Aucun article</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Détail lots */}
+      {artSel && (
+        <div style={{ background:'#fff', borderRadius:12, border:'2px solid #bae6fd', padding:16 }}>
+          <div style={{ fontWeight:700, color:'#0369a1', marginBottom:12 }}>📋 Lots — {artSel.code}</div>
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
+            <thead>
+              <tr style={{ background:'#e0f2fe' }}>
+                {['N° Lot','Fournisseur','Date réception','DLUO','Disponible','Prix/kg'].map(h => (
+                  <th key={h} style={{ padding:'7px 10px', textAlign:'left', fontSize:11, fontWeight:600, color:'#0369a1' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {lots.map((l,i) => (
+                <tr key={l.id} style={{ borderBottom:'1px solid #e0f2fe', background: i%2===0?'#fff':'#f0f9ff' }}>
+                  <td style={{ padding:'7px 10px', fontFamily:'monospace', fontWeight:700 }}>{l.numero_lot}</td>
+                  <td style={{ padding:'7px 10px', color:'#6b7280' }}>{l.fournisseur_nom||'—'}</td>
+                  <td style={{ padding:'7px 10px' }}>{l.date_reception ? new Date(l.date_reception).toLocaleDateString('fr-FR') : '—'}</td>
+                  <td style={{ padding:'7px 10px', color: l.date_dluo && new Date(l.date_dluo) < new Date() ? '#dc2626' : '#6b7280' }}>
+                    {l.date_dluo ? new Date(l.date_dluo).toLocaleDateString('fr-FR') : '—'}
+                  </td>
+                  <td style={{ padding:'7px 10px', fontWeight:700, color:'#0369a1' }}>{parseFloat(l.qte_disponible).toFixed(3)} kg</td>
+                  <td style={{ padding:'7px 10px', color:'#6b7280' }}>{parseFloat(l.prix_unitaire||0).toFixed(0)} FCFA</td>
+                </tr>
+              ))}
+              {lots.length === 0 && (
+                <tr><td colSpan={6} style={{ padding:20, textAlign:'center', color:'#9ca3af' }}>Aucun lot disponible</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+// ══════════════════════════════════════════════════════════════
+// DASHBOARD MAGASIN MP
+// ══════════════════════════════════════════════════════════════
+export function DashboardMagasinMP() {
+  const { user } = useAuth();
+  const [stats, setStats] = useState({ en_attente:0, en_preparation:0, partiel:0, livre:0 });
+  const [stockMP, setStockMP] = useState([]);
+  const [dernLivraisons, setDernLivraisons] = useState([]);
+
+  const charger = async () => {
+    try {
+      const [r1, r2, r3, r4, r5] = await Promise.all([
+        axios.get(`${API}/dbm?statut=en_attente`),
+        axios.get(`${API}/dbm?statut=en_preparation`),
+        axios.get(`${API}/dbm?statut=partiel`),
+        axios.get(`${API}/dbm?statut=livre`),
+        axios.get(`${API}/dbm/stock-mp/resume`),
+      ]);
+      setStats({
+        en_attente:    (r1.data||[]).length,
+        en_preparation:(r2.data||[]).length,
+        partiel:       (r3.data||[]).length,
+        livre:         (r4.data||[]).length,
+      });
+      // Grouper stock par famille, uniquement MP avec stock > 0
+      const stockParFamille = {};
+      for (const s of (r5.data||[])) {
+        if (parseFloat(s.qte_disponible||0) <= 0) continue;
+        const fam = s.famille_libelle || 'Autre';
+        if (!stockParFamille[fam]) stockParFamille[fam] = 0;
+        stockParFamille[fam] += parseFloat(s.qte_disponible||0);
+      }
+      setStockMP(Object.entries(stockParFamille).map(([fam, qte]) => ({ famille_libelle:fam, qte_totale:qte })));
+      setDernLivraisons([...(r3.data||[]), ...(r4.data||[])].sort((a,b) => new Date(b.date_livraison||b.date_demande) - new Date(a.date_livraison||a.date_demande)).slice(0,5));
+    } catch(e) { console.error('Dashboard error:', e?.response?.config?.url, e?.response?.status, e.message); toast.error('Erreur: ' + (e?.response?.config?.url || e.message)); }
+  };
+
+  useEffect(() => { if (user) { setTimeout(charger, 500); } }, [user]);
+
+  return (
+    <div>
+      <div style={{ background:'linear-gradient(135deg,#0369a1,#0284c7)', borderRadius:14, padding:'14px 20px', marginBottom:20, color:'#fff' }}>
+        <div style={{ fontWeight:800, fontSize:16 }}>🏪 Magasin MP — Tableau de bord</div>
+        <div style={{ fontSize:11, opacity:0.8, marginTop:2 }}>Vue d'ensemble des livraisons et du stock</div>
+      </div>
+
+      {/* KPIs */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(150px,1fr))', gap:12, marginBottom:20 }}>
+        {[
+          { label:'DBM en attente',    val:stats.en_attente,     bg:'#fef3c7', tx:'#92400e', icon:'📦' },
+          { label:'En transit → AT3',  val:stats.en_preparation, bg:'#f3e8ff', tx:'#6d28d9', icon:'🚚' },
+          { label:'Livraisons partielles', val:stats.partiel,    bg:'#fef9c3', tx:'#854d0e', icon:'⚠' },
+          { label:'Livrées (total)',   val:stats.livre,          bg:'#dcfce7', tx:'#15803d', icon:'✅' },
+        ].map((k,i) => (
+          <div key={i} style={{ background:k.bg, borderRadius:12, padding:'14px 16px', border:`1px solid ${k.tx}30` }}>
+            <div style={{ fontSize:20, marginBottom:4 }}>{k.icon}</div>
+            <div style={{ fontSize:24, fontWeight:800, color:k.tx }}>{k.val}</div>
+            <div style={{ fontSize:11, color:k.tx, fontWeight:600 }}>{k.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Stock MP par famille */}
+      <div style={{ background:'#fff', borderRadius:12, border:'1px solid #e5e7eb', padding:16, marginBottom:16 }}>
+        <div style={{ fontWeight:700, color:'#0369a1', marginBottom:12, fontSize:13 }}>📊 Stock MP disponible par famille</div>
+        {stockMP.length === 0 ? (
+          <div style={{ color:'#9ca3af', fontSize:13, textAlign:'center', padding:20 }}>Stock vide</div>
+        ) : (
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(180px,1fr))', gap:10 }}>
+            {stockMP.map((s,i) => (
+              <div key={i} style={{ background:'#f0f9ff', borderRadius:10, padding:'12px 14px', border:'1px solid #bae6fd' }}>
+                <div style={{ fontSize:11, fontWeight:700, color:'#6b7280', marginBottom:4 }}>{s.famille_libelle||'—'}</div>
+                <div style={{ fontSize:22, fontWeight:800, color:'#0369a1' }}>{parseFloat(s.qte_totale||0).toFixed(1)}</div>
+                <div style={{ fontSize:10, color:'#6b7280' }}>kg disponible</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Dernières livraisons */}
+      <div style={{ background:'#fff', borderRadius:12, border:'1px solid #e5e7eb', padding:16 }}>
+        <div style={{ fontWeight:700, color:'#15803d', marginBottom:12, fontSize:13 }}>📋 Dernières livraisons</div>
+        {dernLivraisons.length === 0 ? (
+          <div style={{ color:'#9ca3af', fontSize:13, textAlign:'center', padding:20 }}>Aucune livraison</div>
+        ) : (
+          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+            {dernLivraisons.map(d => (
+              <div key={d.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'10px 14px', background:'#f9fafb', borderRadius:8, border:'1px solid #e5e7eb' }}>
+                <div>
+                  <span style={{ fontWeight:800, fontFamily:'monospace', color:'#374151', fontSize:13 }}>{d.numero_dbm}</span>
+                  <span style={{ fontSize:11, color:'#6b7280', marginLeft:8 }}>OF : {d.numero_of}</span>
+                </div>
+                <div style={{ textAlign:'right' }}>
+                  <div style={{ fontWeight:700, color:'#15803d' }}>{parseFloat(d.poids_total_livre||0).toFixed(1)} kg</div>
+                  <div style={{ fontSize:10, color:'#9ca3af' }}>{new Date(d.date_livraison||d.date_demande).toLocaleDateString('fr-FR')}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginTop:16, textAlign:'right' }}>
+        <button onClick={charger} style={{ background:'#e0f2fe', border:'1px solid #7dd3fc', color:'#0369a1', padding:'7px 14px', borderRadius:8, cursor:'pointer', fontSize:12 }}>🔄 Actualiser</button>
+      </div>
+    </div>
+  );
+}
 // Export par défaut — composant principal avec navigation
 export default function DBM_StockAT3() {
   const { user } = useAuth();
@@ -710,8 +1297,9 @@ export default function DBM_StockAT3() {
   const MODULES = user?.role === 'magasinier_mp' ? [
     { id:'reception', icon:'🏪', label:'DBM à livrer', color:'#0369a1' },
   ] : [
-    { id:'dbm',       icon:'📦', label:'Mes DBM',       color:'#92400e' },
-    { id:'stock_at3', icon:'🏗',  label:'Stock AT3',     color:'#15803d' },
+    { id:'dbm',         icon:'📦', label:'Mes DBM',         color:'#92400e' },
+    { id:'reception_at3', icon:'📥', label:'Réception MP',  color:'#7c3aed' },
+    { id:'stock_at3',   icon:'🏗',  label:'Stock AT3',       color:'#15803d' },
   ];
 
   return (
@@ -738,9 +1326,10 @@ export default function DBM_StockAT3() {
         ))}
       </div>
 
-      {module === 'dbm'       && <ModuleDBM />}
-      {module === 'reception' && <ModuleReceptionDBM />}
-      {module === 'stock_at3' && <ModuleStockAT3 />}
+      {module === 'dbm'           && <ModuleDBM />}
+      {module === 'reception'     && <ModuleReceptionDBM />}
+      {module === 'reception_at3' && <ModuleReceptionAT3 />}
+      {module === 'stock_at3'     && <ModuleStockAT3 />}
     </div>
   );
 }

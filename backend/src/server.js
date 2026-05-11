@@ -89,4 +89,5 @@ app.use('/api/dbm', require('./routes/dbm'));
 app.listen(PORT, () => console.log(`NAIdo v3 démarré sur le port ${PORT}`));
 module.exports = app;
 
+app.use('/api/regleur', require('./routes/regleur_historique'));
 // Routes additionnelles

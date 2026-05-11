@@ -4,7 +4,7 @@ import { useAuth } from '../hooks/useAuth.jsx';
 import { useNavigate } from 'react-router-dom';
 
 import Atelier3Flux from './Atelier3Flux';
-import DBM_StockAT3 from './DBM_StockAT3';
+import DBM_StockAT3, { DashboardMagasinMP, ModuleStockMP } from './DBM_StockAT3';
 import { CompositionFicheArticle, CompositionOF } from './CompositionArticle';
 import toast from 'react-hot-toast';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
@@ -117,6 +117,7 @@ const MENU = [
   { id:'stock',       label:'Stock',               icon:'stock',       color:'#6d28d9' },
   { id:'dbm',         label:'DBM — Matières',       icon:'stock',       color:'#92400e' },
   { id:'stock_at3',   label:'Stock AT3',            icon:'stock',       color:'#15803d' },
+  { id:'stock_mp',    label:'Stock MP',             icon:'stock',       color:'#0369a1' },
   { id:'cession',     label:'Bons de Cession',     icon:'cession',     color:'#4338ca' },
   { id:'ol',          label:'Ordres de Livraison', icon:'cession',     color:'#15803d' },
   { id:'separator2b', label:'VENTE & ACHAT',        separator:true },
@@ -157,7 +158,7 @@ const MENU_PAR_ROLE = {
   operateur_dec: ['dashboard','separator1','of','production','cession','alertes'],
   magasinier:    ['dashboard','separator2','stock','cession','alertes'],
   magasinier_at3:['dashboard','separator2','stock','cession','alertes'],
-  magasinier_mp: ['dashboard','dbm','alertes'],
+  magasinier_mp: ['dashboard','dbm','stock_mp','alertes'],
   magasinier_central:['dashboard','separator2','stock','cession','separator2b','vente','alertes'],
   qualite:       ['dashboard','separator1','of','production','separator3','qhse','alertes'],
   qhse:          ['dashboard','separator3','qhse','gmao','alertes'],
@@ -1484,7 +1485,7 @@ function DetailOF({ detail, machines, onClose, onRefresh, onStatut, setOngletAct
   const chargerComposition = async () => {
     try {
       const { data: mp } = await axios.get(`${API}/articles?type_article=matiere_premiere`);
-      const { data: stocks } = await axios.get(`${API}/stock/matieres`).catch(() => ({ data: [] }));
+      const { data: stocks } = await axios.get(`${API}/dbm/stock-at3/liste`).catch(() => ({ data: [] }));
       const enriched = (mp||[]).map(m=>({...m,qte_disponible:parseFloat(stocks.find(s=>s.article_id===m.id)?.qte_disponible||0)}));
       setMpStock(enriched);
       const { data: art } = await axios.get(`${API}/articles/${detail.article_id}`);
@@ -7520,7 +7521,7 @@ function OrdresLivraison() {
     df:          <DemandesFabrication />,
     ol:          <OrdresLivraison />,
     of:          <OrdresFabrication setOngletActif={setOngletActif} />,
-    dashboard:   user?.role === 'chef_atelier' ? <DashboardAT3 /> : <Dashboard />,
+    dashboard:   user?.role === 'chef_atelier' ? <DashboardAT3 /> : user?.role === 'magasinier_mp' ? <DashboardMagasinMP /> : <Dashboard />,
     production:  <SuiviProduction />,
     planning:    <PlanningMachines />,
     rapportjour: <RapportsJournaliers />,
@@ -7544,6 +7545,7 @@ function OrdresLivraison() {
     at3flux:     <Atelier3Flux />,
     dbm:         <DBM_StockAT3 />,
     stock_at3:   <DBM_StockAT3 />,
+    stock_mp:    <ModuleStockMP />,
     referentiels:<Referentiels />,
   };
 

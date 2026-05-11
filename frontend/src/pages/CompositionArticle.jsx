@@ -246,6 +246,13 @@ export function CompositionOF({ detail, configOf, setConfigOf, onSaved }) {
       const savedArr = Array.isArray(saved) ? saved : (saved ? JSON.parse(saved) : []);
       if (savedArr.length > 0) {
         const preload = {};
+        // Construire une map article_id → stock_at3 depuis les groupes
+        const stockMap = {};
+        for (const g of (data.groupes||[])) {
+          for (const a of (g.articles||[])) {
+            stockMap[a.id] = parseFloat(a.stock_at3||0);
+          }
+        }
         for (const m of savedArr) {
           const gid = String(m.famille_id || m.groupe_id);
           if (!preload[gid]) preload[gid] = [];
@@ -255,6 +262,7 @@ export function CompositionOF({ detail, configOf, setConfigOf, onSaved }) {
             designation: m.designation,
             pct:         m.pct || '',
             quantite:    m.quantite || '',
+            stock_at3:   stockMap[m.mp_id] || 0,
           });
         }
         setChoixMp(preload);
@@ -435,7 +443,7 @@ export function CompositionOF({ detail, configOf, setConfigOf, onSaved }) {
                 <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12, marginBottom:10 }}>
                   <thead>
                     <tr style={{ background:clr.light }}>
-                      {['MP sélectionnée','Stock AT3','%','Quantité (kg)',''].map(h=>(
+                      {['MP sélectionnée','Stock AT3','% dans groupe','Quantité (kg)',''].map(h=>(
                         <th key={h} style={{ padding:'5px 8px', textAlign:'left', fontSize:10, fontWeight:600, color:clr.tx }}>{h}</th>
                       ))}
                     </tr>
@@ -454,9 +462,7 @@ export function CompositionOF({ detail, configOf, setConfigOf, onSaved }) {
                             {m.stock_at3>0?`${parseFloat(m.stock_at3).toFixed(1)} kg`:'—'}
                             {insuf&&' ⚠'}
                           </td>
-                          <td style={{ padding:'6px 8px', color:'#0369a1', fontSize:11 }}>
-                            {m.stock_mag>0?`${parseFloat(m.stock_mag).toFixed(1)} kg`:'—'}
-                          </td>
+
                           <td style={{ padding:'6px 8px', width:90 }}>
                             <div style={{ display:'flex', alignItems:'center', gap:3 }}>
                               <input type="number" value={m.pct} min="0" max="100" step="0.1"

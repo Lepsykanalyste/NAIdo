@@ -11,15 +11,18 @@ router.get('/', auth, async (req, res) => {
       SELECT o.*, 
              c.raison_sociale AS client_nom,
              a.designation AS article_nom, a.code AS article_code,
-             a.cadence_theorique_kg_h AS cadence_heure,
+             a.cadence_heure AS cadence_heure,
+             ROUND((o.quantite_cible * a.poids_theorique_kg)::numeric, 1) AS poids_theorique_total_kg,
              a.temps_reglage_min, a.poids_theorique_kg,
              a.longueur_mm, a.largeur_mm, a.couleur,
              m.code AS machine_code, m.nom AS machine_nom, m.type AS machine_type,
+             um.code AS unite_code, um.libelle AS unite_libelle,
              at.libelle AS atelier_libelle, at.code AS atelier_code
       FROM ordres_fabrication o
       LEFT JOIN clients_complet c ON c.id = o.client_id
       LEFT JOIN articles a ON a.id = o.article_id
       LEFT JOIN machines m ON m.id = o.machine_id
+      LEFT JOIN unites_mesure um ON um.id = o.unite_id
       LEFT JOIN ateliers at ON at.id::text = o.atelier_id::text
       WHERE 1=1
     `;
@@ -91,7 +94,8 @@ router.get('/:id', auth, async (req, res) => {
       SELECT o.*,
              c.raison_sociale AS client_nom,
              a.designation AS article_nom, a.code AS article_code,
-             a.cadence_theorique_kg_h AS cadence_heure,
+             a.cadence_heure AS cadence_heure,
+             ROUND((o.quantite_cible * a.poids_theorique_kg)::numeric, 1) AS poids_theorique_total_kg,
              a.temps_reglage_min, a.poids_theorique_kg,
              a.longueur_mm, a.largeur_mm, a.couleur, a.composition,
              m.code AS machine_code, m.nom AS machine_nom
@@ -99,6 +103,7 @@ router.get('/:id', auth, async (req, res) => {
       LEFT JOIN clients_complet c ON c.id = o.client_id
       LEFT JOIN articles a ON a.id = o.article_id
       LEFT JOIN machines m ON m.id = o.machine_id
+      LEFT JOIN unites_mesure um ON um.id = o.unite_id
       LEFT JOIN ateliers at ON at.id::text = o.atelier_id::text
       WHERE o.id = $1
     `, [req.params.id]);
@@ -145,6 +150,31 @@ router.put('/:id/statut', auth, async (req, res) => {
       'UPDATE ordres_fabrication SET statut=$1 WHERE id=$2 RETURNING *',
       [statut, req.params.id]
     );
+    if (!rows.length) return res.status(404).json({ error: 'OF introuvable' });
+    res.json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+
+// PATCH /api/of/:id/reglage — Régleur valide les paramètres machine
+router.patch('/:id/reglage', auth, async (req, res) => {
+  try {
+    const { temperature, pression, vitesse, notes, regleur_id } = req.body;
+    const rId = regleur_id || req.user.id;
+    const { rows } = await db.query(`
+      UPDATE ordres_fabrication SET
+        statut              = 'en_attente_operateur',
+        regleur_id          = $1,
+        regleur_valide      = true,
+        regleur_temperature = $2,
+        regleur_pression    = $3,
+        regleur_vitesse     = $4,
+        regleur_notes       = $5,
+        regleur_valide_at   = NOW(),
+        numero_ticket_reglage = 'TKR-' || TO_CHAR(NOW(), 'YYYY') || '-' || LPAD(nextval('seq_ticket_reglage')::text, 4, '0')
+      WHERE id = $6
+      RETURNING *
+    `, [rId, temperature, pression, vitesse, notes, req.params.id]);
     if (!rows.length) return res.status(404).json({ error: 'OF introuvable' });
     res.json(rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
