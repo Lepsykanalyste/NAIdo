@@ -5,7 +5,10 @@ import { useAuth } from './hooks/useAuth.jsx';
 import Login       from './pages/Login';
 import Operateur   from './pages/Operateur';
 import Regleur     from './pages/Regleur';
-import Qualite     from './pages/Qualite';
+import Qualite              from './pages/Qualite';
+import RondeChef            from './pages/RondeChef';
+import NonConformite        from './pages/NonConformite';
+import ControleAvantCession from './pages/ControleAvantCession';
 import ChefAtelier from './pages/ChefAtelier';
 
 const ROLES_OPERATEUR = ['operateur','operateur_ext','operateur_sou','operateur_imp','operateur_dec'];
@@ -60,6 +63,21 @@ export default function App() {
         <Route path="/regleur/*" element={
           <PrivateRoute roles={['regleur']}>
             <Regleur />
+          </PrivateRoute>
+        }/>
+        <Route path="/ronde/*" element={
+          <PrivateRoute roles={['chef_atelier','admin']}>
+            <RondeChef/>
+          </PrivateRoute>
+        }/>
+        <Route path="/non-conformite/*" element={
+          <PrivateRoute roles={['qualite','chef_atelier','admin']}>
+            <NonConformite/>
+          </PrivateRoute>
+        }/>
+        <Route path="/cession/*" element={
+          <PrivateRoute roles={['qualite','chef_atelier','admin']}>
+            <ControleAvantCession/>
           </PrivateRoute>
         }/>
         <Route path="/qualite/*" element={
