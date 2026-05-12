@@ -3,10 +3,11 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: naido_postgres
+    env_file: .env
     environment:
-      POSTGRES_DB: naido_db
-      POSTGRES_USER: naido_user
-      POSTGRES_PASSWORD: naido_pass_2026
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       - naido_pgdata:/var/lib/postgresql/data
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -14,7 +15,7 @@ services:
       - "5436:5432"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U naido_user -d naido_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -22,17 +23,7 @@ services:
   backend:
     build: ./backend
     container_name: naido_backend
-    environment:
-      NODE_ENV: production
-      PORT: 3000
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: naido_db
-      DB_USER: naido_user
-      DB_PASS: naido_pass_2026
-      JWT_SECRET: naido_jwt_secret_green_industry_2026
-      JWT_EXPIRES_IN: 7d
-      APP_BASE_URL: http://100.85.252.109:8095
+    env_file: .env
     ports:
       - "3090:3000"
     depends_on:
@@ -46,10 +37,7 @@ services:
   backend_python:
     build: ./backend_python
     container_name: naido_backend_python
-    environment:
-      DATABASE_URL: postgresql://naido_user:naido_pass_2026@postgres:5432/naido_db
-      APP_BASE_URL: http://100.85.252.109:8095
-      JWT_SECRET: naido_jwt_secret_green_industry_2026
+    env_file: .env
     ports:
       - "3091:3000"
     depends_on:
