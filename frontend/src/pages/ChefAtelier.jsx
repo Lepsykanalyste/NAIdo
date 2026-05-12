@@ -4,7 +4,10 @@ import { useAuth } from '../hooks/useAuth.jsx';
 import { useNavigate } from 'react-router-dom';
 
 import Atelier3Flux from './Atelier3Flux';
-import DBM_StockAT3, { DashboardMagasinMP, ModuleStockMP } from './DBM_StockAT3';
+import DBM_StockAT3, { DashboardMagasinMP, ModuleStockMP, ModuleStockAT3 } from './DBM_StockAT3';
+import RondeChef from './RondeChef';
+import NonConformite from './NonConformite';
+import ControleAvantCession from './ControleAvantCession';
 import { CompositionFicheArticle, CompositionOF } from './CompositionArticle';
 import toast from 'react-hot-toast';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
@@ -126,13 +129,9 @@ const MENU = [
   { id:'fournisseurs',label:'Fournisseurs',         icon:'articles',    color:'#6d28d9' },
   { id:'achat',       label:'Commandes Achat',     icon:'stock',       color:'#9333ea' },
   { id:'separator3',  label:'QHSE & MAINTENANCE',  separator:true },
-  { id:'qhse',        label:'QHSE / NC',           icon:'qhse',        color:'#b45309' },
-  { id:'ronde_ext',   label:'Ronde Chef de Quart',  icon:'qhse',        color:'#d97706', extUrl:'/ronde' },
-  { id:'nc_ext',      label:'Non-Conformites',       icon:'qhse',        color:'#dc2626', extUrl:'/non-conformite' },
-  { id:'cession_ext', label:'Controle Avant Cession',icon:'cession',     color:'#059669', extUrl:'/cession' },
-  { id:'ronde_ext',   label:'Ronde Chef de Quart',  icon:'qhse',        color:'#d97706', extUrl:'/ronde' },
-  { id:'nc_ext',      label:'Non-Conformites',       icon:'qhse',        color:'#dc2626', extUrl:'/non-conformite' },
-  { id:'cession_ext', label:'Controle Avant Cession',icon:'cession',     color:'#059669', extUrl:'/cession' },
+  { id:'ronde',       label:'Ronde Chef de Quart',  icon:'qhse',        color:'#d97706' },
+  { id:'nc',          label:'Non-Conformités',       icon:'qhse',        color:'#dc2626' },
+  { id:'cession_ctrl',label:'Contrôle Avant Cession',icon:'cession',    color:'#059669' },
   { id:'gmao',        label:'GMAO / Maintenance',  icon:'gmao',        color:'#92400e' },
 
   { id:'separator4b', label:'RESSOURCES HUMAINES', separator:true },
@@ -154,7 +153,7 @@ const MENU = [
 const MENU_PAR_ROLE = {
   super_admin:   null, // tout
   directeur:     null, // tout
-  chef_atelier:  ['dashboard','separator1','at3flux','of','production','planning','separator2','dbm','stock_at3','cession','separator3','gmao','alertes'],
+  chef_atelier:  ['dashboard','separator1','at3flux','of','production','planning','separator2','dbm','stock_at3','cession','separator3','ronde','nc','cession_ctrl','gmao','alertes'],
   regleur:       ['dashboard','separator1','of','production','planning','alertes'],
   commercial:    ['dashboard','separator1','devis','bc','df','ol','separator2b','clients','vente','alertes'],
   operateur:     ['dashboard','separator1','of','production','alertes'],
@@ -166,7 +165,7 @@ const MENU_PAR_ROLE = {
   magasinier_at3:['dashboard','separator2','stock','cession','alertes'],
   magasinier_mp: ['dashboard','dbm','stock_mp','alertes'],
   magasinier_central:['dashboard','separator2','stock','cession','separator2b','vente','alertes'],
-  qualite:       ['dashboard','separator1','of','production','separator3','qhse','alertes'],
+  qualite:       ['dashboard','separator1','of','production','separator3','ronde','nc','cession_ctrl','qhse','alertes'],
   qhse:          ['dashboard','separator3','qhse','gmao','alertes'],
   rh:            ['dashboard','separator4b','rh','alertes'],
   technicien:    ['dashboard','separator3','gmao','alertes'],
@@ -7554,8 +7553,11 @@ function OrdresLivraison() {
     alertes:     <Alertes />,
     at3flux:     <Atelier3Flux />,
     dbm:         <DBM_StockAT3 />,
-    stock_at3:   <DBM_StockAT3 />,
+    stock_at3:   <ModuleStockAT3 />,
     stock_mp:    <ModuleStockMP />,
+    ronde:       <RondeChef />,
+    nc:          <NonConformite />,
+    cession_ctrl:<ControleAvantCession />,
     referentiels:<Referentiels />,
   };
 

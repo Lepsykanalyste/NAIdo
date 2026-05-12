@@ -208,7 +208,17 @@ export default function Qualite() {
   const criteres = getCriteres(typeCtrl);
 
   const chargerOFs=useCallback(async()=>{
-    try{const{data}=await axios.get(`${API}/of`);setOfs(Array.isArray(data)?data:[]);}catch{}
+    try{
+      const [r1,r2,r3] = await Promise.all([
+        axios.get(`${API}/of?statut=en_cours`),
+        axios.get(`${API}/of?statut=lance`),
+        axios.get(`${API}/of?statut=planifie`),
+      ]);
+      const tous = [...(r1.data||[]),...(r2.data||[]),...(r3.data||[])];
+      // dédoublonner par id
+      const uniq = tous.filter((o,i,a)=>a.findIndex(x=>x.id===o.id)===i);
+      setOfs(uniq);
+    }catch{}
   },[]);
 
   const chargerHistorique=useCallback(async()=>{

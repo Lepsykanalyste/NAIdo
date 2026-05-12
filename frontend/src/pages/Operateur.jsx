@@ -77,6 +77,7 @@ ${rows.map(r=>r===null?'<hr/>':
 ).join('')}
 <div class="qr">${qr?`<img src="${qr}" width="120" height="120"/>`:''}
 <div style="font-size:8px;color:#666">${ticket.numero_ticket}</div></div><hr/>
+${qrRecap?`<div style="text-align:center;margin:4px 0"><img src="${qrRecap}" width="100" height="100"/><div style="font-size:8px;color:#666;margin-top:2px">${r.numero_of} · ${r.shift}</div></div><hr/>`:''}
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:3mm">
 <div class="sig"><div style="font-size:8px;font-weight:bold">OPÉRATEUR</div>${user?.prenom||''} ${user?.nom||''}<br/><br/>Signature:</div>
 <div class="sig"><div style="font-size:8px;font-weight:bold">CHEF DE QUART</div><br/><br/>Signature:</div>
@@ -132,6 +133,12 @@ ${rows.map(r=>r===null?'<hr/>':
 // RÉCAP FIN DE SHIFT
 // ═══════════════════════════════════════════════════════════════════════════
 function RecapShift({ recap, onNouveau }) {
+  const [qrRecap, setQrRecap] = React.useState('');
+  React.useEffect(() => {
+    const str = `NAI-SHIFT|${recap.numero_of}|${recap.shift}|${recap.operateur}|${recap.date}|BOB:${recap.nb_bobines}|${recap.poids_total}kg`;
+    import('qrcode').then(Q => Q.default.toDataURL(str, { width:120, margin:1, color:{dark:'#1c1917',light:'#fff'} })).then(setQrRecap).catch(()=>{});
+  }, [recap]);
+
   const imprimer=()=>{
     const r=recap;
     const w=window.open('','_blank','width=400,height=600');
@@ -196,6 +203,12 @@ ${r.duree_min?`<div class="r"><span>DURÉE</span><b>${Math.floor(r.duree_min/60)
               </div>
             ))}
           </div>
+          {qrRecap&&(
+            <div style={{textAlign:'center',marginTop:8}}>
+              <img src={qrRecap} width={90} height={90} alt="QR" style={{borderRadius:4}}/>
+              <div style={{fontSize:8,color:'#666',marginTop:2}}>{recap.numero_of} · {recap.shift}</div>
+            </div>
+          )}
           <div style={{textAlign:'center',fontSize:8,color:'#666',marginTop:6,borderTop:'1px dashed #999',paddingTop:3}}>NAIdo — NAI · {recap.date}</div>
         </div>
       </div>
