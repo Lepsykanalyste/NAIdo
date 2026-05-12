@@ -10,7 +10,7 @@ from pathlib import Path
 from datetime import datetime, date
 
 # ── CONFIG ─────────────────────────────────────────────────────
-DB_URL = os.getenv("DATABASE_URL", "postgresql://naido_user:naido_pass_2026@naido_postgres:5436/naido_db")
+DB_URL = os.getenv("DATABASE_URL", "postgresql://naido_user:NAId0ProdSecure2026xK9mQ@postgres:5432/naido_db")
 JWT_SECRET = os.getenv("JWT_SECRET", "naido_secret_2026")
 
 # ── DB POOL ────────────────────────────────────────────────────
