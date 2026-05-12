@@ -1622,7 +1622,7 @@ function DetailOF({ detail, machines, onClose, onRefresh, onStatut, setOngletAct
           ['Client', detail.client_nom||'—'],
           ['Atelier', detail.atelier_libelle||detail.atelier_id||'—'],
           ['Statut', {'planifie':'Planifié','lance':'Lancé','en_cours':'En cours','termine':'Terminé','annule':'Annulé'}[detail.statut]||detail.statut],
-          ['Qté cible', parseFloat(detail.quantite_cible||0).toFixed(0)+' pcs'+(detail.at3_poids_cible_kg?' — '+parseFloat(detail.at3_poids_cible_kg).toFixed(0)+' kg':'')],
+          ['Qté cible', (detail.quantite_pieces&&detail.quantite_pieces>0?parseFloat(detail.quantite_pieces).toLocaleString('fr-FR')+' pcs — ':'') + parseFloat(detail.quantite_cible||0).toFixed(1)+' kg'],
           ['Qté produite', parseFloat(detail.quantite_produite||0).toFixed(0)+' kg'],
           ['Temps prévu', detail.temps_prevu_min?detail.temps_prevu_min+' min':'—'],
           ['Livraison', detail.date_livraison_prevue?new Date(detail.date_livraison_prevue).toLocaleDateString('fr-FR'):'—'],

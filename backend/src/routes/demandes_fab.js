@@ -37,18 +37,19 @@ router.get('/', auth, async (req, res) => {
 // POST /api/df
 router.post('/', auth, async (req, res) => {
   try {
-    const { client_id, article_id, quantite_demandee, description,
+    const { client_id, article_id, quantite_demandee, quantite_pieces, description,
             specifications, date_livraison_souhaitee, priorite, notes } = req.body;
     if (!article_id || !quantite_demandee)
       return res.status(400).json({ error: 'article_id et quantite_demandee requis' });
     const { rows } = await db.query(`
       INSERT INTO demandes_fabrication
-        (client_id, article_id, quantite_demandee, description,
+        (client_id, article_id, quantite_demandee, quantite_pieces, description,
          specifications, date_livraison_souhaitee, priorite,
          demandeur_id, notes, statut)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'en_attente')
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'en_attente')
       RETURNING *
     `, [client_id||null, article_id, parseFloat(quantite_demandee),
+        parseInt(quantite_pieces||0),
         description||null, specifications||null,
         date_livraison_souhaitee||null, parseInt(priorite||3),
         req.user.id, notes||null]);
@@ -80,16 +81,17 @@ router.put('/:id/valider', auth, async (req, res) => {
     // Créer OF automatiquement
     const { rows: of } = await db.query(`
       INSERT INTO ordres_fabrication
-        (client_id, article_id, quantite_cible, machine_id, atelier_id,
+        (client_id, article_id, quantite_cible, quantite_pieces, machine_id, atelier_id,
          date_livraison_prevue, date_debut_prevue, priorite, statut,
          temps_prevu_min, df_id)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'planifie',$9,$10)
+      VALUES ($1,$2,$3,$11,$4,$5,$6,$7,$8,'planifie',$9,$10)
       RETURNING *
     `, [d.client_id, d.article_id, d.quantite_demandee,
         machine_id ? parseInt(machine_id) : null,
         atelier_id||'AT3',
         d.date_livraison_souhaitee, date_debut_prevue||null,
-        d.priorite, temps_prevu_min, d.id]);
+        d.priorite, temps_prevu_min, d.id,
+        parseInt(d.quantite_pieces||0)]);
 
     // Mettre à jour la DF
     const { rows: updated } = await db.query(`

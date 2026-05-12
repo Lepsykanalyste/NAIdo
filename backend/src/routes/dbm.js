@@ -113,9 +113,13 @@ router.put('/:id/livrer', auth, async (req, res) => {
       await client.query(`
         UPDATE dbm_lignes SET qte_en_transit=$1, numero_lot=$2 WHERE id=$3
       `, [parseFloat(l.qte_livree), l.numero_lot||'', l.ligne_id]);
-      await client.query(`
-        UPDATE stock_articles SET qte_disponible=GREATEST(0,qte_disponible-$1) WHERE article_id=$2
-      `, [parseFloat(l.qte_livree), l.article_id]);
+      // Mettre à jour stock_articles si la ligne existe
+      const saRes = await client.query('SELECT id FROM stock_articles WHERE article_id=$1 LIMIT 1', [l.article_id]);
+      if (saRes.rows.length) {
+        await client.query(`
+          UPDATE stock_articles SET qte_disponible=GREATEST(0,qte_disponible-$1) WHERE article_id=$2
+        `, [parseFloat(l.qte_livree), l.article_id]);
+      }
     }
     await client.query(`
       UPDATE dbm SET statut='en_preparation', livre_par=$1, date_livraison=NOW(), notes_magasin=$2 WHERE id=$3
