@@ -64,14 +64,14 @@ router.post('/', auth, async (req, res) => {
       const ttc = ht + tva_amt;
       total_ht += ht; total_tva += tva_amt; total_ttc += ttc;
 
+      const qte_kg = parseFloat(l.quantite_kg||0) > 0
+          ? parseFloat(l.quantite_kg||0)
+          : parseInt(l.quantite_pieces||0) * parseFloat(l.poids_piece_kg||l.poids_theorique_kg||0);
       await client.query(`
         INSERT INTO devis_lignes (devis_id, article_id, designation, quantite_pieces,
           quantite_kg, prix_unitaire_ht, remise_pct, taux_tva,
           montant_ht, montant_tva, montant_ttc, ordre)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-      const qte_kg = parseFloat(l.quantite_kg||0) > 0 && parseFloat(l.quantite_kg||0) !== parseFloat(l.quantite_pieces||0)
-          ? parseFloat(l.quantite_kg||0)
-          : parseInt(l.quantite_pieces||0) * parseFloat(l.poids_piece_kg||0);
       `, [dv[0].id, l.article_id||null, l.designation||'', parseInt(l.quantite_pieces||0),
           qte_kg, pu_ht, rem, tva, ht, tva_amt, ttc, i]);
     }

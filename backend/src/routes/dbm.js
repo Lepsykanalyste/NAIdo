@@ -261,13 +261,13 @@ router.put('/:id/annuler', auth, async (req, res) => {
 // GET /api/dbm/lots/:article_id — lots disponibles pour un article
 router.get('/lots/:article_id', auth, async (req, res) => {
   try {
-    const { data } = await db.query(`
+    const { rows: data } = await db.query(`
       SELECT id, numero_lot, qte_disponible, date_reception, fournisseur_nom
       FROM lots_stock
       WHERE article_id=$1 AND statut='disponible' AND qte_disponible>0
       ORDER BY date_reception ASC
     `, [req.params.article_id]);
-    ok(res, data.rows);
+    ok(res, data);
   } catch(e) { err(res, e, 'Erreur lots'); }
 });
 
@@ -408,13 +408,13 @@ router.put('/:id/annuler', auth, async (req, res) => {
 // GET /api/dbm/lots/:article_id — lots disponibles pour un article
 router.get('/lots/:article_id', auth, async (req, res) => {
   try {
-    const { data } = await db.query(`
+    const { rows: data } = await db.query(`
       SELECT id, numero_lot, qte_disponible, date_reception, fournisseur_nom
       FROM lots_stock
       WHERE article_id=$1 AND statut='disponible' AND qte_disponible>0
       ORDER BY date_reception ASC
     `, [req.params.article_id]);
-    ok(res, data.rows);
+    ok(res, data);
   } catch(e) { err(res, e, 'Erreur lots'); }
 });
 
@@ -555,13 +555,13 @@ router.put('/:id/annuler', auth, async (req, res) => {
 // GET /api/dbm/lots/:article_id — lots disponibles pour un article
 router.get('/lots/:article_id', auth, async (req, res) => {
   try {
-    const { data } = await db.query(`
+    const { rows: data } = await db.query(`
       SELECT id, numero_lot, qte_disponible, date_reception, fournisseur_nom
       FROM lots_stock
       WHERE article_id=$1 AND statut='disponible' AND qte_disponible>0
       ORDER BY date_reception ASC
     `, [req.params.article_id]);
-    ok(res, data.rows);
+    ok(res, data);
   } catch(e) { err(res, e, 'Erreur lots'); }
 });
 
