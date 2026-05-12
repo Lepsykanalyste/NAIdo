@@ -172,7 +172,7 @@ export default function Login() {
 
         <span className="nai-corner tl">SYS // NAIDO-MES<br/>ATELIER — ACTIF</span>
         <span className="nai-corner tr">SESSION<br/>SÉCURISÉE</span>
-        <span className="nai-corner bl">© 2026 SOPHOPSY<br/>sophopsy.com</span>
+        <span className="nai-corner bl">© 2026 NAIdo — NAI</span>
         <span className="nai-corner br">{clock}</span>
 
         <div className="nai-page">

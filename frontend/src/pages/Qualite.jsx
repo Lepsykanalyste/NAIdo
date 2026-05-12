@@ -208,7 +208,7 @@ export default function Qualite() {
   const criteres = getCriteres(typeCtrl);
 
   const chargerOFs=useCallback(async()=>{
-    try{const{data}=await axios.get(`${API}/of?statut=en_cours`);setOfs(Array.isArray(data)?data:[]);}catch{}
+    try{const{data}=await axios.get(`${API}/of`);setOfs(Array.isArray(data)?data:[]);}catch{}
   },[]);
 
   const chargerHistorique=useCallback(async()=>{

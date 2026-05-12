@@ -127,6 +127,12 @@ const MENU = [
   { id:'achat',       label:'Commandes Achat',     icon:'stock',       color:'#9333ea' },
   { id:'separator3',  label:'QHSE & MAINTENANCE',  separator:true },
   { id:'qhse',        label:'QHSE / NC',           icon:'qhse',        color:'#b45309' },
+  { id:'ronde_ext',   label:'Ronde Chef de Quart',  icon:'qhse',        color:'#d97706', extUrl:'/ronde' },
+  { id:'nc_ext',      label:'Non-Conformites',       icon:'qhse',        color:'#dc2626', extUrl:'/non-conformite' },
+  { id:'cession_ext', label:'Controle Avant Cession',icon:'cession',     color:'#059669', extUrl:'/cession' },
+  { id:'ronde_ext',   label:'Ronde Chef de Quart',  icon:'qhse',        color:'#d97706', extUrl:'/ronde' },
+  { id:'nc_ext',      label:'Non-Conformites',       icon:'qhse',        color:'#dc2626', extUrl:'/non-conformite' },
+  { id:'cession_ext', label:'Controle Avant Cession',icon:'cession',     color:'#059669', extUrl:'/cession' },
   { id:'gmao',        label:'GMAO / Maintenance',  icon:'gmao',        color:'#92400e' },
 
   { id:'separator4b', label:'RESSOURCES HUMAINES', separator:true },
@@ -1624,7 +1630,7 @@ function DetailOF({ detail, machines, onClose, onRefresh, onStatut, setOngletAct
       </div>
 
       {/* Machine — saisie par production */}
-      <div style={{background:'#fffbeb',borderRadius:10,padding:14,marginBottom:16,border:'1px solid #fde68a',display:user?.role==='chef_atelier'?'none':'block'}}>
+      <div style={{background:'#fffbeb',borderRadius:10,padding:14,marginBottom:16,border:'1px solid #fde68a',display:'block'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:editMachine?10:0}}>
           <div style={{fontWeight:700,fontSize:13,color:'#92400e'}}>
             🏭 Machine : {detail.machine_nom||<span style={{color:'#d97706'}}>Non assignée — à définir par la production</span>}
@@ -1763,7 +1769,7 @@ function DetailOF({ detail, machines, onClose, onRefresh, onStatut, setOngletAct
 
         {/* Liste lots */}
         {lots.length===0 ? (
-          <div style={{display:user?.role==='chef_atelier'?'none':'block',color:'#6b7280',fontSize:12,fontStyle:'italic'}}>Aucune matière saisie</div>
+          <div style={{display:'block',color:'#6b7280',fontSize:12,fontStyle:'italic'}}>Aucune matière saisie</div>
         ) : (
           <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
             <thead><tr style={{background:'#dcfce7'}}>
@@ -1874,6 +1880,9 @@ function OrdresFabrication({ setOngletActif }) {
     if (!form.article_id || !form.quantite_cible) {
       toast.error('Article et quantité requis'); return;
     }
+    if (!form.machine_id) {
+      toast.error('Machine obligatoire — ENR.ALP1-003'); return;
+    }
     try {
       await axios.post(`${API}/of`, {
         ...form,
@@ -1939,7 +1948,8 @@ function OrdresFabrication({ setOngletActif }) {
       {/* Formulaire création */}
       {showForm && (
         <div style={{background:'#f0f9ff',borderRadius:14,padding:20,marginBottom:20,border:'1px solid #bae6fd'}}>
-          <div style={{fontWeight:700,fontSize:15,color:'#0369a1',marginBottom:16}}>📋 Nouvel Ordre de Fabrication</div>
+          <div style={{fontWeight:700,fontSize:15,color:'#0369a1',marginBottom:8}}>📋 Nouvel Ordre de Fabrication</div>
+          <div style={{fontSize:11,color:'#6b7280',marginBottom:14}}>Ref. ENR.ALP1-003 v01 — Chef atelier : {user?.prenom} {user?.nom}</div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12}}>
             <F label="Article * (produit à fabriquer)">
               <select value={form.article_id} onChange={e=>setForm({...form,article_id:e.target.value})} style={sel}>
@@ -1962,7 +1972,7 @@ function OrdresFabrication({ setOngletActif }) {
                 ))}
               </select>
             </F>
-            <F label="Machine">
+            <F label="Machine * (obligatoire)">
               <select value={form.machine_id} onChange={e=>setForm({...form,machine_id:e.target.value})} style={sel}>
                 <option value="">-- Sélectionner machine --</option>
                 {machinesFiltrees.map(m=><option key={m.id} value={m.id}>{m.code} — {m.nom}</option>)}
@@ -7661,7 +7671,7 @@ function OrdresLivraison() {
 
         {/* Footer */}
         <footer style={{ background:'#fff', borderTop:'1px solid #e5e7eb', padding:'8px 24px', fontSize:11, color:'#9ca3af', textAlign:'center', flexShrink:0 }}>
-          © 2026 NAIdo v3.0 — Logiciel créé par SOPHOPSY pour NAI
+          © 2026 NAIdo v3.0 — NAIdo v3.0 - NAI
         </footer>
       </div>
     </div>
