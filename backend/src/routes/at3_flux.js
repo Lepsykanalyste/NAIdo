@@ -119,6 +119,8 @@ router.put('/of/:id/configurer', auth, async (req, res) => {
     if (valider) {
       sets.push('at3_composition_validee = true');
       sets.push("at3_statut_zone         = 'extrusion'");
+      sets.push("statut                  = 'lance'");
+      sets.push('date_debut_reel         = NOW()');
       params.push(userId);
       sets.push(`at3_valide_par = $${params.length}`);
       sets.push('at3_valide_le  = NOW()');
