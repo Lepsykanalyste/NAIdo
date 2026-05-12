@@ -265,6 +265,12 @@ function GestionDevis() {
     setLignes(prev=>{
       const next=[...prev];
       next[i]={...next[i],[field]:val};
+      // Recalculer quantite_kg si on change quantite_pieces
+      if(field==='quantite_pieces'){
+        const art = next[i];
+        const poids = parseFloat(art.poids_piece_kg||art.poids_theorique_kg||0);
+        if(poids>0) next[i].quantite_kg = String((parseFloat(val||0)*poids).toFixed(3));
+      }
       return next;
     });
   };
