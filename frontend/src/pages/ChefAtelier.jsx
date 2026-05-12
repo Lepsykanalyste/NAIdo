@@ -256,7 +256,7 @@ function GestionDevis() {
     if(lignes.find(l=>l.article_id===art.id)) return;
     setLignes(prev=>[...prev,{
       article_id:art.id, designation:art.designation, article_code:art.code,
-      quantite_pieces:'1',
+      quantite_pieces:'1', quantite_kg:String(art.poids_theorique_kg||0),
       prix_unitaire_ht:String(art.prix_vente_fcfa||''), remise_pct:'0', taux_tva:'18',
     }]);
   };
