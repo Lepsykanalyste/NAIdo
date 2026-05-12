@@ -19,16 +19,31 @@ echo "$(date) — Export images..."
 docker save naido-backend naido-backend_python naido-frontend | gzip > /tmp/naido_images.tar.gz
 ls -lh /tmp/naido_images.tar.gz
 
+echo "$(date) — Dump base de données sophopsy..."
+docker exec naido_postgres pg_dump -U naido_user naido_db > /tmp/naido_db.sql
+ls -lh /tmp/naido_db.sql
+
 echo "$(date) — Transfert vers NAIdo via Tailscale..."
 scp /tmp/naido_images.tar.gz ${NAIDO_USER}@${NAIDO_IP}:/tmp/naido_images.tar.gz
+scp /tmp/naido_db.sql ${NAIDO_USER}@${NAIDO_IP}:/tmp/naido_db.sql
 
 echo "$(date) — Déploiement sur NAIdo..."
 ssh ${NAIDO_USER}@${NAIDO_IP} "
   cd ${NAIDO_DIR} &&
   git pull origin main &&
+
+  echo '--- Chargement images Docker...' &&
   docker load < /tmp/naido_images.tar.gz &&
+
+  echo '--- Sync base de données...' &&
+  docker exec -i naido_postgres psql -U naido_user -d naido_db -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO naido_user;' &&
+  docker exec -i naido_postgres psql -U naido_user -d naido_db < /tmp/naido_db.sql &&
+
+  echo '--- Redémarrage containers...' &&
   docker-compose up -d &&
-  rm /tmp/naido_images.tar.gz &&
+
+  rm /tmp/naido_images.tar.gz /tmp/naido_db.sql &&
   echo '✅ NAIdo mis à jour'
 "
+
 echo "$(date) — DONE ✅"
