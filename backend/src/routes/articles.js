@@ -57,6 +57,7 @@ router.get('/', auth, async (req, res) => {
         COALESCE(SUM(sa.qte_disponible),0) AS stock_total
       FROM articles a
       LEFT JOIN familles_articles f ON f.id=a.famille_id
+      LEFT JOIN sous_familles_articles sf ON sf.id=a.sous_famille_id
       LEFT JOIN unites_mesure um ON um.id=a.unite_mesure_id
       LEFT JOIN stock_articles sa ON sa.article_id=a.id
       WHERE a.actif=true
