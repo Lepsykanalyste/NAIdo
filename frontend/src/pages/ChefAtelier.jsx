@@ -1362,7 +1362,10 @@ function DemandesFabrication() {
                   <td style={{padding:'9px 12px',fontWeight:700,color:'#7c3aed',cursor:'pointer',textDecoration:'underline'}} onClick={()=>ouvrirDF(df)}>{df.numero_df}</td>
                   
                   <td style={{padding:'9px 12px',fontSize:12}}>{df.client_nom||'—'}</td>
-                  <td style={{padding:'9px 12px',fontWeight:600}}>{parseFloat(df.quantite_totale_kg||df.quantite_demandee||0).toFixed(1)} kg</td>
+                  <td style={{padding:'9px 12px',fontWeight:600}}>
+                    {df.quantite_pieces>0&&<div style={{fontSize:11,color:'#7c3aed'}}>{parseFloat(df.quantite_pieces).toLocaleString('fr-FR')} pcs</div>}
+                    <div>{parseFloat(df.quantite_totale_kg||df.quantite_demandee||0).toFixed(1)} kg</div>
+                  </td>
                   <td style={{padding:'9px 12px',fontSize:12}}>{df.date_livraison_souhaitee?new Date(df.date_livraison_souhaitee).toLocaleDateString('fr-FR'):'—'}</td>
                   <td style={{padding:'9px 12px',textAlign:'center'}}>{'⭐'.repeat(df.priorite||1)}</td>
                   <td style={{padding:'9px 12px'}}>
