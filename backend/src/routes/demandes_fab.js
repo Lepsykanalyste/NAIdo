@@ -16,7 +16,7 @@ router.get('/', auth, async (req, res) => {
              u2.nom||' '||u2.prenom AS valideur_nom,
              o.numero_of,
              bc.numero_bc,
-             COALESCE((SELECT SUM(quantite_kg) FROM bc_lignes WHERE bc_id=df.bc_id), df.quantite_demandee) AS quantite_totale_kg
+             df.quantite_demandee AS quantite_totale_kg
       FROM demandes_fabrication df
       LEFT JOIN clients_complet c ON c.id=df.client_id
       LEFT JOIN articles a ON a.id=df.article_id
@@ -131,7 +131,7 @@ router.get('/:id/pdf', async (req, res) => {
              u2.nom||' '||u2.prenom AS valideur_nom,
              o.numero_of,
              bc.numero_bc, bc.reference_client, bc.adresse_livraison, bc.date_livraison_souhaitee,
-             COALESCE((SELECT SUM(quantite_kg) FROM bc_lignes WHERE bc_id=df.bc_id), df.quantite_demandee) AS quantite_totale_kg
+             df.quantite_demandee AS quantite_totale_kg
       FROM demandes_fabrication df
       LEFT JOIN clients_complet c ON c.id=df.client_id
       LEFT JOIN articles a ON a.id=df.article_id
@@ -263,8 +263,9 @@ router.get('/:id/pdf', async (req, res) => {
   </div>
 </div>
 
+${d.quantite_pieces>0?`<div class="qte-big" style="font-size:14pt;">${parseFloat(d.quantite_pieces).toLocaleString("fr-FR")} pcs</div><div class="qte-lbl">QUANTITÉ EN PIÈCES</div>`:''}
 <div class="qte-big">${qte_totale.toFixed(1)} kg</div>
-<div class="qte-lbl">QUANTITÉ DEMANDÉE</div>
+<div class="qte-lbl">QUANTITÉ EN KG</div>
 
 ${lignes_html}
 ${d.description ? `<div class="specs"><strong>Spécifications :</strong> ${d.description}</div>` : ''}
