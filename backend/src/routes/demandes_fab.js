@@ -246,6 +246,9 @@ router.get('/:id/pdf', async (req, res) => {
     <div class="sec-b">
       <div class="row"><span class="lbl">BC NAI</span><span class="val">${d.numero_bc||'—'}</span></div>
       <div class="row"><span class="lbl">Réf. client</span><span class="val">${d.reference_client||'—'}</span></div>
+      <div class="row"><span class="lbl">Article</span><span class="val">${d.article_code||'—'} — ${d.article_nom||'—'}</span></div>
+      <div class="row"><span class="lbl">Qté (pces)</span><span class="val">${d.quantite_pieces>0?parseFloat(d.quantite_pieces).toLocaleString('fr-FR')+' pcs':'—'}</span></div>
+      <div class="row"><span class="lbl">Qté (poids)</span><span class="val">${qte_totale.toFixed(1)} kg</span></div>
       <div class="row"><span class="lbl">Nb articles</span><span class="val">${bc_lignes.length > 0 ? bc_lignes.length+' article(s)' : '1 article'}</span></div>
       <div class="row"><span class="lbl">Livraison</span><span class="val">${d.date_livraison_souhaitee ? new Date(d.date_livraison_souhaitee).toLocaleDateString('fr-FR') : '—'}</span></div>
       <div class="row"><span class="lbl">Adresse</span><span class="val">${d.adresse_livraison||'—'}</span></div>
