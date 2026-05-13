@@ -312,6 +312,8 @@ ${d.numero_of ? `
 </html>`;
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.setHeader('Pragma', 'no-cache');
     res.send(html);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });

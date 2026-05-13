@@ -1375,7 +1375,7 @@ function DemandesFabrication() {
                   </td>
                   <td style={{padding:'9px 12px',fontSize:12,color:'#0369a1',fontWeight:600}}>{df.numero_of||'—'}</td>
                   <td style={{padding:'9px 12px',textAlign:'center'}}>
-                    <button onClick={()=>window.open(`/api/df/${df.id}/pdf`,'_blank')}
+                    <button onClick={()=>window.open(`/api/df/${df.id}/pdf?t=${Date.now()}`,'_blank')}
                       title="Imprimer PDF"
                       style={{background:'#f5f3ff',color:'#7c3aed',border:'none',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:12}}>
                       🖨 PDF
