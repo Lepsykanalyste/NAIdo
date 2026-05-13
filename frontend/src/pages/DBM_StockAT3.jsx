@@ -679,9 +679,13 @@ export function ModuleReceptionDBM() {
                   <div style={{ fontSize:12, color:'#374151' }}>OF : {d.numero_of} | {d.nb_lignes} MP</div>
                   <div style={{ fontSize:11, color:'#9ca3af' }}>{new Date(d.date_livraison||d.date_demande).toLocaleString('fr-FR', { dateStyle:'short', timeStyle:'short' })}</div>
                 </div>
-                <div style={{ textAlign:'right' }}>
+                <div style={{ textAlign:'right', display:'flex', flexDirection:'column', alignItems:'flex-end', gap:4 }}>
                   <div style={{ fontWeight:700, color:'#374151' }}>{parseFloat(d.poids_total_demande||0).toFixed(1)} kg demandé</div>
                   <div style={{ fontSize:12, color:'#15803d' }}>Livré : {parseFloat(d.poids_total_livre||0).toFixed(1)} kg</div>
+                  <button onClick={() => window.open(`/api/dbm/${d.id}/pdf?t=${Date.now()}`,'_blank')}
+                    style={{ background:'#f0f9ff', color:'#0369a1', border:'1px solid #bae6fd', borderRadius:6, padding:'3px 8px', cursor:'pointer', fontSize:11, fontWeight:600 }}>
+                    🖨 PDF
+                  </button>
                 </div>
               </div>
             </div>
