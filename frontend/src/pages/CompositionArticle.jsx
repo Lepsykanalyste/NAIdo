@@ -296,9 +296,26 @@ export function CompositionOF({ detail, configOf, setConfigOf, onSaved }) {
     const poids = parseFloat(configOf?.at3_poids_cible_kg || 0);
     setChoixMp(prev => ({
       ...prev,
-      [gid]: (prev[gid]||[]).map((m, i) => i !== idx ? m : {
-        ...m, pct: val,
-        quantite: poids > 0 ? ((parseFloat(val||0)/100)*poids).toFixed(3) : ''
+      [gid]: (prev[gid]||[]).map((m, i) => {
+        if (i !== idx) return m;
+        const qteNecessaire = poids > 0 ? (parseFloat(val||0)/100)*poids : 0;
+        const stockDispo = parseFloat(m.stock_at3 || 0);
+        // Si stock insuffisant, limiter le % au maximum possible
+        let pctFinal = parseFloat(val||0);
+        let qteFinal = qteNecessaire;
+        if (stockDispo > 0 && poids > 0 && qteNecessaire > stockDispo) {
+          pctFinal = (stockDispo / poids) * 100;
+          qteFinal = stockDispo;
+          // toast warning - on le fait via return flag
+        }
+        return {
+          ...m,
+          pct: stockDispo > 0 && poids > 0 && qteNecessaire > stockDispo
+            ? pctFinal.toFixed(2)
+            : val,
+          quantite: poids > 0 ? qteFinal.toFixed(3) : '',
+          stock_insuffisant: stockDispo > 0 && poids > 0 && qteNecessaire > stockDispo,
+        };
       })
     }));
   };
@@ -310,6 +327,7 @@ export function CompositionOF({ detail, configOf, setConfigOf, onSaved }) {
 
   // Total % global
   const totalPct = Object.values(choixMp).flat().reduce((s, m) => s + parseFloat(m.pct||0), 0);
+  const stockInsuffisant = Object.values(choixMp).flat().some(m => m.stock_insuffisant);
 
   const sauvegarder = async (valider = false) => {
     if (valider && Math.abs(totalPct-100) > 0.1) return toast.error(`Total ${totalPct.toFixed(1)}% — doit être 100%`);
@@ -524,16 +542,23 @@ export function CompositionOF({ detail, configOf, setConfigOf, onSaved }) {
           style={{ background:'#f0fdf4', color:'#15803d', border:'1px solid #86efac', padding:'9px 18px', borderRadius:8, cursor:'pointer', fontWeight:600 }}>
           💾 Sauvegarder
         </button>}
-        {detail?.at3_statut_zone!=='extrusion' && <button onClick={() => sauvegarder(true)}
-          disabled={loading}
-          style={{
-            background: Math.abs(totalPct-100)<0.1 && configOf?.at3_poids_cible_kg ? '#14532d' : '#9ca3af',
-            color:'#fff', border:'none', padding:'9px 22px', borderRadius:8,
-            cursor: Math.abs(totalPct-100)<0.1 && configOf?.at3_poids_cible_kg ? 'pointer' : 'not-allowed',
-            fontWeight:700, fontSize:14
-          }}>
-          {loading ? '...' : '✅ Valider & Lancer Extrusion'}
-        </button>}
+        {detail?.at3_statut_zone!=='extrusion' && <>
+          {stockInsuffisant && (
+            <div style={{background:'#fef3c7',border:'1px solid #fde68a',borderRadius:8,padding:'8px 12px',fontSize:12,color:'#92400e',display:'flex',alignItems:'center',gap:8}}>
+              ⚠ Stock AT3 insuffisant — lancez une DBM avant de valider
+            </div>
+          )}
+          <button onClick={() => sauvegarder(true)}
+            disabled={loading || stockInsuffisant}
+            style={{
+              background: Math.abs(totalPct-100)<0.1 && configOf?.at3_poids_cible_kg && !stockInsuffisant ? '#14532d' : '#9ca3af',
+              color:'#fff', border:'none', padding:'9px 22px', borderRadius:8,
+              cursor: Math.abs(totalPct-100)<0.1 && configOf?.at3_poids_cible_kg && !stockInsuffisant ? 'pointer' : 'not-allowed',
+              fontWeight:700, fontSize:14
+            }}>
+            {loading ? '...' : '✅ Valider & Lancer Extrusion'}
+          </button>
+        </>}
         {detail?.at3_statut_zone === 'extrusion' && (
           <span style={{ background:'#fef3c7', color:'#92400e', padding:'9px 16px', borderRadius:8, fontSize:12, fontWeight:600 }}>
             ⚙ Déjà en extrusion
