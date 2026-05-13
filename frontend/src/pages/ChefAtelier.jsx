@@ -1006,7 +1006,7 @@ function MenuActionsDF({ df, isDir, user, onValider, onRefuser, onAnnuler, onMod
             {mode==="voir" && (
               <div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,fontSize:13,marginBottom:12}}>
-                  {[["Article",df.article_nom+" ("+df.article_code+")"],["Client",df.client_nom||"—"],["Quantité",(df.quantite_demandee||0)+" kg"],["Priorité",stars(df.priorite)],["Livraison souhaitée",fmtDate(df.date_livraison_souhaitee)],["Statut",df.statut],["BC origine",df.numero_bc||"—"],["OF généré",df.numero_of||"—"],["Demandeur",df.demandeur_nom||"—"],["Validé par",df.valideur_nom||"—"]].map(([l,v])=>(
+                  {[["Article",df.article_nom+" ("+df.article_code+")"],["Client",df.client_nom||"—"],["Quantité",(df.quantite_pieces&&df.quantite_pieces>0?parseFloat(df.quantite_pieces).toLocaleString('fr-FR')+' pcs — ':'')+(df.quantite_demandee||0)+' kg'],["Priorité",stars(df.priorite)],["Livraison souhaitée",fmtDate(df.date_livraison_souhaitee)],["Statut",df.statut],["BC origine",df.numero_bc||"—"],["OF généré",df.numero_of||"—"],["Demandeur",df.demandeur_nom||"—"],["Validé par",df.valideur_nom||"—"]].map(([l,v])=>(
                     <div key={l} style={{background:"#f9fafb",borderRadius:8,padding:"8px 12px"}}>
                       <div style={{fontSize:10,color:"#6b7280",fontWeight:600}}>{l}</div>
                       <div style={{fontWeight:600,marginTop:2}}>{v}</div>
@@ -1218,7 +1218,16 @@ function DemandesFabrication() {
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:12}}>
             <div style={{marginBottom:12}}>
               <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Article à fabriquer *</div>
-              <select value={form.article_id} onChange={e=>setForm({...form,article_id:e.target.value})} style={sel}>
+              <select value={form.article_id} onChange={e=>{
+                const artId = e.target.value;
+                const art = articles.find(a=>a.id===artId);
+                const poids_unit = parseFloat(art?.poids_piece_kg||art?.poids_theorique_kg||0);
+                const pieces = parseFloat(form.quantite_pieces||0);
+                setForm(prev=>({...prev,
+                  article_id:artId,
+                  quantite_demandee: poids_unit>0 && pieces>0 ? (pieces*poids_unit).toFixed(3) : prev.quantite_demandee
+                }));
+              }} style={sel}>
                 <option value="">-- Sélectionner --</option>
                 {articles.filter(a=>a.type_article==='produit_fini').map(a=>(
                   <option key={a.id} value={a.id}>{a.code} — {a.designation}</option>
@@ -1302,7 +1311,7 @@ function DemandesFabrication() {
           <div style={{background:'#fff',borderRadius:16,padding:28,width:480,maxWidth:'90vw'}}>
             <div style={{fontWeight:800,fontSize:16,marginBottom:16,color:'#15803d'}}>✓ Valider la demande</div>
             <div style={{fontSize:13,color:'#374151',marginBottom:16,background:'#f0fdf4',padding:12,borderRadius:8}}>
-              <strong>{showValider.article_nom}</strong> — {showValider.quantite_demandee} kg<br/>
+              <strong>{showValider.article_nom}</strong> — {showValider.quantite_pieces>0?`${parseFloat(showValider.quantite_pieces).toLocaleString('fr-FR')} pcs — `:''}{showValider.quantite_demandee} kg<br/>
               Client : {showValider.client_nom||'—'}
             </div>
             <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:16}}>
@@ -1403,7 +1412,7 @@ function DemandesFabrication() {
               {dfMode==='voir' && (
                 <div>
                   <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,fontSize:13,marginBottom:12}}>
-                    {[['Client',dfSelectionne.client_nom||'—'],['Quantité',parseFloat(dfSelectionne.quantite_totale_kg||dfSelectionne.quantite_demandee||0).toFixed(1)+' kg'],['Priorité','⭐'.repeat(dfSelectionne.priorite||1)],['Livraison',dfSelectionne.date_livraison_souhaitee?new Date(dfSelectionne.date_livraison_souhaitee).toLocaleDateString('fr-FR'):'—'],['Statut',({'en_attente':'En attente','validee':'Validée → OF','refusee':'Refusée','annulee':'Annulée'}[dfSelectionne.statut]||dfSelectionne.statut)],['BC origine',dfSelectionne.numero_bc||'—'],['OF généré',dfSelectionne.numero_of||'—'],['Demandeur',dfSelectionne.demandeur_nom||'—'],['Validé par',dfSelectionne.valideur_nom||'—']].map(([l,v])=>(
+                    {[['Client',dfSelectionne.client_nom||'—'],['Quantité',(dfSelectionne.quantite_pieces>0?parseFloat(dfSelectionne.quantite_pieces).toLocaleString('fr-FR')+' pcs — ':'')+parseFloat(dfSelectionne.quantite_totale_kg||dfSelectionne.quantite_demandee||0).toFixed(1)+' kg'],['Priorité','⭐'.repeat(dfSelectionne.priorite||1)],['Livraison',dfSelectionne.date_livraison_souhaitee?new Date(dfSelectionne.date_livraison_souhaitee).toLocaleDateString('fr-FR'):'—'],['Statut',({'en_attente':'En attente','validee':'Validée → OF','refusee':'Refusée','annulee':'Annulée'}[dfSelectionne.statut]||dfSelectionne.statut)],['BC origine',dfSelectionne.numero_bc||'—'],['OF généré',dfSelectionne.numero_of||'—'],['Demandeur',dfSelectionne.demandeur_nom||'—'],['Validé par',dfSelectionne.valideur_nom||'—']].map(([l,v])=>(
                       <div key={l} style={{background:'#f9fafb',borderRadius:8,padding:'8px 12px'}}>
                         <div style={{fontSize:10,color:'#6b7280',fontWeight:600}}>{l}</div>
                         <div style={{fontWeight:600,marginTop:2}}>{v}</div>
