@@ -1001,6 +1001,15 @@ export function ModuleStockMP() {
   const [articles, setArticles] = useState([]);
   const [lots, setLots] = useState([]);
   const [artSel, setArtSel] = useState(null);
+  const [fournisseurs, setFournisseurs] = useState([]);
+  const [searchFourn, setSearchFourn] = useState('');
+  useEffect(() => {
+    axios.get('/api/achat/fournisseurs').then(r => setFournisseurs(r.data||[])).catch(()=>{});
+  }, []);
+  const fournisseursFiltres = fournisseurs.filter(f =>
+    !searchFourn || f.raison_sociale.toLowerCase().includes(searchFourn.toLowerCase()) ||
+    (f.code||'').toLowerCase().includes(searchFourn.toLowerCase())
+  );
   const [showEntree, setShowEntree] = useState(false);
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
@@ -1087,9 +1096,15 @@ export function ModuleStockMP() {
                 style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13, boxSizing:'border-box' }} />
             </div>
             <div>
-              <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Fournisseur</label>
-              <input type="text" value={form.fournisseur_nom} onChange={e => setForm(f=>({...f,fournisseur_nom:e.target.value}))}
-                style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'8px', fontSize:13, boxSizing:'border-box' }} />
+              <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Fournisseur *</label>
+              <input type="text" placeholder="🔍 Rechercher fournisseur..." value={searchFourn}
+                onChange={e => setSearchFourn(e.target.value)}
+                style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'7px', fontSize:12, boxSizing:'border-box', marginBottom:4 }} />
+              <select value={form.fournisseur_nom} onChange={e => { setForm(f=>({...f,fournisseur_nom:e.target.value})); setSearchFourn(''); }}
+                style={{ width:'100%', border:'2px solid #7dd3fc', borderRadius:8, padding:'8px', fontSize:13, boxSizing:'border-box' }}>
+                <option value="">-- Choisir fournisseur --</option>
+                {fournisseursFiltres.map(f => <option key={f.id} value={f.raison_sociale}>{f.code} — {f.raison_sociale}</option>)}
+              </select>
             </div>
             <div>
               <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Date réception</label>
@@ -1290,9 +1305,13 @@ export function DashboardMagasinMP() {
                   <span style={{ fontWeight:800, fontFamily:'monospace', color:'#374151', fontSize:13 }}>{d.numero_dbm}</span>
                   <span style={{ fontSize:11, color:'#6b7280', marginLeft:8 }}>OF : {d.numero_of}</span>
                 </div>
-                <div style={{ textAlign:'right' }}>
+                <div style={{ textAlign:'right', display:'flex', flexDirection:'column', alignItems:'flex-end', gap:4 }}>
                   <div style={{ fontWeight:700, color:'#15803d' }}>{parseFloat(d.poids_total_livre||0).toFixed(1)} kg</div>
                   <div style={{ fontSize:10, color:'#9ca3af' }}>{new Date(d.date_livraison||d.date_demande).toLocaleDateString('fr-FR')}</div>
+                  <button onClick={() => window.open(`/api/dbm/${d.id}/pdf?t=${Date.now()}`,'_blank')}
+                    style={{ background:'#f0fdf4', color:'#15803d', border:'1px solid #86efac', borderRadius:6, padding:'3px 8px', cursor:'pointer', fontSize:11, fontWeight:600 }}>
+                    🖨 PDF
+                  </button>
                 </div>
               </div>
             ))}
