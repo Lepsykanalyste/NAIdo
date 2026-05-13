@@ -2909,7 +2909,7 @@ async def of_pdf(of_id: str):
             _img.save(_buf, format='PNG')
             qr_url = "data:image/png;base64," + _b64.b64encode(_buf.getvalue()).decode()
         except:
-            qr_url = """
+            qr_url = ""
 
         html_content = f"""<!DOCTYPE html>
 <html lang="fr">
