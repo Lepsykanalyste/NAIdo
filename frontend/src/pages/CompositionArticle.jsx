@@ -378,12 +378,14 @@ export function CompositionOF({ detail, configOf, setConfigOf, onSaved }) {
         </div>
         <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8, marginBottom:8 }}>
           {[
+            ['Poids cible (kg) *', 'at3_poids_cible_kg'],
             ['Nb bobines prévues', 'at3_nb_bobines_cibles'],
           ].map(([label, key]) => (
             <div key={key}>
               <label style={{ fontSize:10, fontWeight:600, display:'block', marginBottom:2 }}>{label}</label>
               <input type="number" value={configOf?.[key]||''} onChange={e => setConfigOf(p=>({...p,[key]:e.target.value}))}
-                style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:6, padding:'7px', fontSize:13, textAlign:'center', fontWeight:700, boxSizing:'border-box' }} />
+                style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:6, padding:'7px', fontSize:13, textAlign:'center', fontWeight:700, boxSizing:'border-box',
+                  borderColor: key==='at3_poids_cible_kg'&&!configOf?.[key]?'#f97316':'#d1d5db' }} />
             </div>
           ))}
         </div>

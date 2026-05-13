@@ -2874,7 +2874,7 @@ async def of_pdf(of_id: str):
         # Composition HTML
         compo_groupes_list = [dict(r) for r in compo_groupes]
         compo_mp_list = [dict(r) for r in compo_mp]
-        poids_cible = float(d.get('at3_poids_cible_kg') or 0) or round(float(d.get('quantite_cible') or 0) * float(d.get('poids_theorique_kg') or 0), 1)
+        poids_cible = float(d.get('at3_poids_cible_kg') or 0) or float(d.get('quantite_cible') or 0)
         lots_html = ''
         if compo_groupes_list or compo_mp_list:
             rows_html = ''
@@ -2898,8 +2898,18 @@ async def of_pdf(of_id: str):
             notes_html = '<div style="margin-top:6px;background:#fffbeb;border:1px solid #fde68a;border-radius:4px;padding:5px 8px;font-size:7.5pt;"><strong>Instructions régleur :</strong> ' + notes_regleur + '</div>' if notes_regleur else ''
             lots_html = '<div style="margin-top:10px;"><div style="background:#92400e;color:#fff;padding:5px 8px;font-size:7pt;font-weight:700;text-transform:uppercase;border-radius:4px 4px 0 0;">🧪 Composition matières premières — Poids cible : ' + str(round(poids_cible,1)) + ' kg</div><table style="width:100%;border-collapse:collapse;font-size:8pt;border:1px solid #fde68a;"><thead><tr style="background:#fef3c7;"><th style="padding:5px 8px;text-align:left;color:#92400e;">Groupe</th><th style="padding:5px 8px;text-align:left;color:#92400e;">Code MP</th><th style="padding:5px 8px;text-align:left;color:#92400e;">Désignation</th><th style="padding:5px 8px;text-align:center;color:#92400e;">%</th><th style="padding:5px 8px;text-align:center;color:#92400e;">Qté (kg)</th></tr></thead><tbody>' + rows_html + '</tbody><tfoot><tr style="background:#fef3c7;font-weight:700;"><td colspan="3" style="padding:5px 8px;color:#92400e;">TOTAL</td><td style="padding:5px 8px;text-align:center;">' + str(round(total_pct,1)) + '%</td><td style="padding:5px 8px;text-align:center;color:#15803d;">' + str(round(total_kg,1)) + ' kg</td></tr></tfoot></table>' + notes_html + '</div>'
 
-        pdf_url = f"http://100.85.252.109:8095/api/of/{of_id}/pdf"
-        qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=100x100&data={pdf_url.replace(':','%3A').replace('/','%2F')}&color=0369a1"
+        pdf_url = f"NAI-OF|{d.get('numero_of','?')}|{d.get('article_code','?')}|{round(poids_cible,1)}kg|{d.get('statut','?')}"
+        try:
+            import qrcode as _qr, base64 as _b64, io as _io
+            _qobj = _qr.QRCode(version=1, box_size=3, border=2, error_correction=_qr.constants.ERROR_CORRECT_M)
+            _qobj.add_data(pdf_url)
+            _qobj.make(fit=True)
+            _img = _qobj.make_image(fill_color="#0369a1", back_color="white")
+            _buf = _io.BytesIO()
+            _img.save(_buf, format='PNG')
+            qr_url = "data:image/png;base64," + _b64.b64encode(_buf.getvalue()).decode()
+        except:
+            qr_url = """
 
         html_content = f"""<!DOCTYPE html>
 <html lang="fr">
@@ -2977,7 +2987,7 @@ async def of_pdf(of_id: str):
     </div>
   </div>
   <div>
-    <div class="qte-big">{int(float(d['quantite_cible'] or 0)):,} pcs / {round(poids_cible,1)} kg</div>
+    <div class="qte-big">{int(float(d.get('quantite_pieces') or 0)):,} pcs / {round(poids_cible,1)} kg</div>
     <div style="text-align:center;font-size:7pt;color:#6b7280;">QUANTITÉ CIBLE</div>
   </div>
   <div class="sec">
