@@ -373,9 +373,13 @@ export function ModuleDBM() {
                 <div style={{ fontSize:12, color:'#374151' }}>OF : {d.numero_of} | {d.nb_lignes} article(s)</div>
                 <div style={{ fontSize:11, color:'#9ca3af' }}>Par : {d.demandeur_nom} | {new Date(d.date_demande).toLocaleDateString('fr-FR')}</div>
               </div>
-              <div style={{ textAlign:'right' }}>
+              <div style={{ textAlign:'right', display:'flex', flexDirection:'column', alignItems:'flex-end', gap:4 }}>
                 <div style={{ fontWeight:700, color:'#92400e' }}>{parseFloat(d.poids_total_demande||0).toFixed(1)} kg</div>
                 <div style={{ fontSize:11, color:'#15803d' }}>Livré : {parseFloat(d.poids_total_livre||0).toFixed(1)} kg</div>
+                <button onClick={e=>{e.stopPropagation();window.open(`/api/dbm/${d.id}/pdf?t=${Date.now()}`,'_blank');}}
+                  style={{ background:'#fff7ed', color:'#92400e', border:'1px solid #fed7aa', borderRadius:6, padding:'3px 10px', cursor:'pointer', fontSize:11, fontWeight:600 }}>
+                  🖨 PDF
+                </button>
               </div>
             </div>
           </div>
@@ -542,9 +546,18 @@ export function ModuleReceptionDBM() {
                       setLivraisons(prev => prev.map((x,xi) => xi===i?{...x,lot_id:e.target.value,numero_lot:lot?.numero_lot||'',qte_livree:Math.min(parseFloat(l.qte_restante||0),parseFloat(lot?.qte_disponible||0)).toFixed(1)}:x));
                     }} style={{ width:'100%', border:'1px solid #7dd3fc', borderRadius:6, padding:'5px', fontSize:12, boxSizing:'border-box', marginBottom:3 }}>
                       <option value="">-- Choisir lot --</option>
-                      {(lots[l.article_id]||[]).map(lot => (
-                        <option key={lot.id} value={lot.id}>{lot.numero_lot} ({parseFloat(lot.qte_disponible).toFixed(0)} kg)</option>
-                      ))}
+                      {(lots[l.article_id]||[]).map(lot => {
+                        // Déduire ce qui est déjà alloué dans les autres lignes
+                        const dejaAlloue = livraisons
+                          .filter((x, xi) => xi !== i && x.lot_id === lot.id)
+                          .reduce((s, x) => s + parseFloat(x.qte_livree||0), 0);
+                        const dispo = Math.max(0, parseFloat(lot.qte_disponible) - dejaAlloue);
+                        return (
+                          <option key={lot.id} value={lot.id}>
+                            {lot.numero_lot} ({dispo.toFixed(0)} kg dispo)
+                          </option>
+                        );
+                      })}
                     </select>
                     <div style={{ display:'flex', gap:4, marginTop:2 }}>
                       <button onClick={() => ajouterLigneParLot(i)}
@@ -1150,7 +1163,7 @@ export function ModuleStockMP() {
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
             <thead>
               <tr style={{ background:'#e0f2fe' }}>
-                {['N° Lot','Fournisseur','Date réception','DLUO','Disponible','Prix/kg'].map(h => (
+                {['N° Lot','Fournisseur','Date réception','DLUO','Disponible','Prix/kg','Fiche'].map(h => (
                   <th key={h} style={{ padding:'7px 10px', textAlign:'left', fontSize:11, fontWeight:600, color:'#0369a1' }}>{h}</th>
                 ))}
               </tr>
@@ -1166,6 +1179,12 @@ export function ModuleStockMP() {
                   </td>
                   <td style={{ padding:'7px 10px', fontWeight:700, color:'#0369a1' }}>{parseFloat(l.qte_disponible).toFixed(3)} kg</td>
                   <td style={{ padding:'7px 10px', color:'#6b7280' }}>{parseFloat(l.prix_unitaire||0).toFixed(0)} FCFA</td>
+                  <td style={{ padding:'7px 10px' }}>
+                    <button onClick={() => window.open(`/api/dbm/stock-mp/entree/${l.id}/pdf?t=${Date.now()}`,'_blank')}
+                      style={{ background:'#e0f2fe', color:'#0369a1', border:'none', borderRadius:6, padding:'3px 8px', cursor:'pointer', fontSize:11, fontWeight:600 }}>
+                      🖨 Fiche
+                    </button>
+                  </td>
                 </tr>
               ))}
               {lots.length === 0 && (

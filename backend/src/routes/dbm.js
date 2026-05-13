@@ -764,3 +764,193 @@ router.post('/declarations', auth, async (req, res) => {
 });
 
 module.exports = router;
+
+// GET /api/dbm/:id/pdf — PDF Bon de Demande de Matières
+router.get('/:id/pdf', async (req, res) => {
+  try {
+    const [dbmRes, lignesRes] = await Promise.all([
+      db.query('SELECT * FROM vue_dbm WHERE id=$1', [req.params.id]),
+      db.query(`SELECT dl.*, a.code, a.designation, f.libelle AS famille_libelle
+        FROM dbm_lignes dl LEFT JOIN articles a ON a.id=dl.article_id
+        LEFT JOIN familles_articles f ON f.id=dl.famille_id
+        WHERE dl.dbm_id=$1 ORDER BY f.libelle, a.code`, [req.params.id])
+    ]);
+    if (!dbmRes.rows.length) return res.status(404).json({ error: 'DBM introuvable' });
+    const d = dbmRes.rows[0];
+    const lignes = lignesRes.rows;
+
+    const statuts = { en_attente:'En attente', en_preparation:'En préparation', livre:'Livré AT3', receptionne:'Réceptionné', annule:'Annulé' };
+    const couleurs = { en_attente:'#d97706', en_preparation:'#0369a1', livre:'#7c3aed', receptionne:'#15803d', annule:'#dc2626' };
+    const labelSt = statuts[d.statut] || d.statut;
+    const couleur = couleurs[d.statut] || '#374151';
+
+    const lignesHtml = lignes.map(l => `
+      <tr>
+        <td style="padding:6px 8px;font-weight:700;">${l.code||'—'}</td>
+        <td style="padding:6px 8px;">${l.designation||'—'}</td>
+        <td style="padding:6px 8px;color:#6b7280;font-size:8pt;">${l.famille_libelle||'—'}</td>
+        <td style="padding:6px 8px;text-align:right;font-weight:700;">${parseFloat(l.qte_demandee||0).toFixed(1)} kg</td>
+        <td style="padding:6px 8px;text-align:right;color:#0369a1;font-weight:700;">${parseFloat(l.qte_en_transit||0).toFixed(1)} kg</td>
+        <td style="padding:6px 8px;text-align:right;color:#15803d;font-weight:700;">${parseFloat(l.qte_livree||0).toFixed(1)} kg</td>
+        <td style="padding:6px 8px;text-align:center;font-size:8pt;">${l.numero_lot||'—'}</td>
+        <td style="padding:6px 8px;text-align:center;">
+          <span style="background:${parseFloat(l.qte_livree||0)>=parseFloat(l.qte_demandee||0)?'#dcfce7':parseFloat(l.qte_en_transit||0)>0?'#dbeafe':'#fef3c7'};
+            color:${parseFloat(l.qte_livree||0)>=parseFloat(l.qte_demandee||0)?'#15803d':parseFloat(l.qte_en_transit||0)>0?'#1d4ed8':'#92400e'};
+            padding:2px 8px;border-radius:12px;font-size:7pt;font-weight:700;">
+            ${parseFloat(l.qte_livree||0)>=parseFloat(l.qte_demandee||0)?'✓ Complet':parseFloat(l.qte_en_transit||0)>0?'En transit':'En attente'}
+          </span>
+        </td>
+      </tr>`).join('');
+
+    const totalDemande = lignes.reduce((s,l)=>s+parseFloat(l.qte_demandee||0),0);
+    const totalLivre = lignes.reduce((s,l)=>s+parseFloat(l.qte_livree||0),0);
+
+    const qrData = `NAI-DBM|${d.numero_dbm}|${d.numero_of||'?'}|${totalDemande.toFixed(1)}kg|${d.statut}`;
+    let qrUrl = '';
+    try {
+      const QRCode = require('qrcode');
+      qrUrl = await QRCode.toDataURL(qrData, { width:100, margin:1, color:{dark:'#1e3a5f',light:'#fff'} });
+    } catch {}
+
+    const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
+<style>*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+@page{size:A4;margin:10mm}body{font-family:Arial,sans-serif;font-size:9pt;color:#1f2937}
+.header{border-bottom:3px solid #1e3a5f;padding-bottom:8px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:flex-start}
+.company{font-size:16pt;font-weight:900;color:#1e3a5f}.banner{background:#1e3a5f;color:#fff;text-align:center;padding:7px;border-radius:4px;margin-bottom:10px;font-size:11pt;font-weight:700;text-transform:uppercase;letter-spacing:1px}
+.dbm-num{font-size:20pt;font-weight:900;color:#1e3a5f;text-align:center;margin:6px 0 3px}
+.badge{display:inline-block;padding:3px 14px;border-radius:12px;font-weight:700;font-size:9pt;border:1px solid ${couleur};color:${couleur};background:${couleur}18}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.sec{border:1px solid #e5e7eb;border-radius:4px;overflow:hidden}
+.sec-h{background:#f3f4f6;padding:3px 8px;font-size:7pt;font-weight:700;text-transform:uppercase;border-bottom:1px solid #e5e7eb}
+.sec-b{padding:6px 8px}.row{display:flex;justify-content:space-between;margin-bottom:2px}
+.lbl{color:#6b7280;font-size:7.5pt}.val{font-weight:700;color:#111827;font-size:8pt}
+table{width:100%;border-collapse:collapse;font-size:8pt;margin:8px 0}
+thead tr{background:#1e3a5f;color:#fff}th{padding:6px 8px;text-align:left;font-weight:600}
+tbody tr{border-bottom:1px solid #e5e7eb}tbody tr:nth-child(even){background:#f9fafb}
+.sigs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px}
+.sig-box{border:1px solid #d1d5db;border-radius:4px;padding:10px;min-height:50px}
+.sig-title{font-size:7pt;font-weight:700;text-transform:uppercase;color:#374151;margin-bottom:3px}
+.sig-name{font-size:7.5pt;color:#6b7280;margin-bottom:20px}
+.sig-line{border-top:1px solid #9ca3af;padding-top:3px;font-size:6.5pt;color:#9ca3af;text-align:center}
+.footer{border-top:1px solid #e5e7eb;padding-top:5px;text-align:center;font-size:6.5pt;color:#9ca3af;margin-top:8px}
+</style></head><body onload="window.print()">
+<div class="header">
+  <div><div class="company">NAI</div><div style="font-size:7pt;color:#6b7280;">Atelier 3 — Gestion des Matières</div></div>
+  <div style="text-align:right;"><div style="font-size:7pt;color:#6b7280;">Date : ${new Date(d.created_at).toLocaleDateString('fr-FR')}</div>
+  <div style="font-size:7pt;color:#6b7280;">Demandeur : ${d.demandeur_nom||'—'}</div></div>
+</div>
+<div class="banner">📦 Bon de Demande de Matières</div>
+<div class="dbm-num">${d.numero_dbm}</div>
+<div style="text-align:center;margin-bottom:8px"><span class="badge">${labelSt}</span></div>
+<div class="grid">
+  <div class="sec"><div class="sec-h">Ordre de Fabrication</div><div class="sec-b">
+    <div class="row"><span class="lbl">N° OF</span><span class="val">${d.numero_of||'—'}</span></div>
+    <div class="row"><span class="lbl">Article</span><span class="val">${d.article_nom||'—'}</span></div>
+    <div class="row"><span class="lbl">Atelier</span><span class="val">${d.atelier_id||'AT3'}</span></div>
+    <div class="row"><span class="lbl">Priorité</span><span class="val">${d.urgence?'🚨 URGENT':'Normale'}</span></div>
+  </div></div>
+  <div class="sec"><div class="sec-h">Livraison</div><div class="sec-b">
+    <div class="row"><span class="lbl">Magasinier</span><span class="val">${d.magasinier_nom||'—'}</span></div>
+    <div class="row"><span class="lbl">Date livraison</span><span class="val">${d.date_livraison?new Date(d.date_livraison).toLocaleDateString('fr-FR'):'—'}</span></div>
+    <div class="row"><span class="lbl">Total demandé</span><span class="val">${totalDemande.toFixed(1)} kg</span></div>
+    <div class="row"><span class="lbl">Total livré</span><span class="val" style="color:#15803d">${totalLivre.toFixed(1)} kg</span></div>
+  </div></div>
+</div>
+<table><thead><tr>
+  <th>Réf.</th><th>Désignation</th><th>Famille</th>
+  <th style="text-align:right">Demandé</th><th style="text-align:right">En transit</th>
+  <th style="text-align:right">Livré</th><th style="text-align:center">N° Lot</th><th style="text-align:center">Statut</th>
+</tr></thead><tbody>${lignesHtml}</tbody>
+<tfoot><tr style="background:#f0f9ff;font-weight:700;">
+  <td colspan="3" style="padding:6px 8px;text-align:right;color:#1e3a5f;">TOTAL</td>
+  <td style="padding:6px 8px;text-align:right;">${totalDemande.toFixed(1)} kg</td>
+  <td style="padding:6px 8px;text-align:right;"></td>
+  <td style="padding:6px 8px;text-align:right;color:#15803d;">${totalLivre.toFixed(1)} kg</td>
+  <td colspan="2"></td>
+</tr></tfoot></table>
+${d.notes_chef?`<div style="background:#f0f9ff;border:1px solid #bfdbfe;border-radius:4px;padding:6px 8px;font-size:8pt;margin-bottom:8px"><strong>Notes chef AT3 :</strong> ${d.notes_chef}</div>`:''}
+${d.notes_magasin?`<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:4px;padding:6px 8px;font-size:8pt;margin-bottom:8px"><strong>Notes magasin :</strong> ${d.notes_magasin}</div>`:''}
+<div style="text-align:center;margin:8px 0">${qrUrl?`<img src="${qrUrl}" width="90" height="90" alt="QR"/><div style="font-size:6pt;color:#9ca3af;margin-top:2px">${d.numero_dbm}</div>`:''}</div>
+<div class="sigs">
+  <div class="sig-box"><div class="sig-title">Demandeur (Chef AT3)</div><div class="sig-name">${d.demandeur_nom||'—'}</div><div class="sig-line">Signature</div></div>
+  <div class="sig-box"><div class="sig-title">Magasinier MP</div><div class="sig-name">${d.magasinier_nom||'—'}</div><div class="sig-line">Signature</div></div>
+  <div class="sig-box"><div class="sig-title">Réceptionnaire AT3</div><div class="sig-name">${d.receptionnaire_nom||'—'}</div><div class="sig-line">Signature</div></div>
+</div>
+<div class="footer">Généré le ${new Date().toLocaleString('fr-FR')} · NAIdo — SOPHOPSY pour NAI</div>
+<script>window.onload=()=>setTimeout(()=>window.print(),800);</script>
+</body></html>`;
+    res.setHeader('Content-Type','text/html; charset=utf-8');
+    res.setHeader('Cache-Control','no-store');
+    res.send(html);
+  } catch(e) { err(res, e, 'Erreur PDF DBM'); }
+});
+
+// GET /api/dbm/stock-mp/entree/:lot_id/pdf — Fiche entrée fournisseur
+router.get('/stock-mp/entree/:lot_id/pdf', async (req, res) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT ls.*, a.code AS article_code, a.designation AS article_nom,
+             f.libelle AS famille_libelle
+      FROM lots_stock ls
+      LEFT JOIN articles a ON a.id=ls.article_id
+      LEFT JOIN familles_articles f ON f.id=a.famille_id
+      WHERE ls.id=$1`, [req.params.lot_id]);
+    if (!rows.length) return res.status(404).json({ error: 'Lot introuvable' });
+    const l = rows[0];
+
+    const qrData = `NAI-MP|${l.article_code}|LOT:${l.numero_lot}|${parseFloat(l.qte_initiale).toFixed(1)}kg|${l.fournisseur_nom||'?'}`;
+    let qrUrl = '';
+    try {
+      const QRCode = require('qrcode');
+      qrUrl = await QRCode.toDataURL(qrData, { width:100, margin:1, color:{dark:'#0369a1',light:'#fff'} });
+    } catch {}
+
+    const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
+<style>*{box-sizing:border-box;margin:0;padding:0}
+@page{size:A5;margin:10mm}body{font-family:Arial,sans-serif;font-size:9pt;color:#1f2937}
+.header{border-bottom:3px solid #0369a1;padding-bottom:8px;margin-bottom:10px;display:flex;justify-content:space-between}
+.company{font-size:14pt;font-weight:900;color:#0369a1}
+.banner{background:#0369a1;color:#fff;text-align:center;padding:6px;border-radius:4px;margin-bottom:10px;font-size:10pt;font-weight:700;text-transform:uppercase}
+.num{font-size:16pt;font-weight:900;color:#0369a1;text-align:center;margin:5px 0}
+.sec{border:1px solid #e5e7eb;border-radius:4px;overflow:hidden;margin-bottom:8px}
+.sec-h{background:#f3f4f6;padding:3px 8px;font-size:7pt;font-weight:700;text-transform:uppercase;border-bottom:1px solid #e5e7eb}
+.sec-b{padding:6px 8px}.row{display:flex;justify-content:space-between;margin-bottom:3px}
+.lbl{color:#6b7280;font-size:7.5pt}.val{font-weight:700;font-size:8pt}
+.qte{font-size:22pt;font-weight:900;color:#0369a1;text-align:center;margin:6px 0 2px}
+.sigs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.sig-box{border:1px solid #d1d5db;border-radius:4px;padding:8px;min-height:45px}
+.footer{border-top:1px solid #e5e7eb;padding-top:4px;text-align:center;font-size:6pt;color:#9ca3af;margin-top:6px}
+</style></head><body onload="window.print()">
+<div class="header">
+  <div><div class="company">NAI</div><div style="font-size:7pt;color:#6b7280">Magasin Matières Premières</div></div>
+  <div style="text-align:right;font-size:7pt;color:#6b7280">Date : ${l.date_reception?new Date(l.date_reception).toLocaleDateString('fr-FR'):new Date().toLocaleDateString('fr-FR')}</div>
+</div>
+<div class="banner">📥 Fiche de Réception Fournisseur</div>
+<div class="num">${l.numero_lot}</div>
+<div class="sec"><div class="sec-h">Matière reçue</div><div class="sec-b">
+  <div class="row"><span class="lbl">Code article</span><span class="val">${l.article_code||'—'}</span></div>
+  <div class="row"><span class="lbl">Désignation</span><span class="val">${l.article_nom||'—'}</span></div>
+  <div class="row"><span class="lbl">Famille</span><span class="val">${l.famille_libelle||'—'}</span></div>
+  <div class="row"><span class="lbl">Fournisseur</span><span class="val">${l.fournisseur_nom||'—'}</span></div>
+</div></div>
+<div class="sec"><div class="sec-h">Détails réception</div><div class="sec-b">
+  <div class="row"><span class="lbl">N° Lot</span><span class="val">${l.numero_lot}</span></div>
+  <div class="row"><span class="lbl">Date réception</span><span class="val">${l.date_reception?new Date(l.date_reception).toLocaleDateString('fr-FR'):'—'}</span></div>
+  <div class="row"><span class="lbl">DLUO</span><span class="val">${l.date_dluo?new Date(l.date_dluo).toLocaleDateString('fr-FR'):'—'}</span></div>
+  <div class="row"><span class="lbl">Prix unitaire</span><span class="val">${l.prix_unitaire?parseFloat(l.prix_unitaire).toLocaleString('fr-FR')+' FCFA/kg':'—'}</span></div>
+</div></div>
+<div class="qte">${parseFloat(l.qte_initiale||0).toFixed(1)} kg</div>
+<div style="text-align:center;font-size:7pt;color:#6b7280;margin-bottom:8px">QUANTITÉ REÇUE</div>
+<div style="text-align:center;margin:6px 0">${qrUrl?`<img src="${qrUrl}" width="90" height="90" alt="QR"/><div style="font-size:6pt;color:#9ca3af;margin-top:2px">${l.article_code} · ${l.numero_lot}</div>`:''}</div>
+<div class="sigs">
+  <div class="sig-box"><div style="font-size:7pt;font-weight:700;text-transform:uppercase;margin-bottom:3px">Réceptionnaire</div><div style="font-size:7pt;color:#6b7280;margin-bottom:18px">—</div><div style="border-top:1px solid #9ca3af;padding-top:3px;font-size:6pt;color:#9ca3af;text-align:center">Signature</div></div>
+  <div class="sig-box"><div style="font-size:7pt;font-weight:700;text-transform:uppercase;margin-bottom:3px">Resp. Magasin MP</div><div style="font-size:7pt;color:#6b7280;margin-bottom:18px">—</div><div style="border-top:1px solid #9ca3af;padding-top:3px;font-size:6pt;color:#9ca3af;text-align:center">Signature</div></div>
+</div>
+<div class="footer">Généré le ${new Date().toLocaleString('fr-FR')} · NAIdo — SOPHOPSY pour NAI</div>
+<script>window.onload=()=>setTimeout(()=>window.print(),800);</script>
+</body></html>`;
+    res.setHeader('Content-Type','text/html; charset=utf-8');
+    res.setHeader('Cache-Control','no-store');
+    res.send(html);
+  } catch(e) { err(res, e, 'Erreur fiche réception'); }
+});
