@@ -485,7 +485,6 @@ router.get('/lots/:article_id', auth, async (req, res) => {
 });
 
 
-});
 
 // GET /api/dbm/stock-mp/entree/:lot_id/pdf — Fiche entrée fournisseur
 router.get('/stock-mp/entree/:lot_id/pdf', async (req, res) => {
@@ -556,3 +555,4 @@ router.get('/stock-mp/entree/:lot_id/pdf', async (req, res) => {
     res.send(html);
   } catch(e) { err(res, e, 'Erreur fiche réception'); }
 });
+module.exports = router;
