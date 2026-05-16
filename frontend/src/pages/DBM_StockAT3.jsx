@@ -1341,7 +1341,6 @@ export default function DBM_StockAT3() {
   ] : [
     { id:'dbm',         icon:'📦', label:'Mes DBM',         color:'#92400e' },
     { id:'reception_at3', icon:'📥', label:'Réception MP',  color:'#7c3aed' },
-    { id:'stock_at3',   icon:'🏗',  label:'Stock AT3',       color:'#15803d' },
   ];
 
   return (

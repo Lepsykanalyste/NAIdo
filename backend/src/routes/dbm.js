@@ -209,12 +209,13 @@ router.put('/:id/receptionner', auth, async (req, res) => {
       `, [qte, r.ligne_id]);
       const ligneUpd = await client.query('SELECT qte_demandee,qte_livree FROM dbm_lignes WHERE id=$1', [r.ligne_id]);
       if (parseFloat(ligneUpd.rows[0].qte_livree) < parseFloat(ligneUpd.rows[0].qte_demandee)) toutRecu = false;
-      const stockRes = await client.query('SELECT id FROM stock_at3 WHERE article_id=$1 LIMIT 1', [r.article_id]);
+      const lotNum = ligne?.numero_lot||'';
+      const stockRes = await client.query('SELECT id FROM stock_at3 WHERE article_id=$1 AND numero_lot=$2 LIMIT 1', [r.article_id, lotNum]);
       if (stockRes.rows.length) {
-        await client.query(`UPDATE stock_at3 SET qte_disponible=qte_disponible+$1,updated_at=NOW() WHERE article_id=$2`, [qte, r.article_id]);
+        await client.query(`UPDATE stock_at3 SET qte_disponible=qte_disponible+$1,updated_at=NOW() WHERE id=$2`, [qte, stockRes.rows[0].id]);
       } else {
         await client.query(`INSERT INTO stock_at3 (article_id,famille_id,qte_disponible,numero_lot,dbm_id) VALUES ($1,$2,$3,$4,$5)`,
-          [r.article_id, r.famille_id||null, qte, ligne?.numero_lot||'', dbm.id]);
+          [r.article_id, r.famille_id||null, qte, lotNum, dbm.id]);
       }
       const numMvt = await client.query("SELECT 'MSAT3-'||TO_CHAR(NOW(),'YYYYMMDD')||'-'||LPAD(nextval('seq_mvt_stock_at3_num')::text,4,'0') AS num");
       await client.query(`INSERT INTO mouvements_stock_at3 (numero_mvt,type_mvt,article_id,quantite,dbm_id,of_id,operateur_id,notes) VALUES ($1,'entree_dbm',$2,$3,$4,$5,$6,$7)`,
@@ -416,9 +417,13 @@ router.get('/stock-mp/resume', auth, async (req, res) => {
 router.get('/stock-at3/mouvements', auth, async (req, res) => {
   try {
     const { rows } = await db.query(`
-      SELECT m.*, a.code, a.designation
+      SELECT m.*, a.code, a.designation,
+             o.numero_of,
+             u.prenom||' '||u.nom AS operateur_nom
       FROM mouvements_stock_at3 m
       LEFT JOIN articles a ON a.id=m.article_id
+      LEFT JOIN ordres_fabrication o ON o.id=m.of_id
+      LEFT JOIN utilisateurs u ON u.id::text=m.operateur_id::text
       ORDER BY m.date_mvt DESC LIMIT 100
     `);
     ok(res, rows);
@@ -428,14 +433,16 @@ router.get('/stock-at3/mouvements', auth, async (req, res) => {
 router.get('/stock-at3/liste', auth, async (req, res) => {
   try {
     const { rows } = await db.query(`
-      SELECT s.*,
+      SELECT s.id, s.article_id, s.famille_id,
+             s.qte_disponible, s.qte_reservee, s.qte_consommee,
+             s.numero_lot, s.date_entree, s.dbm_id,
              a.code, a.designation, a.type_article,
              f.libelle AS famille_libelle, f.code AS famille_code
       FROM stock_at3 s
       JOIN articles a ON a.id = s.article_id
       LEFT JOIN familles_articles f ON f.id = s.famille_id
       WHERE s.qte_disponible > 0 OR s.qte_reservee > 0
-      ORDER BY f.libelle, a.code
+      ORDER BY f.libelle, a.code, s.date_entree
     `);
     ok(res, rows);
   } catch(e) { err(res, e, 'Erreur stock AT3'); }
