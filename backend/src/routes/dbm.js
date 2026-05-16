@@ -67,7 +67,7 @@ router.get('/:id/pdf', async (req, res) => {
         <td style="padding:4px 6px;border-bottom:1px solid #e5e7eb">${l.article_code||'—'}</td>
         <td style="padding:4px 6px;border-bottom:1px solid #e5e7eb">${l.article_nom||'—'}</td>
         <td style="padding:4px 6px;border-bottom:1px solid #e5e7eb;text-align:center;font-weight:700">${parseFloat(l.qte_demandee||0).toFixed(1)}</td>
-        <td style="padding:4px 6px;border-bottom:1px solid #e5e7eb;text-align:center;color:#15803d;font-weight:700">${parseFloat(l.qte_livree||0).toFixed(1)}</td>
+        <td style="padding:4px 6px;border-bottom:1px solid #e5e7eb;text-align:center;color:#15803d;font-weight:700">${parseFloat(l.qte_en_transit||l.qte_livree||0).toFixed(1)}</td>
         <td style="padding:4px 6px;border-bottom:1px solid #e5e7eb;font-size:7pt;color:#6b7280">${l.numero_lot||'—'}</td>
       </tr>`).join('');
     const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
@@ -353,6 +353,35 @@ router.get('/stock-mp/liste', auth, async (req, res) => {
   } catch(e) { err(res, e, 'Erreur stock MP liste'); }
 });
 
+
+// PUT /api/dbm/stock-mp/entree/:lot_id — Modifier un lot
+router.put('/stock-mp/entree/:lot_id', auth, async (req, res) => {
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    const { numero_lot, qte, prix_unitaire, fournisseur_nom, date_reception, date_dluo, motif } = req.body;
+    if (!motif || motif.trim().length < 5) throw new Error('Motif obligatoire (minimum 5 caractères)');
+    const qteNum = parseFloat(qte);
+    if (!qteNum || qteNum <= 0) throw new Error('Quantité invalide');
+    const lotRes = await client.query('SELECT * FROM lots_stock WHERE id=$1', [req.params.lot_id]);
+    if (!lotRes.rows.length) throw new Error('Lot introuvable');
+    const lot = lotRes.rows[0];
+    const diff = qteNum - parseFloat(lot.qte_initiale);
+    await client.query(`
+      UPDATE lots_stock SET numero_lot=$1, qte_initiale=$2, qte_disponible=qte_disponible+$3,
+      prix_unitaire=$4, fournisseur_nom=$5, date_reception=$6, date_dluo=$7 WHERE id=$8
+    `, [numero_lot||lot.numero_lot, qteNum, diff, prix_unitaire||0, fournisseur_nom||'',
+        date_reception||lot.date_reception, date_dluo||null, req.params.lot_id]);
+    await client.query(`
+      INSERT INTO journal_stock (article_id, type, qte, numero_lot, cree_par, notes)
+      VALUES ($1,'correction',$2,$3,$4,$5)
+    `, [lot.article_id, diff, numero_lot||lot.numero_lot, req.user?.id, `Correction: ${motif.trim()}`]).catch(()=>{});
+    await client.query('COMMIT');
+    ok(res, { message: `Lot ${numero_lot} modifié ✓` });
+  } catch(e) { await client.query('ROLLBACK'); err(res, e, 'Erreur modification lot'); }
+  finally { client.release(); }
+});
+
 // GET /api/dbm/stock-mp/lots/:article_id — Lots d'un article
 router.get('/stock-mp/lots/:article_id', auth, async (req, res) => {
   try {
@@ -380,7 +409,7 @@ router.post('/stock-mp/entree', auth, async (req, res) => {
     await client.query(`
       INSERT INTO lots_stock (article_id, numero_lot, qte_initiale, qte_disponible, prix_unitaire, fournisseur_nom, date_reception, date_dluo, statut)
       VALUES ($1,$2,$3,$3,$4,$5,$6,$7,'disponible')
-      ON CONFLICT (numero_lot) DO UPDATE SET qte_disponible=lots_stock.qte_disponible+$3
+      ON CONFLICT (numero_lot, article_id) DO UPDATE SET qte_disponible=lots_stock.qte_disponible+$3
     `, [article_id, numero_lot, qteNum, prix_unitaire||0, fournisseur_nom||'', date_reception||new Date().toISOString().split('T')[0], date_dluo||null]);
 
     // stock_articles mis a jour par trigger
