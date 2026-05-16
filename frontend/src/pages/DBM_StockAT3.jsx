@@ -713,13 +713,13 @@ export function ModuleStockAT3() {
 
   const charger = async () => {
     try {
-      const [s, r, m] = await Promise.all([
-        axios.get(`${API}/dbm/stock-at3/liste`),
-        axios.get(`${API}/dbm/stock-at3/resume`),
-        axios.get(`${API}/dbm/stock-at3/mouvements`),
+      const [s, r] = await Promise.all([
+        axios.get(),
+        axios.get(),
       ]);
       setStock(s.data || []);
       setResume(r.data || []);
+      setMvts([]);
       setMvts(m.data || []);
     } catch { toast.error('Erreur stock AT3'); }
   };
@@ -1224,8 +1224,9 @@ export function DashboardMagasinMP() {
   const [stats, setStats] = useState({ en_attente:0, en_preparation:0, partiel:0, livre:0 });
   const [stockMP, setStockMP] = useState([]);
   const [dernLivraisons, setDernLivraisons] = useState([]);
+  const loadedRef = React.useRef(false);
 
-  const charger = async () => {
+  const charger = async () => { setStockMP([]);
     try {
       const [r1, r2, r3, r4, r5] = await Promise.all([
         axios.get(`${API}/dbm?statut=en_attente`),
@@ -1252,8 +1253,7 @@ export function DashboardMagasinMP() {
       setDernLivraisons([...(r3.data||[]), ...(r4.data||[])].sort((a,b) => new Date(b.date_livraison||b.date_demande) - new Date(a.date_livraison||a.date_demande)).slice(0,5));
     } catch(e) { console.error('Dashboard error:', e?.response?.config?.url, e?.response?.status, e.message); toast.error('Erreur: ' + (e?.response?.config?.url || e.message)); }
   };
-
-  useEffect(() => { if (user) { setTimeout(charger, 500); } }, [user]);
+  useEffect(() => { if (user?.id && !loadedRef.current) { loadedRef.current = true; charger(); } }, [user?.id]);
 
   return (
     <div>

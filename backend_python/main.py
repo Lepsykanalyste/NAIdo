@@ -2634,7 +2634,7 @@ async def df_pdf(df_id: str, token: str = ""):
         etoiles = {1:'Basse',2:'Normale',3:'Haute',4:'Urgente',5:'Critique'}.get(d.get('priorite') or 1,'Normale')
         
         qr_text = f"NAI DF\nN: {d['numero_df']}\nARTICLE: {d['article_code']} {d['article_nom']}\nQTE: {d['quantite_demandee']} kg\nCLIENT: {d['client_nom'] or '—'}\nSTATUT: {d['statut']}\nOF: {d.get('numero_of') or '—'}"
-        pdf_url = f"{os.environ.get('APP_BASE_URL','http://100.85.252.109:8095')}/api/df/{df_id}/pdf"
+        pdf_url = f"{os.environ.get('APP_BASE_URL','http://192.100.100.6:8095')}/api/df/{df_id}/pdf"
         import qrcode as _qr, base64 as _b64, urllib.parse as _up
         from io import BytesIO as _BIO
         _q = _qr.QRCode(version=1, box_size=3, border=2, error_correction=_qr.constants.ERROR_CORRECT_M)
@@ -2736,7 +2736,7 @@ async def df_pdf(df_id: str, token: str = ""):
 @app.get("/api/df/{df_id}/view")
 async def df_view(df_id: str):
     from fastapi.responses import HTMLResponse
-    pdf_url = f"{os.environ.get('APP_BASE_URL','http://100.85.252.109:8095')}/api/df/{df_id}/pdf"
+    pdf_url = f"{os.environ.get('APP_BASE_URL','http://192.100.100.6:8095')}/api/df/{df_id}/pdf"
     html = f"""<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>DF {df_id}</title>
@@ -3071,7 +3071,7 @@ async def ticket_prod_pdf(ticket_id: str):
         }
         type_label, couleur = type_labels.get(t.get('type_ticket','extrusion'), ('🏭 PRODUCTION', '#0369a1'))
 
-        pdf_url = f"http://100.85.252.109:8095/api/ticket-prod/{ticket_id}/pdf"
+        pdf_url = f"http://192.100.100.6:8095/api/ticket-prod/{ticket_id}/pdf"
         qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=100x100&data={pdf_url.replace(':','%3A').replace('/','%2F')}&color={couleur.replace('#','')}"
 
         poids_net = float(t.get('poids_net_kg') or 0)

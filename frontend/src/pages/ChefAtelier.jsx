@@ -7542,41 +7542,44 @@ function OrdresLivraison() {
     </div>
   );
 }
-  const SECTIONS = {
-    devis:       <GestionDevis />,
-    bc:          <GestionBC />,
-    df:          <DemandesFabrication />,
-    ol:          <OrdresLivraison />,
-    of:          <OrdresFabrication setOngletActif={setOngletActif} />,
-    dashboard:   user?.role === 'chef_atelier' ? <DashboardAT3 /> : user?.role === 'magasinier_mp' ? <DashboardMagasinMP /> : <Dashboard />,
-    production:  <SuiviProduction />,
-    planning:    <PlanningMachines />,
-    rapportjour: <RapportsJournaliers />,
-    articles:    <Articles />,
-    matieres:    <MatieresPremières />,
-    stock:       <Stock />,
-    clients:     <Clients />,
-    vente:       <Vente />,
-    fournisseurs:<Fournisseurs />,
-    achat:       <Achat />,
-    cession:     <BonsCession />,
-    qhse:        <QHSE />,
-    rh:          <RH />,
-    gmao:        <GMAO />,
-    kpi:         <KPIRapports />,
-    parametres:  <ParametresSysteme />,
-    ia:          <AssistantIA />,
-    users:       <Utilisateurs />,
-    import:      <ImportSage />,
-    alertes:     <Alertes />,
-    at3flux:     <Atelier3Flux />,
-    dbm:         <DBM_StockAT3 />,
-    stock_at3:   <ModuleStockAT3 />,
-    stock_mp:    <ModuleStockMP />,
-    ronde:       <RondeChef />,
-    nc:          <NonConformite />,
-    cession_ctrl:<ControleAvantCession />,
-    referentiels:<Referentiels />,
+  const getSection = (id) => {
+    switch(id) {
+      case 'devis': return <GestionDevis />;
+      case 'bc': return <GestionBC />;
+      case 'df': return <DemandesFabrication />;
+      case 'ol': return <OrdresLivraison />;
+      case 'of': return <OrdresFabrication setOngletActif={setOngletActif} />;
+      case 'dashboard': return (() => { if (user?.role === 'chef_atelier') return <DashboardAT3 />; if (user?.role === 'magasinier_mp') return <DashboardMagasinMP />; return <Dashboard />; })();
+      case 'production': return <SuiviProduction />;
+      case 'planning': return <PlanningMachines />;
+      case 'rapportjour': return <RapportsJournaliers />;
+      case 'articles': return <Articles />;
+      case 'matieres': return <MatieresPremières />;
+      case 'stock': return <Stock />;
+      case 'clients': return <Clients />;
+      case 'vente': return <Vente />;
+      case 'fournisseurs': return <Fournisseurs />;
+      case 'achat': return <Achat />;
+      case 'cession': return <BonsCession />;
+      case 'qhse': return <QHSE />;
+      case 'rh': return <RH />;
+      case 'gmao': return <GMAO />;
+      case 'kpi': return <KPIRapports />;
+      case 'parametres': return <ParametresSysteme />;
+      case 'ia': return <AssistantIA />;
+      case 'users': return <Utilisateurs />;
+      case 'import': return <ImportSage />;
+      case 'alertes': return <Alertes />;
+      case 'at3flux': return <Atelier3Flux />;
+      case 'dbm': return <DBM_StockAT3 />;
+      case 'stock_at3': return <ModuleStockAT3 />;
+      case 'stock_mp': return <ModuleStockMP />;
+      case 'ronde': return <RondeChef />;
+      case 'nc': return <NonConformite />;
+      case 'cession_ctrl': return <ControleAvantCession />;
+      case 'referentiels': return <Referentiels />;
+      default: return <Dashboard />;
+    }
   };
 
   const menuItem = MENU.find(m => m.id === ongletActif);
@@ -7686,7 +7689,7 @@ function OrdresLivraison() {
 
         {/* Zone de contenu */}
         <main style={{ flex:1, overflow:'auto', padding:24 }}>
-          {SECTIONS[ongletActif] || <Dashboard />}
+          {getSection(ongletActif) || <Dashboard />}
         </main>
 
         {/* Footer */}

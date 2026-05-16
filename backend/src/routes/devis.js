@@ -339,8 +339,8 @@ router.post('/:id/envoyer-email', auth, async (req, res) => {
       },
     });
 
-    const validationUrl = `http://100.85.252.109:8095/api/devis/valider/${d.token_validation}`;
-    const pdfUrl = `http://100.85.252.109:8095/api/devis/${d.id}/pdf`;
+    const validationUrl = `http://192.100.100.6:8095/api/devis/valider/${d.token_validation}`;
+    const pdfUrl = `http://192.100.100.6:8095/api/devis/${d.id}/pdf`;
 
     await transporter.sendMail({
       from: `"NAI - ${d.commercial_nom}" <${emailConfig.user || d.commercial_email}>`,

@@ -33,23 +33,82 @@ router.get('/', auth, async (req, res) => {
 });
 
 // GET /api/dbm/:id — détail DBM avec lignes
-router.get('/:id', auth, async (req, res) => {
+
+// GET /api/dbm/:id/pdf — Bon de livraison DBM
+router.get('/:id/pdf', async (req, res) => {
   try {
-    const [dbmRes, lignesRes] = await Promise.all([
-      db.query('SELECT * FROM vue_dbm WHERE id=$1', [req.params.id]),
-      db.query(`
-        SELECT dl.*, a.code, a.designation, f.libelle AS famille_libelle
-        FROM dbm_lignes dl
-        LEFT JOIN articles a ON a.id = dl.article_id
-        LEFT JOIN familles_articles f ON f.id = dl.famille_id
-        WHERE dl.dbm_id=$1
-        ORDER BY f.libelle, a.code
-      `, [req.params.id])
-    ]);
-    if (!dbmRes.rows.length) return res.status(404).json({ error: 'DBM introuvable' });
-    ok(res, { ...dbmRes.rows[0], lignes: lignesRes.rows });
-  } catch(e) { err(res, e, 'Erreur détail DBM'); }
+    const { rows } = await db.query(`
+      SELECT d.*, o.numero_of,
+             u1.prenom||' '||u1.nom AS demandeur_nom,
+             u2.prenom||' '||u2.nom AS livreur_nom
+      FROM dbm d
+      LEFT JOIN ordres_fabrication o ON o.id=d.of_id
+      LEFT JOIN utilisateurs u1 ON u1.id=d.demandeur_id
+      LEFT JOIN utilisateurs u2 ON u2.id=d.livre_par
+      WHERE d.numero_dbm=$1 OR d.id=$1::uuid
+    `, [req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: 'DBM introuvable' });
+    const d = rows[0];
+    const { rows: lignes } = await db.query(`
+      SELECT dl.*, a.code AS article_code, a.designation AS article_nom
+      FROM dbm_lignes dl
+      LEFT JOIN articles a ON a.id=dl.article_id
+      WHERE dl.dbm_id=$1 ORDER BY dl.created_at
+    `, [d.id]);
+    let qrUrl = '';
+    try {
+      const QRCode = require('qrcode');
+      const qrData = `NAI-DBM|${d.numero_dbm}|OF:${d.numero_of||'?'}|${new Date(d.created_at).toLocaleDateString('fr-FR')}`;
+      qrUrl = await QRCode.toDataURL(qrData, { width:100, margin:1 });
+    } catch(e) {}
+    const statutColor = { livre:'#15803d', partiel:'#b45309', en_attente:'#1d4ed8', annule:'#dc2626' };
+    const lignesHtml = lignes.map(l => `
+      <tr>
+        <td style="padding:4px 6px;border-bottom:1px solid #e5e7eb">${l.article_code||'—'}</td>
+        <td style="padding:4px 6px;border-bottom:1px solid #e5e7eb">${l.article_nom||'—'}</td>
+        <td style="padding:4px 6px;border-bottom:1px solid #e5e7eb;text-align:center;font-weight:700">${parseFloat(l.qte_demandee||0).toFixed(1)}</td>
+        <td style="padding:4px 6px;border-bottom:1px solid #e5e7eb;text-align:center;color:#15803d;font-weight:700">${parseFloat(l.qte_livree||0).toFixed(1)}</td>
+        <td style="padding:4px 6px;border-bottom:1px solid #e5e7eb;font-size:7pt;color:#6b7280">${l.numero_lot||'—'}</td>
+      </tr>`).join('');
+    const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
+<style>*{box-sizing:border-box;margin:0;padding:0}@page{size:A4;margin:15mm}body{font-family:Arial,sans-serif;font-size:9pt;color:#1f2937}.header{border-bottom:3px solid #0369a1;padding-bottom:8px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:flex-start}.company{font-size:16pt;font-weight:900;color:#0369a1}.banner{background:#0369a1;color:#fff;text-align:center;padding:8px;border-radius:4px;margin-bottom:12px;font-size:11pt;font-weight:700;text-transform:uppercase}.num{font-size:18pt;font-weight:900;color:#0369a1;text-align:center;margin:6px 0}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}.sec{border:1px solid #e5e7eb;border-radius:4px;overflow:hidden}.sec-h{background:#f3f4f6;padding:4px 8px;font-size:7pt;font-weight:700;text-transform:uppercase;border-bottom:1px solid #e5e7eb}.sec-b{padding:8px}.row{display:flex;justify-content:space-between;margin-bottom:3px}.lbl{color:#6b7280;font-size:7.5pt}.val{font-weight:700;font-size:8pt}table{width:100%;border-collapse:collapse;margin-bottom:12px}th{background:#0369a1;color:#fff;padding:5px 6px;text-align:left;font-size:7.5pt}.sigs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:12px}.sig-box{border:1px solid #d1d5db;border-radius:4px;padding:10px;min-height:55px}.footer{border-top:1px solid #e5e7eb;padding-top:4px;text-align:center;font-size:6pt;color:#9ca3af;margin-top:8px}
+</style></head><body>
+<div class="header">
+  <div><div class="company">NAI</div><div style="font-size:7pt;color:#6b7280">Atelier 3 — Sacherie</div></div>
+  <div style="text-align:center">${qrUrl ? '<img src="'+qrUrl+'" width="80" height="80"/>' : ''}<div style="font-size:6pt;color:#9ca3af">${d.numero_dbm}</div></div>
+  <div style="text-align:right;font-size:7pt;color:#6b7280">Date : ${new Date(d.created_at).toLocaleDateString('fr-FR')}<br>Statut : <span style="color:${statutColor[d.statut]||'#374151'};font-weight:700">${(d.statut||'').toUpperCase()}</span></div>
+</div>
+<div class="banner">📦 Bon de Livraison Matières — DBM</div>
+<div class="num">${d.numero_dbm}</div>
+<div class="grid">
+  <div class="sec"><div class="sec-h">Informations</div><div class="sec-b">
+    <div class="row"><span class="lbl">OF lié</span><span class="val">${d.numero_of||'—'}</span></div>
+    <div class="row"><span class="lbl">Demandeur</span><span class="val">${d.demandeur_nom||'—'}</span></div>
+    <div class="row"><span class="lbl">Date demande</span><span class="val">${d.date_demande ? new Date(d.date_demande).toLocaleDateString('fr-FR') : '—'}</span></div>
+    <div class="row"><span class="lbl">Date besoin</span><span class="val">${d.date_besoin ? new Date(d.date_besoin).toLocaleDateString('fr-FR') : '—'}</span></div>
+  </div></div>
+  <div class="sec"><div class="sec-h">Livraison</div><div class="sec-b">
+    <div class="row"><span class="lbl">Livré par</span><span class="val">${d.livreur_nom||'—'}</span></div>
+    <div class="row"><span class="lbl">Date livraison</span><span class="val">${d.date_livraison ? new Date(d.date_livraison).toLocaleDateString('fr-FR') : '—'}</span></div>
+    <div class="row"><span class="lbl">Urgence</span><span class="val">${d.urgence ? '⚠️ OUI' : 'Non'}</span></div>
+  </div></div>
+</div>
+<table><thead><tr><th>Code</th><th>Désignation</th><th style="text-align:center">Qté demandée</th><th style="text-align:center">Qté livrée</th><th>N° Lot</th></tr></thead><tbody>${lignesHtml}</tbody></table>
+<div class="sigs">
+  <div class="sig-box"><div style="font-size:7pt;font-weight:700;text-transform:uppercase;margin-bottom:3px">Demandeur</div><div style="font-size:7pt;color:#6b7280;margin-bottom:25px">${d.demandeur_nom||'—'}</div><div style="border-top:1px solid #9ca3af;padding-top:3px;font-size:6pt;color:#9ca3af;text-align:center">Signature</div></div>
+  <div class="sig-box"><div style="font-size:7pt;font-weight:700;text-transform:uppercase;margin-bottom:3px">Magasinier MP</div><div style="font-size:7pt;color:#6b7280;margin-bottom:25px">${d.livreur_nom||'—'}</div><div style="border-top:1px solid #9ca3af;padding-top:3px;font-size:6pt;color:#9ca3af;text-align:center">Signature</div></div>
+  <div class="sig-box"><div style="font-size:7pt;font-weight:700;text-transform:uppercase;margin-bottom:3px">Chef Atelier</div><div style="font-size:7pt;color:#6b7280;margin-bottom:25px">—</div><div style="border-top:1px solid #9ca3af;padding-top:3px;font-size:6pt;color:#9ca3af;text-align:center">Signature</div></div>
+</div>
+<div class="footer">Généré le ${new Date().toLocaleString('fr-FR')} · NAIdo v3 — SOPHOPSY pour NAI</div>
+<script>window.onload=()=>setTimeout(()=>window.print(),800);</script>
+</body></html>`;
+    res.setHeader('Content-Type','text/html; charset=utf-8');
+    res.setHeader('Cache-Control','no-store');
+    res.send(html);
+  } catch(e) { console.error('PDF DBM error:', e); res.status(500).json({ error: 'Erreur PDF' }); }
 });
+
+
 
 // POST /api/dbm — créer une DBM depuis un OF
 router.post('/', auth, async (req, res) => {
@@ -113,7 +172,6 @@ router.put('/:id/livrer', auth, async (req, res) => {
       await client.query(`
         UPDATE dbm_lignes SET qte_en_transit=$1, numero_lot=$2 WHERE id=$3
       `, [parseFloat(l.qte_livree), l.numero_lot||'', l.ligne_id]);
-      // Mettre à jour stock_articles si la ligne existe
       const saRes = await client.query('SELECT id FROM stock_articles WHERE article_id=$1 LIMIT 1', [l.article_id]);
       if (saRes.rows.length) {
         await client.query(`
@@ -281,15 +339,13 @@ router.get('/stock-mp/liste', auth, async (req, res) => {
   try {
     const { rows } = await db.query(`
       SELECT a.id, a.code, a.designation, f.libelle AS famille_libelle,
-             COALESCE(SUM(sa.qte_disponible),0) AS qte_disponible,
-             COALESCE(SUM(sa.qte_reservee),0) AS qte_reservee,
-             COUNT(ls.id) FILTER (WHERE ls.statut='disponible' AND ls.qte_disponible>0) AS nb_lots
+             COALESCE(sa.qte_disponible,0) AS qte_disponible,
+             COALESCE(sa.qte_reservee,0) AS qte_reservee,
+             (SELECT COUNT(*) FROM lots_stock ls WHERE ls.article_id=a.id AND ls.statut='disponible' AND ls.qte_disponible>0) AS nb_lots
       FROM articles a
       JOIN familles_articles f ON f.id=a.famille_id
       LEFT JOIN stock_articles sa ON sa.article_id=a.id
-      LEFT JOIN lots_stock ls ON ls.article_id=a.id
       WHERE a.type_article='matiere_premiere'
-      GROUP BY a.id, a.code, a.designation, f.libelle
       ORDER BY f.libelle, a.code
     `);
     ok(res, rows);
@@ -326,18 +382,11 @@ router.post('/stock-mp/entree', auth, async (req, res) => {
       ON CONFLICT (numero_lot) DO UPDATE SET qte_disponible=lots_stock.qte_disponible+$3
     `, [article_id, numero_lot, qteNum, prix_unitaire||0, fournisseur_nom||'', date_reception||new Date().toISOString().split('T')[0], date_dluo||null]);
 
-    // Mettre à jour stock_articles
-    const stockRes = await client.query('SELECT id FROM stock_articles WHERE article_id=$1 LIMIT 1', [article_id]);
-    if (stockRes.rows.length) {
-      await client.query(`UPDATE stock_articles SET qte_disponible=qte_disponible+$1, derniere_entree=NOW() WHERE article_id=$2`, [qteNum, article_id]);
-    } else {
-      await client.query(`INSERT INTO stock_articles (article_id, qte_disponible, derniere_entree) VALUES ($1,$2,NOW())`, [article_id, qteNum]);
-    }
-
+    // stock_articles mis a jour par trigger
     // Mouvement journal
     await client.query(`
-      INSERT INTO journal_stock (article_id, type_mvt, quantite, numero_lot, operateur_id, notes, date_mvt)
-      VALUES ($1,'entree_fournisseur',$2,$3,$4,$5,NOW())
+      INSERT INTO journal_stock (article_id, type, qte, numero_lot, cree_par, notes)
+      VALUES ($1,'entree',$2,$3,$4,$5)
     `, [article_id, qteNum, numero_lot, req.user?.id, notes||'Réception fournisseur']).catch(()=>{});
 
     await client.query('COMMIT');
@@ -362,6 +411,20 @@ router.get('/stock-mp/resume', auth, async (req, res) => {
   } catch(e) { err(res, e, 'Erreur stock MP'); }
 });
 // GET /api/dbm/stock-at3 — stock MP interne AT3
+
+// GET /api/dbm/stock-at3/mouvements
+router.get('/stock-at3/mouvements', auth, async (req, res) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT m.*, a.code, a.designation
+      FROM mouvements_stock_at3 m
+      LEFT JOIN articles a ON a.id=m.article_id
+      ORDER BY m.date_mvt DESC LIMIT 100
+    `);
+    ok(res, rows);
+  } catch(e) { err(res, e, 'Erreur mouvements AT3'); }
+});
+
 router.get('/stock-at3/liste', auth, async (req, res) => {
   try {
     const { rows } = await db.query(`
@@ -554,5 +617,22 @@ router.get('/stock-mp/entree/:lot_id/pdf', async (req, res) => {
     res.setHeader('Cache-Control','no-store');
     res.send(html);
   } catch(e) { err(res, e, 'Erreur fiche réception'); }
+});
+router.get('/:id', auth, async (req, res) => {
+  try {
+    const [dbmRes, lignesRes] = await Promise.all([
+      db.query('SELECT * FROM vue_dbm WHERE id=$1', [req.params.id]),
+      db.query(`
+        SELECT dl.*, a.code, a.designation, f.libelle AS famille_libelle
+        FROM dbm_lignes dl
+        LEFT JOIN articles a ON a.id = dl.article_id
+        LEFT JOIN familles_articles f ON f.id = dl.famille_id
+        WHERE dl.dbm_id=$1
+        ORDER BY f.libelle, a.code
+      `, [req.params.id])
+    ]);
+    if (!dbmRes.rows.length) return res.status(404).json({ error: 'DBM introuvable' });
+    ok(res, { ...dbmRes.rows[0], lignes: lignesRes.rows });
+  } catch(e) { err(res, e, 'Erreur détail DBM'); }
 });
 module.exports = router;
