@@ -130,6 +130,31 @@ router.put('/of/:id/configurer', auth, async (req, res) => {
       `UPDATE ordres_fabrication SET ${sets.join(', ')} WHERE id = $1`,
       params
     );
+    // Déduire le stock AT3 si validation
+    if (valider && composition_of && Array.isArray(composition_of)) {
+      for (const m of composition_of) {
+        const qte = parseFloat(m.quantite || 0);
+        if (qte <= 0) continue;
+        const numeroLot = m.numero_lot || null;
+        if (numeroLot) {
+          await client.query(
+            `UPDATE stock_at3 SET qte_disponible = GREATEST(0, qte_disponible - $1) WHERE article_id=$2 AND numero_lot=$3`,
+            [qte, m.mp_id, numeroLot]
+          );
+        } else {
+          await client.query(
+            `UPDATE stock_at3 SET qte_disponible = GREATEST(0, qte_disponible - $1) WHERE article_id=$2`,
+            [qte, m.mp_id]
+          );
+        }
+        await client.query(
+          `INSERT INTO mouvements_stock_at3 (numero_mvt,type_mvt,article_id,quantite,of_id,operateur_id,notes)
+           VALUES ('MSAT3-'||TO_CHAR(NOW(),'YYYYMMDD')||'-'||LPAD(nextval('seq_mvt_stock_at3_num')::text,4,'0'),
+                   'consommation',$1,$2,$3,$4,$5)`,
+          [m.mp_id, qte, req.params.id, userId, 'Lancement OF extrusion']
+        );
+      }
+    }
     await client.query('COMMIT');
     ok(res, { success: true, message: valider ? 'OF lancé en extrusion ✓' : 'Configuration sauvegardée' });
   } catch(e) { await client.query('ROLLBACK'); erreur(res, e, 'Erreur config OF'); }

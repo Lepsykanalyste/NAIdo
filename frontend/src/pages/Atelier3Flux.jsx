@@ -338,6 +338,20 @@ function ModuleChefAtelier() {
     }));
   };
 
+
+  const majKgMp = (familleIdx, mpIdx, val) => {
+    const poidsCible = parseFloat(config.at3_poids_cible_kg || 0);
+    setCompoFamilles(prev => prev.map((f, fi) => {
+      if (fi !== familleIdx) return f;
+      const mp_choisies = f.mp_choisies.map((m, mi) => {
+        if (mi !== mpIdx) return m;
+        const quantite = parseFloat(val || 0);
+        const pct = poidsCible > 0 ? ((quantite / poidsCible) * 100).toFixed(2) : '';
+        return { ...m, quantite: val, pct };
+      });
+      return { ...f, mp_choisies };
+    }));
+  };
   // ── Supprimer une MP d'une famille ──
   const supprimerMp = (familleIdx, mpIdx) => {
     setCompoFamilles(prev => prev.map((f, fi) => {
@@ -559,14 +573,28 @@ function ModuleChefAtelier() {
                                   </td>
                                   <td style={{ padding:'7px 10px', width:100 }}>
                                     <div style={{ display:'flex', alignItems:'center', gap:4 }}>
-                                      <input type="number" value={m.pct} min="0" max="100" step="0.1"
+                                      <input type="number" value={m.pct} min="0" step="0.1"
                                         onChange={e => majPctMp(fi, mi, e.target.value)}
                                         style={{ width:65, border:`1px solid ${clr.border}`, borderRadius:6, padding:'5px', fontSize:13, textAlign:'center', fontWeight:700 }} />
                                       <span style={{ fontSize:11 }}>%</span>
                                     </div>
                                   </td>
                                   <td style={{ padding:'7px 10px', fontSize:13, fontWeight:700, color:clr.tx }}>
-                                    {m.quantite ? `${m.quantite} kg` : '—'}
+                                    {m.quantite ? (
+                                      <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                                        <input type="number" value={m.quantite||''} min="0" step="0.1"
+                                          onChange={e => majKgMp(fi, mi, e.target.value)}
+                                          style={{ width:75, borderRadius:6, padding:'5px', fontSize:13, textAlign:'center', fontWeight:700 }} />
+                                        <span style={{ fontSize:11 }}>kg</span>
+                                      </div>
+                                    ) : (
+                                      <div style={{ display:'flex', alignItems:'center', gap:4 }}>
+                                        <input type="number" value="" min="0" step="0.1"
+                                          onChange={e => majKgMp(fi, mi, e.target.value)}
+                                          style={{ width:75, borderRadius:6, padding:'5px', fontSize:13, textAlign:'center' }} />
+                                        <span style={{ fontSize:11 }}>kg</span>
+                                      </div>
+                                    )}
                                   </td>
                                   <td style={{ padding:'7px 10px' }}>
                                     <button onClick={() => supprimerMp(fi, mi)}

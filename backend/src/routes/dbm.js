@@ -201,7 +201,8 @@ router.get('/of/:of_id/besoins', auth, async (req, res) => {
       const artRes = await db.query(`
         SELECT a.id, a.code, a.designation,
                COALESCE(SUM(sa.qte_disponible),0) AS stock_magasin,
-               COALESCE((SELECT SUM(qte_disponible) FROM stock_at3 WHERE article_id=a.id),0) AS stock_at3
+               COALESCE((SELECT SUM(qte_disponible) FROM stock_at3 WHERE article_id=a.id),0) AS stock_at3,
+               COALESCE((SELECT json_agg(json_build_object('lot',numero_lot,'qte',qte_disponible)) FROM stock_at3 WHERE article_id=a.id AND qte_disponible>0),'[]') AS lots_at3
         FROM articles a
         LEFT JOIN stock_articles sa ON sa.article_id=a.id
         WHERE a.sous_famille_id=$1 AND a.type_article='matiere_premiere'

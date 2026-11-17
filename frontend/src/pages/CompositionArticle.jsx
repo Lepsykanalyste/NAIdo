@@ -218,54 +218,50 @@ export function CompositionOF({ detail, configOf, setConfigOf, onSaved }) {
   const [loading, setLoading]           = useState(false);
 
   useEffect(() => {
-    if (detail?.article_id) chargerGroupes();
-  }, [detail?.article_id]);
-
-  // Recalculer quantités quand poids cible change
-  useEffect(() => {
-    const poids = parseFloat(configOf?.at3_poids_cible_kg || 0);
-    if (!poids) return;
-    setChoixMp(prev => {
-      const updated = {};
-      for (const gid in prev) {
-        updated[gid] = prev[gid].map(m => ({
-          ...m,
-          quantite: m.pct ? ((parseFloat(m.pct)/100)*poids).toFixed(3) : ''
-        }));
-      }
-      return updated;
-    });
-  }, [configOf?.at3_poids_cible_kg]);
+    if (detail?.article_id && configOf?.at3_poids_cible_kg) chargerGroupes();
+    else if (detail?.article_id) chargerGroupes();
+  }, [detail?.article_id, configOf?.at3_poids_cible_kg]);
 
   const chargerGroupes = async () => {
     try {
       const { data } = await axios.get(`${API}/dbm/of/${detail.id}/besoins`);
       setGroupes(data.groupes || []);
       // Pré-remplir depuis la composition déjà sauvegardée
+      console.log('saved:', detail.at3_composition_of, 'configOf:', configOf?.at3_poids_cible_kg);
       const saved = detail.at3_composition_of;
       const savedArr = Array.isArray(saved) ? saved : (saved ? JSON.parse(saved) : []);
       if (savedArr.length > 0) {
         const preload = {};
         // Construire une map article_id → stock_at3 depuis les groupes
         const stockMap = {};
+        const lotMap = {};
         for (const g of (data.groupes||[])) {
           for (const a of (g.articles||[])) {
             stockMap[a.id] = parseFloat(a.stock_at3||0);
+            const lots = Array.isArray(a.lots_at3) ? a.lots_at3 : (a.lots_at3 ? JSON.parse(a.lots_at3) : []);
+            for (const l of lots) {
+              lotMap[a.id + '|' + (l.lot||'')] = parseFloat(l.qte||0);
+            }
           }
         }
         for (const m of savedArr) {
-          const gid = String(m.famille_id || m.groupe_id);
+          const gid = String(m.groupe_id || m.famille_id);
           if (!preload[gid]) preload[gid] = [];
+          const lotKey = m.mp_id + '|' + (m.numero_lot||'');
+          const stockLot = lotMap[lotKey] !== undefined ? lotMap[lotKey] : stockMap[m.mp_id] || 0;
           preload[gid].push({
             mp_id:       m.mp_id,
             code:        m.code,
             designation: m.designation,
+            numero_lot:  m.numero_lot || '',
+            quantite_fixe: m.quantite_fixe || false,
             pct:         m.pct || '',
-            quantite:    m.quantite || '',
-            stock_at3:   stockMap[m.mp_id] || 0,
+            quantite:    m.quantite || (m.pct && parseFloat(configOf?.at3_poids_cible_kg||0) > 0 ? ((parseFloat(m.pct)/100)*parseFloat(configOf.at3_poids_cible_kg)).toFixed(3) : ''),
+            stock_at3:   stockLot,
           });
         }
-        setChoixMp(preload);
+        console.log('preload:', JSON.stringify(preload));
+        setChoixMp({...preload});
       }
     } catch(e) { console.error(e); }
   };
@@ -274,17 +270,22 @@ export function CompositionOF({ detail, configOf, setConfigOf, onSaved }) {
     const gid = String(groupe_id);
     setChoixMp(prev => {
       const existing = prev[gid] || [];
-      if (existing.find(m => m.mp_id === article.id)) return prev;
+      if (existing.find(m => m.mp_id === article.id && m.numero_lot === (article.numero_lot||''))) return prev;
       const poids = parseFloat(configOf?.at3_poids_cible_kg || 0);
+      console.log('ajouterMp:', article.code, 'quantite_lot:', article.quantite_lot, 'qteInit sera:', article.quantite_lot > 0 ? parseFloat(article.quantite_lot).toFixed(3) : 'vide');
+      const qteInit = article.quantite_lot > 0 ? parseFloat(article.quantite_lot).toFixed(3) : '';
+      const pctInit = qteInit && poids > 0 ? ((parseFloat(qteInit)/poids)*100).toFixed(2) : '';
       return {
         ...prev,
         [gid]: [...existing, {
           mp_id:       article.id,
           code:        article.code,
           designation: article.designation,
-          pct:         '',
-          quantite:    '',
-          stock_at3:   parseFloat(article.stock_at3 || 0),
+          numero_lot:  article.numero_lot || '',
+          pct:         pctInit,
+          quantite:    qteInit,
+          quantite_fixe: article.quantite_lot > 0,
+          stock_at3:   article.quantite_lot > 0 ? parseFloat(article.quantite_lot) : parseFloat(article.stock_at3 || 0),
           stock_mag:   parseFloat(article.stock_magasin || 0),
         }]
       };
@@ -313,13 +314,29 @@ export function CompositionOF({ detail, configOf, setConfigOf, onSaved }) {
           pct: stockDispo > 0 && poids > 0 && qteNecessaire > stockDispo
             ? pctFinal.toFixed(2)
             : val,
-          quantite: poids > 0 ? qteFinal.toFixed(3) : '',
-          stock_insuffisant: stockDispo > 0 && poids > 0 && qteNecessaire > stockDispo,
+          quantite: m.quantite_fixe ? m.quantite : (poids > 0 ? qteFinal.toFixed(3) : ''),
+          stock_insuffisant: stockDispo > 0 && poids > 0 && qteNecessaire > (stockDispo + 0.01),
         };
       })
     }));
   };
 
+  const majQte = (groupe_id, idx, val) => {
+    const gid = String(groupe_id);
+    const poids = parseFloat(configOf?.at3_poids_cible_kg || 0);
+    setChoixMp(prev => ({
+      ...prev,
+      [gid]: (prev[gid]||[]).map((m, i) => {
+        if (i !== idx) return m;
+        const qte = parseFloat(val||0);
+        const pctFinal = poids > 0 ? (qte / poids) * 100 : 0;
+        return { ...m, quantite: val, pct: pctFinal.toFixed(2) };
+      })
+    }));
+  };
+  const majPctGroupe = (groupe_id, val) => {
+    setGroupes(prev => prev.map(g => g.groupe_id === groupe_id ? {...g, pct: parseFloat(val||0)} : g));
+  };
   const supprimerMp = (groupe_id, idx) => {
     const gid = String(groupe_id);
     setChoixMp(prev => ({ ...prev, [gid]: (prev[gid]||[]).filter((_,i)=>i!==idx) }));
@@ -336,17 +353,16 @@ export function CompositionOF({ detail, configOf, setConfigOf, onSaved }) {
         const gmp = choixMp[String(g.groupe_id)] || [];
         if (gmp.length === 0) return toast.error(`Groupe "${g.groupe_libelle}" : aucune MP sélectionnée`);
         const tG=gmp.reduce((s,m)=>s+parseFloat(m.pct||0),0);
-        if(Math.abs(tG-g.pct)>0.1)return toast.error(g.groupe_libelle+' : total '+tG.toFixed(1)+'% attendu '+g.pct+'%');
+        // validation groupe supprimée - seul le total 100% compte
         for(const m of gmp){
-          const artLive=g.articles?.find(a=>a.id===m.mp_id);
-          const stockAt3=artLive?parseFloat(artLive.stock_at3||0):0;
+          const stockAt3 = parseFloat(m.stock_at3||0);
           const qte=parseFloat(m.quantite||0);
           if(stockAt3<qte){
             return toast.error(m.code+' : besoin '+qte+'kg mais stock AT3 = '+stockAt3+'kg — créez une DBM');
           }
         }
         const totalG = gmp.reduce((s,m)=>s+parseFloat(m.pct||0),0);
-        if (Math.abs(totalG - g.pct) > 0.1) return toast.error(`Groupe "${g.groupe_libelle}" : total ${totalG.toFixed(1)}% ≠ ${g.pct}% attendu`);
+        // validation groupe supprimée - seul le total 100% compte
       }
     }
     setLoading(true);
@@ -355,7 +371,7 @@ export function CompositionOF({ detail, configOf, setConfigOf, onSaved }) {
         const g = groupes.find(x => String(x.groupe_id) === gid);
         return mps.map(m => ({
           mp_id: m.mp_id, code: m.code, designation: m.designation,
-          pct: m.pct, quantite: m.quantite,
+          pct: m.pct, quantite: m.quantite, numero_lot: m.numero_lot||'', quantite_fixe: m.quantite_fixe||false,
           famille_id: g?.groupe_id, famille_libelle: g?.groupe_libelle,
           groupe_id: g?.groupe_id, groupe_libelle: g?.groupe_libelle,
         }));
@@ -442,8 +458,12 @@ export function CompositionOF({ detail, configOf, setConfigOf, onSaved }) {
             <div style={{ background:clr.bg, padding:'9px 14px', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
               <div>
                 <span style={{ fontWeight:800, color:clr.tx, fontSize:14 }}>{g.groupe_libelle}</span>
-                <span style={{ marginLeft:10, background:'#fff', color:clr.tx, padding:'1px 10px', borderRadius:20, fontSize:11, fontWeight:700 }}>
-                  {g.pct}% de l'OF
+                <span style={{ marginLeft:10, display:'inline-flex', alignItems:'center', gap:3, background:'#fff', borderRadius:20, padding:'1px 8px' }}>
+                  <input type="number" value={g.pct} min="0" max="100" step="0.1"
+                    onChange={e => majPctGroupe(g.groupe_id, e.target.value)}
+                    disabled={detail?.at3_statut_zone==='extrusion'}
+                    style={{ width:50, border:'none', outline:'none', fontWeight:700, fontSize:11, color:clr.tx, textAlign:'center', background:'transparent' }} />
+                  <span style={{ fontSize:11, fontWeight:700, color:clr.tx }}>% de l'OF</span>
                 </span>
                 {poids > 0 && (
                   <span style={{ marginLeft:8, fontSize:11, color:clr.tx }}>= {qteGroupe} kg</span>
@@ -487,18 +507,25 @@ export function CompositionOF({ detail, configOf, setConfigOf, onSaved }) {
                             <div style={{ display:'flex', alignItems:'center', gap:3 }}>
                               <input type="number" value={m.pct} min="0" max="100" step="0.1"
                                 onChange={e => majPct(g.groupe_id, mi, e.target.value)}
-                                style={{ width:60, border:`1px solid ${clr.bd}`, borderRadius:5, padding:'4px', fontSize:12, textAlign:'center', fontWeight:700 }} />
+                                disabled={detail?.at3_statut_zone==='extrusion'}
+                                style={{ width:60, border:`1px solid ${clr.bd}`, borderRadius:5, padding:'4px', fontSize:12, textAlign:'center', fontWeight:700, background: detail?.at3_statut_zone==='extrusion'?'#f3f4f6':'#fff' }} />
                               <span style={{ fontSize:10 }}>%</span>
                             </div>
                           </td>
-                          <td style={{ padding:'6px 8px', fontWeight:700, color:clr.tx, fontSize:12 }}>
-                            {m.quantite ? `${m.quantite} kg` : (poids>0 ? qteNec+' kg' : '—')}
+                          <td style={{ padding:'6px 8px', width:110 }}>
+                            <div style={{ display:'flex', alignItems:'center', gap:3 }}>
+                              <input type="number" value={m.quantite||''} min="0" step="0.1"
+                                onChange={e => majQte(g.groupe_id, mi, e.target.value)}
+                                disabled={detail?.at3_statut_zone==='extrusion'}
+                                style={{ width:80, border:`1px solid ${clr.bd}`, borderRadius:5, padding:'4px', fontSize:12, textAlign:'center', fontWeight:700, background: detail?.at3_statut_zone==='extrusion'?'#f3f4f6':'#fff' }} />
+                              <span style={{ fontSize:10 }}>kg</span>
+                            </div>
                           </td>
                           <td style={{ padding:'6px 8px' }}>
-                            <button onClick={() => supprimerMp(g.groupe_id, mi)}
+                            {detail?.at3_statut_zone !== 'extrusion' && <button onClick={() => supprimerMp(g.groupe_id, mi)}
                               style={{ background:'#fee2e2', color:'#dc2626', border:'none', borderRadius:5, padding:'3px 7px', cursor:'pointer', fontSize:11 }}>
                               🗑
-                            </button>
+                            </button>}
                           </td>
                         </tr>
                       );
@@ -508,29 +535,31 @@ export function CompositionOF({ detail, configOf, setConfigOf, onSaved }) {
               )}
 
               {/* Articles disponibles dans ce groupe */}
-              <div style={{ display:'flex', gap:6, flexWrap:'wrap', alignItems:'center' }}>
+              {detail?.at3_statut_zone !== 'extrusion' && <div style={{ display:'flex', gap:6, flexWrap:'wrap', alignItems:'center' }}>
                 <span style={{ fontSize:10, fontWeight:600, color:'#6b7280', whiteSpace:'nowrap' }}>
                   + Ajouter une MP :
                 </span>
-                {g.articles?.filter(a => !mpsChoisis.find(m => m.mp_id === a.id) && parseFloat(a.stock_at3||0)>0).map(a => (
-                  <button key={a.id} onClick={() => ajouterMp(g.groupe_id, a)} style={{
-                    background: parseFloat(a.stock_at3||0)>0 ? clr.bg : '#f3f4f6',
-                    color:      parseFloat(a.stock_at3||0)>0 ? clr.tx : '#9ca3af',
-                    border: `1px solid ${clr.bd}`,
-                    borderRadius:20, padding:'4px 12px', cursor:'pointer', fontSize:11, fontWeight:600
-                  }}>
-                    + {a.code}
-                    <span style={{ fontSize:9, marginLeft:4, opacity:0.8 }}>
-                      AT3: {parseFloat(a.stock_at3||0).toFixed(0)}kg
-                    </span>
-                  </button>
-                ))}
+                {g.articles?.flatMap(a => {
+                  const lots = Array.isArray(a.lots_at3) ? a.lots_at3 : (a.lots_at3 ? JSON.parse(a.lots_at3) : []);
+                  if (lots.length === 0 && parseFloat(a.stock_at3||0) > 0) {
+                    return [<button key={a.id} onClick={() => ajouterMp(g.groupe_id, {...a, numero_lot:'', quantite_lot: parseFloat(a.stock_at3||0)})} style={{
+                      background:clr.bg, color:clr.tx, border:`1px solid ${clr.bd}`,
+                      borderRadius:20, padding:'4px 12px', cursor:'pointer', fontSize:11, fontWeight:600
+                    }}>+ {a.code} <span style={{fontSize:9,opacity:0.8}}>AT3: {parseFloat(a.stock_at3||0).toFixed(0)}kg</span></button>];
+                  }
+                  return lots.map((l, li) => (
+                    <button key={a.id+'-'+li} onClick={() => ajouterMp(g.groupe_id, {...a, numero_lot: l.lot, quantite_lot: parseFloat(l.qte||0)})} style={{
+                      background:clr.bg, color:clr.tx, border:`1px solid ${clr.bd}`,
+                      borderRadius:20, padding:'4px 12px', cursor:'pointer', fontSize:11, fontWeight:600
+                    }}>+ {a.code} <span style={{fontSize:9,opacity:0.8}}>AT3: {parseFloat(l.qte||0).toFixed(0)}kg lot {l.lot}</span></button>
+                  ));
+                })}
                 {(!g.articles || g.articles.length === 0) && (
                   <span style={{ fontSize:11, color:'#dc2626' }}>
                     ⚠ Aucune MP dans ce groupe — créez-en dans Matières Premières
                   </span>
                 )}
-              </div>
+              </div>}
             </div>
           </div>
         );
@@ -549,7 +578,7 @@ export function CompositionOF({ detail, configOf, setConfigOf, onSaved }) {
             </div>
           )}
           <button onClick={() => sauvegarder(true)}
-            disabled={loading || stockInsuffisant}
+            disabled={loading}
             style={{
               background: Math.abs(totalPct-100)<0.1 && configOf?.at3_poids_cible_kg && !stockInsuffisant ? '#14532d' : '#9ca3af',
               color:'#fff', border:'none', padding:'9px 22px', borderRadius:8,

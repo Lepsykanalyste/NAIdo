@@ -9,7 +9,7 @@
 // 4. Dans la map sections : dbm, stock_at3, declarations
 // ============================================================
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { useAuth } from '../hooks/useAuth.jsx';
@@ -57,12 +57,12 @@ export function ModuleDBM() {
   const charger = async () => {
     try {
       const [d, o] = await Promise.all([
-        axios.get(`${API}/dbm`),
-        axios.get(`${API}/at3/of`),
+        axios.get(`${API}/dbm`).catch(()=>({data:[]})),
+        axios.get(`${API}/at3/of`).catch(()=>({data:[]})),
       ]);
       setDbms(d.data || []);
       // Charger aussi les DBM en transit (en_preparation) pour réception
-      setOfs((o.data || []).filter(o => ['planifie','assigne','en_attente'].includes(o.statut)));
+      setOfs((o.data || []).filter(o => ['planifie','assigne','en_attente','lance','en_cours'].includes(o.statut)));
     } catch { toast.error('Erreur chargement'); }
   };
 
@@ -74,7 +74,7 @@ export function ModuleDBM() {
     setLignes([]);
     if (!of_id) return;
     try {
-      const { data } = await axios.get(`${API}/dbm/of/${of_id}/besoins`);
+      const { data } = await axios.get(`${API}/dbm/of/${of_id}/besoins`).catch(()=>({data:[]}));
       // Fusionner groupes (articles+stock mag) avec besoins (calculs AT3)
       const besoinsMap = {};
       (data.besoins || []).forEach(b => { besoinsMap[b.groupe_id] = b; });
@@ -136,7 +136,7 @@ export function ModuleDBM() {
 
   const ouvrirDetail = async (id) => {
     try {
-      const { data } = await axios.get(`${API}/dbm/${id}`);
+      const { data } = await axios.get(`${API}/dbm/${id}`).catch(()=>({data:[]}));
       setDetail(data);
     } catch { toast.error('Erreur'); }
   };
@@ -407,20 +407,23 @@ export function ModuleReceptionDBM() {
 
   const [onglet, setOnglet] = useState('alivrer');
   const [historique, setHistorique] = useState([]);
+  const [bonsLivraison, setBonsLivraison] = useState([]);
   const [showAnnuler, setShowAnnuler] = useState(null);
   const [motifAnnul, setMotifAnnul] = useState('');
 
   const charger = async () => {
     try {
       const [r1, r2, r3, r4, r5] = await Promise.all([
-        axios.get(`${API}/dbm?statut=en_attente`),
-        axios.get(`${API}/dbm?statut=partiel`),
-        axios.get(`${API}/dbm?statut=en_preparation`),
-        axios.get(`${API}/dbm?statut=livre`),
-        axios.get(`${API}/dbm?statut=annule`),
+        axios.get(`${API}/dbm?statut=en_attente`).catch(()=>({data:[]})),
+        axios.get(`${API}/dbm?statut=partiel`).catch(()=>({data:[]})),
+        axios.get(`${API}/dbm?statut=en_preparation`).catch(()=>({data:[]})),
+        axios.get(`${API}/dbm?statut=livre`).catch(()=>({data:[]})),
+        axios.get(`${API}/dbm?statut=annule`).catch(()=>({data:[]})),
       ]);
       setDbms([...(r1.data||[]), ...(r2.data||[])]);
       setHistorique([...(r2.data||[]), ...(r3.data||[]), ...(r4.data||[]), ...(r5.data||[])]);
+      // Charger les bons de livraison
+      axios.get(`${API}/dbm/livraisons`).catch(()=>({data:[]})).then(r => setBonsLivraison(r.data||[]));
     } catch { toast.error('Erreur'); }
   };
 
@@ -441,7 +444,7 @@ export function ModuleReceptionDBM() {
 
   const ouvrirDetail = async (id) => {
     try {
-      const { data } = await axios.get(`${API}/dbm/${id}`);
+      const { data } = await axios.get(`${API}/dbm/${id}`).catch(()=>({data:[]}));
       setDetail(data);
       // Charger les lots pour chaque article
       const lotsMap = {};
@@ -668,21 +671,19 @@ export function ModuleReceptionDBM() {
       {/* Historique */}
       {onglet === 'historique' && (
         <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-          {historique.map(d => (
-            <div key={d.id} style={{ background:'#f8fafc', borderRadius:10, padding:'12px 16px', border:'1px solid #e5e7eb' }}>
-              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', flexWrap:'wrap', gap:8 }}>
+          {bonsLivraison.length === 0 ? (
+            <div style={{ padding:48, textAlign:'center', color:'#9ca3af' }}>Aucun bon de livraison</div>
+          ) : bonsLivraison.map((b, i) => (
+            <div key={i} style={{ background:'#fff', borderRadius:10, padding:'12px 16px', border:'1px solid #bae6fd' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                 <div>
-                  <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:4 }}>
-                    <span style={{ fontWeight:800, fontFamily:'monospace', color:'#374151' }}>{d.numero_dbm}</span>
-                    <Badge statut={d.statut} map={STATUT_DBM} />
-                  </div>
-                  <div style={{ fontSize:12, color:'#374151' }}>OF : {d.numero_of} | {d.nb_lignes} MP</div>
-                  <div style={{ fontSize:11, color:'#9ca3af' }}>{new Date(d.date_livraison||d.date_demande).toLocaleString('fr-FR', { dateStyle:'short', timeStyle:'short' })}</div>
+                  <div style={{ fontWeight:800, fontFamily:'monospace', color:'#0369a1' }}>{b.numero_livraison}</div>
+                  <div style={{ fontSize:12, color:'#374151' }}>DBM : {b.numero_dbm} | OF : {b.numero_of}</div>
+                  <div style={{ fontSize:11, color:'#9ca3af' }}>{new Date(b.date_livraison).toLocaleString('fr-FR', { dateStyle:'short', timeStyle:'short' })} — {b.livre_par_nom}</div>
                 </div>
-                <div style={{ textAlign:'right', display:'flex', flexDirection:'column', alignItems:'flex-end', gap:4 }}>
-                  <div style={{ fontWeight:700, color:'#374151' }}>{parseFloat(d.poids_total_demande||0).toFixed(1)} kg demandé</div>
-                  <div style={{ fontSize:12, color:'#15803d' }}>Livré : {parseFloat(d.poids_total_livre||0).toFixed(1)} kg</div>
-                  <button onClick={() => window.open(`/api/dbm/${d.id}/pdf?t=${Date.now()}`,'_blank')}
+                <div style={{ textAlign:'right', display:'flex', flexDirection:'column', gap:4, alignItems:'flex-end' }}>
+                  <div style={{ fontWeight:700, color:'#15803d' }}>Livré : {parseFloat(b.poids_livre||0).toFixed(1)} kg | Reçu : {parseFloat(b.poids_recu||0).toFixed(1)} kg</div>
+                  <button onClick={() => window.open(`/api/dbm/livraisons/${b.numero_livraison}/pdf?t=${Date.now()}`,'_blank')}
                     style={{ background:'#f0f9ff', color:'#0369a1', border:'1px solid #bae6fd', borderRadius:6, padding:'3px 8px', cursor:'pointer', fontSize:11, fontWeight:600 }}>
                     🖨 PDF
                   </button>
@@ -690,12 +691,6 @@ export function ModuleReceptionDBM() {
               </div>
             </div>
           ))}
-          {historique.length === 0 && (
-            <div style={{ padding:48, textAlign:'center', border:'1px solid #e5e7eb', borderRadius:12, color:'#9ca3af' }}>
-              <div style={{ fontSize:36, marginBottom:8 }}>📋</div>
-              <p>Aucun historique</p>
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -713,14 +708,14 @@ export function ModuleStockAT3() {
 
   const charger = async () => {
     try {
-      const [s, r, m] = await Promise.all([
-        axios.get(`${API}/dbm/stock-at3/liste`),
-        axios.get(`${API}/dbm/stock-at3/resume`),
-        axios.get(`${API}/dbm/stock-at3/mouvements`),
+      const [s, r] = await Promise.all([
+        axios.get(`${API}/dbm/stock-at3/liste`).catch(()=>({data:[]})),
+        axios.get(`${API}/dbm/stock-at3/resume`).catch(()=>({data:[]})),
       ]);
       setStock(s.data || []);
       setResume(r.data || []);
-      setMvts(m.data || []);
+      setMvts([]);
+      setMvts([]);
     } catch { toast.error('Erreur stock AT3'); }
   };
 
@@ -860,11 +855,14 @@ export function ModuleReceptionAT3() {
   const [detail, setDetail]     = useState(null);
   const [receptions, setReceptions] = useState([]);
   const [loading, setLoading]   = useState(false);
+  const [ongletRecep, setOngletRecep] = useState('attente');
+  const [bonsLivraison, setBonsLivraison] = useState([]);
 
   const charger = async () => {
     try {
-      const { data } = await axios.get(`${API}/dbm?statut=en_preparation`);
-      setDbms(data || []);
+      const [r1, r2] = await Promise.all([axios.get(`${API}/dbm?statut=en_preparation`).catch(()=>({data:[]})), axios.get(`${API}/dbm?statut=en_attente`).catch(()=>({data:[]}))]);
+      setDbms([...(r1.data||[]), ...(r2.data||[])]);
+      axios.get(`${API}/dbm/livraisons`).catch(()=>({data:[]})).then(r => setBonsLivraison(r.data||[]));
     } catch { toast.error('Erreur chargement'); }
   };
 
@@ -872,23 +870,43 @@ export function ModuleReceptionAT3() {
 
   const ouvrirDetail = async (id) => {
     try {
-      const { data } = await axios.get(`${API}/dbm/${id}`);
+      const { data } = await axios.get(`${API}/dbm/${id}`).catch(()=>({data:[]}));
       setDetail(data);
-      setReceptions((data.lignes || []).map(l => ({
-        ligne_id:   l.id,
-        article_id: l.article_id,
-        famille_id: l.famille_id,
-        code:       l.code,
-        designation: l.designation,
-        qte_en_transit: parseFloat(l.qte_en_transit || 0),
-        qte_recue:  parseFloat(l.qte_en_transit || 0).toFixed(1),
-        numero_lot: l.numero_lot || '',
-      })));
+      const src = (data.livraisons && data.livraisons.length > 0)
+        ? data.livraisons.filter(lv => parseFloat(lv.qte_livree||0) > 0 && lv.receptionne === false).map(lv => ({
+            ligne_id:   lv.ligne_id,
+            article_id: lv.article_id,
+            famille_id: (data.lignes||[]).find(l=>l.id===lv.ligne_id)?.famille_id,
+            code:       lv.code,
+            designation: lv.designation,
+            qte_en_transit: parseFloat(lv.qte_livree||0),
+            qte_recue:  parseFloat(lv.qte_livree||0).toFixed(1),
+            numero_lot: lv.numero_lot||'',
+            observation: '',
+          }))
+        : (data.lignes||[]).map(l => ({
+            ligne_id:   l.id,
+            article_id: l.article_id,
+            famille_id: l.famille_id,
+            code:       l.code,
+            designation: l.designation,
+            qte_en_transit: parseFloat(l.qte_en_transit||0),
+            qte_recue:  parseFloat(l.qte_en_transit||0).toFixed(1),
+            numero_lot: l.numero_lot||'',
+            observation: '',
+          }));
+      setReceptions(src);
     } catch { toast.error('Erreur'); }
   };
 
   const receptionner = async () => {
     if (!detail) return;
+    // Vérifier observations obligatoires
+    for (const r of receptions) {
+      if (parseFloat(r.qte_recue||0) !== parseFloat(r.qte_en_transit||0) && !r.observation?.trim()) {
+        return toast.error('Observation obligatoire si quantité différente de celle livrée');
+      }
+    }
     setLoading(true);
     try {
       const { data } = await axios.put(`${API}/dbm/${detail.id}/receptionner`, {
@@ -907,11 +925,44 @@ export function ModuleReceptionAT3() {
   return (
     <div>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
-        <h3 style={{ margin:0, fontSize:15, fontWeight:700, color:'#7c3aed' }}>
-          📥 Réception MP — En attente de validation
-        </h3>
+        <h3 style={{ margin:0, fontSize:15, fontWeight:700, color:'#7c3aed' }}>📥 Réception MP</h3>
         <button onClick={charger} style={{ background:'#f3e8ff', border:'1px solid #c4b5fd', color:'#7c3aed', padding:'7px 12px', borderRadius:8, cursor:'pointer', fontSize:12 }}>🔄</button>
       </div>
+      <div style={{ display:'flex', gap:8, marginBottom:16 }}>
+        {[['attente','📥 En attente'],['historique','📋 Historique']].map(([id,label]) => (
+          <button key={id} onClick={() => setOngletRecep(id)}
+            style={{ padding:'6px 14px', borderRadius:8, border:'none', cursor:'pointer', fontWeight:700,
+              background: ongletRecep===id ? '#7c3aed' : '#f3e8ff',
+              color: ongletRecep===id ? '#fff' : '#7c3aed' }}>{label}</button>
+        ))}
+      </div>
+      {ongletRecep === 'historique' && (
+        <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+          {bonsLivraison.length === 0 ? (
+            <div style={{ padding:48, textAlign:'center', color:'#9ca3af' }}>Aucun bon de livraison</div>
+          ) : bonsLivraison.map((b, i) => (
+            <div key={i} style={{ background:'#faf5ff', borderRadius:10, padding:'12px 16px', border:'1px solid #c4b5fd' }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                <div>
+                  <div style={{ fontWeight:800, fontFamily:'monospace', color:'#7c3aed' }}>{b.numero_livraison}</div>
+                  <div style={{ fontSize:12, color:'#374151' }}>DBM : {b.numero_dbm} | OF : {b.numero_of}</div>
+                  <div style={{ fontSize:11, color:'#9ca3af' }}>{new Date(b.date_livraison).toLocaleString('fr-FR', { dateStyle:'short', timeStyle:'short' })}</div>
+                </div>
+                <div style={{ textAlign:'right', display:'flex', flexDirection:'column', gap:4, alignItems:'flex-end' }}>
+                  <div style={{ fontSize:12, color:'#7c3aed' }}>Livré : {parseFloat(b.poids_livre||0).toFixed(1)} kg</div>
+                  <div style={{ fontSize:12, color:'#15803d', fontWeight:700 }}>Reçu : {parseFloat(b.poids_recu||0).toFixed(1)} kg</div>
+                  <button onClick={() => window.open(`/api/dbm/livraisons/${b.numero_livraison}/pdf?t=${Date.now()}`,'_blank')}
+                    style={{ background:'#f3e8ff', color:'#7c3aed', border:'1px solid #c4b5fd', borderRadius:6, padding:'3px 8px', cursor:'pointer', fontSize:11, fontWeight:600 }}>
+                    🖨 PDF
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {ongletRecep === 'attente' && (<>
+
 
       {detail && (
         <div style={{ background:'#fff', borderRadius:12, border:'2px solid #c4b5fd', padding:20, marginBottom:16 }}>
@@ -926,7 +977,7 @@ export function ModuleReceptionAT3() {
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13, marginBottom:14 }}>
             <thead>
               <tr style={{ background:'#f3e8ff' }}>
-                {['MP', 'N° Lot', 'Envoyé', 'Qté reçue réelle'].map(h => (
+                {['MP', 'N° Lot', 'Envoyé', 'Qté reçue réelle', 'Observation'].map(h => (
                   <th key={h} style={{ padding:'7px 10px', textAlign:'left', fontSize:11, fontWeight:600, color:'#7c3aed' }}>{h}</th>
                 ))}
               </tr>
@@ -992,6 +1043,8 @@ export function ModuleReceptionAT3() {
           </div>
         )}
       </div>
+      </>
+      )}
     </div>
   );
 }
@@ -1024,7 +1077,7 @@ export function ModuleStockMP() {
 
   const charger = async () => {
     try {
-      const { data } = await axios.get(`${API}/dbm/stock-mp/liste`);
+      const { data } = await axios.get(`${API}/dbm/stock-mp/liste`).catch(()=>({data:[]}));
       setArticles(data||[]);
     } catch { toast.error('Erreur chargement stock MP'); }
   };
@@ -1032,7 +1085,7 @@ export function ModuleStockMP() {
   const chargerLots = async (article) => {
     setArtSel(article);
     try {
-      const { data } = await axios.get(`${API}/dbm/stock-mp/lots/${article.id}`);
+      const { data } = await axios.get(`${API}/dbm/stock-mp/lots/${article.id}`).catch(()=>({data:[]}));
       setLots(data||[]);
     } catch { toast.error('Erreur lots'); }
   };
@@ -1224,15 +1277,16 @@ export function DashboardMagasinMP() {
   const [stats, setStats] = useState({ en_attente:0, en_preparation:0, partiel:0, livre:0 });
   const [stockMP, setStockMP] = useState([]);
   const [dernLivraisons, setDernLivraisons] = useState([]);
+  const loadedRef = useRef(false);
 
-  const charger = async () => {
+  const charger = async () => { setStockMP([]);
     try {
       const [r1, r2, r3, r4, r5] = await Promise.all([
-        axios.get(`${API}/dbm?statut=en_attente`),
-        axios.get(`${API}/dbm?statut=en_preparation`),
-        axios.get(`${API}/dbm?statut=partiel`),
-        axios.get(`${API}/dbm?statut=livre`),
-        axios.get(`${API}/dbm/stock-mp/resume`),
+        axios.get(`${API}/dbm?statut=en_attente`).catch(()=>({data:[]})),
+        axios.get(`${API}/dbm?statut=en_preparation`).catch(()=>({data:[]})),
+        axios.get(`${API}/dbm?statut=partiel`).catch(()=>({data:[]})),
+        axios.get(`${API}/dbm?statut=livre`).catch(()=>({data:[]})),
+        axios.get(`${API}/dbm/stock-mp/resume`).catch(()=>({data:[]})),
       ]);
       setStats({
         en_attente:    (r1.data||[]).length,
@@ -1252,8 +1306,7 @@ export function DashboardMagasinMP() {
       setDernLivraisons([...(r3.data||[]), ...(r4.data||[])].sort((a,b) => new Date(b.date_livraison||b.date_demande) - new Date(a.date_livraison||a.date_demande)).slice(0,5));
     } catch(e) { console.error('Dashboard error:', e?.response?.config?.url, e?.response?.status, e.message); toast.error('Erreur: ' + (e?.response?.config?.url || e.message)); }
   };
-
-  useEffect(() => { if (user) { setTimeout(charger, 500); } }, [user]);
+  useEffect(() => { if (user?.id && !loadedRef.current) { loadedRef.current = true; charger(); } }, [user?.id]);
 
   return (
     <div>
@@ -1341,7 +1394,6 @@ export default function DBM_StockAT3() {
   ] : [
     { id:'dbm',         icon:'📦', label:'Mes DBM',         color:'#92400e' },
     { id:'reception_at3', icon:'📥', label:'Réception MP',  color:'#7c3aed' },
-    { id:'stock_at3',   icon:'🏗',  label:'Stock AT3',       color:'#15803d' },
   ];
 
   return (
