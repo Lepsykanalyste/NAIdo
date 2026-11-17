@@ -708,14 +708,14 @@ export function ModuleStockAT3() {
 
   const charger = async () => {
     try {
-      const [s, r] = await Promise.all([
+      const [s, r, m] = await Promise.all([
         axios.get(`${API}/dbm/stock-at3/liste`).catch(()=>({data:[]})),
         axios.get(`${API}/dbm/stock-at3/resume`).catch(()=>({data:[]})),
+        axios.get(`${API}/dbm/stock-at3/mouvements`).catch(()=>({data:[]})),
       ]);
       setStock(s.data || []);
       setResume(r.data || []);
-      setMvts([]);
-      setMvts([]);
+      setMvts(m.data || []);
     } catch { toast.error('Erreur stock AT3'); }
   };
 
