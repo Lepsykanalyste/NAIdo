@@ -146,7 +146,7 @@ async def get_articles(
             SELECT a.id, a.code, a.designation, a.couleur, a.type_article,
                 a.poids_theorique_kg, a.poids_reel_kg, a.cadence_theorique_kg_h,
                 a.temps_reglage_min, a.prix_achat, a.prix_vente, a.prix_cession_interne,
-                a.stock_mini, a.tracabilite_type, a.format_lot, a.actif,
+                a.stock_mini, a.stock_maxi, a.tracabilite_type, a.format_lot, a.actif,
                 a.longueur_mm, a.largeur_mm, a.hauteur_mm,
                 a.photo_path, a.fiche_technique_path, a.fiche_securite_path,
                 a.dlc_jours, a.points_ccp, a.normes_iso, a.certifications,
@@ -214,10 +214,10 @@ async def create_article(payload: dict, user=Depends(get_current_user)):
                     prix_achat,prix_vente,prix_cession_interne,
                     stock_mini,dlc_jours,allergenes,points_ccp,
                     normes_iso,atelier_production_id,
-                    composition,notes,actif
+                    composition,notes,actif,stock_maxi,fournisseur,reference_fournisseur
                 ) VALUES (
                     $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,
-                    $15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,true
+                    $15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,true,$28,$29,$30
                 ) RETURNING id,code,designation,type_article
             """,
                 d["code"].upper().strip(),
@@ -247,6 +247,9 @@ async def create_article(payload: dict, user=Depends(get_current_user)):
                 int_or_none(d.get("atelier_production_id")),
                 json.dumps(safe_json(d.get("composition"), [])),
                 d.get("notes") or None,
+                num(d.get("stock_maxi")),
+                d.get("fournisseur") or None,
+                d.get("reference_fournisseur") or None,
             )
             return dict(row)
         except asyncpg.UniqueViolationError:
@@ -276,6 +279,8 @@ async def update_article(article_id: str, payload: dict, user=Depends(get_curren
         if "prix_vente" in d: add("prix_vente", num(d["prix_vente"], 0))
         if "prix_cession_interne" in d: add("prix_cession_interne", num(d["prix_cession_interne"], 0))
         if "stock_mini" in d: add("stock_mini", num(d["stock_mini"], 0))
+        if "stock_maxi" in d: add("stock_maxi", num(d["stock_maxi"]))
+        if "reference_fournisseur" in d: add("reference_fournisseur", d["reference_fournisseur"] or None)
         if "normes_iso" in d: add("normes_iso", d["normes_iso"] or None)
         if "notes" in d: add("notes", d["notes"] or None)
         if "points_ccp" in d: add("points_ccp", bool(d["points_ccp"]))

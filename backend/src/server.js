@@ -36,6 +36,7 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 app.use('/api/auth',           require('./routes/auth'));
 app.use('/api/users',          require('./routes/users'));
 app.use('/api/ateliers',       require('./routes/ateliers'));
+app.use('/api/fichiers-article', require('./routes/fichiers_article'));
 app.use('/api/articles',       require('./routes/articles'));
 app.use('/api/composition',     require('./routes/composition'));
 
@@ -51,6 +52,7 @@ app.use('/api/arrets',         require('./routes/arrets'));
 // Stock & Mouvements
 app.use('/api/stock',          require('./routes/stock'));
 app.use('/api/vente',          require('./routes/vente'));
+app.use('/api/achat', require('./routes/achat_v2'));
 app.use('/api/achat',          require('./routes/achat'));
 app.use('/api/mouvements',     require('./routes/mouvements'));
 app.use('/api/lots',           require('./routes/lots'));
@@ -82,6 +84,7 @@ app.use('/api/ol', require('./routes/ordres_livraison'));
 app.use('/api/ticket-prod',      require('./routes/ticket_prod'));
 app.use('/api/df',                require('./routes/demandes_fab'));
 app.use('/api/lots-prod',          require('./routes/lots_prod'));
+app.use('/api', require('./routes/compat_routes'));
 app.use('/api/qualite',        require('./routes/qualite'));
 // Traçabilité
 app.use('/api/tracabilite',    require('./routes/tracabilite'));

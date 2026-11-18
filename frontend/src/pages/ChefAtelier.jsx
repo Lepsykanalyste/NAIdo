@@ -9,6 +9,7 @@ import RondeChef from './RondeChef';
 import NonConformite from './NonConformite';
 import ControleAvantCession from './ControleAvantCession';
 import { CompositionFicheArticle, CompositionOF } from './CompositionArticle';
+import AchatsV2, { ArticlesDivers, DashboardAchat, DemandesAchatAtelier, SectionStockBas } from './Achats';
 import toast from 'react-hot-toast';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
@@ -117,6 +118,7 @@ const MENU = [
   { id:'separator2',  label:'STOCKS & ARTICLES',   separator:true },
   { id:'articles',    label:'Articles (Produits)',  icon:'articles',    color:'#7e22ce' },
   { id:'matieres',    label:'Matières Premières',   icon:'articles',    color:'#1d4ed8' },
+  { id:'articles_divers', label:'Articles Divers',  icon:'articles',    color:'#0369a1' },
   { id:'stock',       label:'Stock',               icon:'stock',       color:'#6d28d9' },
   { id:'dbm',         label:'DBM — Matières',       icon:'stock',       color:'#92400e' },
   { id:'stock_at3',   label:'Stock AT3',            icon:'stock',       color:'#15803d' },
@@ -128,6 +130,7 @@ const MENU = [
   { id:'vente',       label:'Ventes',              icon:'stock',       color:'#15803d' },
   { id:'fournisseurs',label:'Fournisseurs',         icon:'articles',    color:'#6d28d9' },
   { id:'achat',       label:'Commandes Achat',     icon:'stock',       color:'#9333ea' },
+  { id:'demandes_achat', label:"Demandes d'achat", icon:'stock',     color:'#d97706' },
   { id:'separator3',  label:'QHSE & MAINTENANCE',  separator:true },
   { id:'ronde',       label:'Ronde Chef de Quart',  icon:'qhse',        color:'#d97706' },
   { id:'nc',          label:'Non-Conformités',       icon:'qhse',        color:'#dc2626' },
@@ -153,7 +156,7 @@ const MENU = [
 const MENU_PAR_ROLE = {
   super_admin:   null, // tout
   directeur:     null, // tout
-  chef_atelier:  ['dashboard','separator1','at3flux','of','production','planning','separator2','dbm','stock_at3','cession','separator3','ronde','nc','cession_ctrl','gmao','alertes'],
+  chef_atelier:  ['dashboard','separator1','at3flux','of','production','planning','separator2','dbm','stock_at3','cession','demandes_achat','separator3','ronde','nc','cession_ctrl','gmao','alertes'],
   regleur:       ['dashboard','separator1','of','production','planning','alertes'],
   commercial:    ['dashboard','separator1','devis','bc','df','ol','separator2b','clients','vente','alertes'],
   operateur:     ['dashboard','separator1','of','production','alertes'],
@@ -169,7 +172,7 @@ const MENU_PAR_ROLE = {
   qhse:          ['dashboard','separator3','qhse','gmao','alertes'],
   rh:            ['dashboard','separator4b','rh','alertes'],
   technicien:    ['dashboard','separator3','gmao','alertes'],
-  achat:         ['dashboard','separator2','articles','fournisseurs','achat','alertes'],
+  achat:         ['dashboard','separator2','matieres','articles_divers','referentiels','fournisseurs','achat','alertes'],
   vente:         ['dashboard','separator2b','clients','vente','alertes'],
 };
 
@@ -3392,10 +3395,17 @@ function MatieresPremières() {
     } catch {}
   };
 
+  const [prixMoyens, setPrixMoyens] = useState({});
   const charger = async () => {
     try {
-      const { data } = await axios.get(`${API}/articles?type_article=matiere_premiere${search ? `&search=${search}` : ''}`);
-      setMps(data);
+      const [r, pm] = await Promise.all([
+        axios.get(`${API}/articles?type_article=matiere_premiere${search ? `&search=${search}` : ''}`),
+        axios.get(`${API}/achat/articles-prix-moyen`).catch(()=>({data:[]})),
+      ]);
+      setMps(r.data);
+      const pmMap = {};
+      (Array.isArray(pm.data)?pm.data:[]).forEach(p=>{ pmMap[p.article_id] = { prix_moyen:parseFloat(p.prix_moyen), nb:parseInt(p.nb_receptions) }; });
+      setPrixMoyens(pmMap);
     } catch {}
   };
 
@@ -3668,7 +3678,7 @@ function MatieresPremières() {
         <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13, minWidth:700 }}>
           <thead>
             <tr style={{ background:'#eff6ff' }}>
-              {['Code','Désignation','Groupe MP','Fournisseur','Unité','Stock','Actions'].map(h => (
+              {['Code','Désignation','Groupe MP','Fournisseur','Unité','Stock','Stock mini','Stock maxi','Prix achat','Prix moyen','Actions'].map(h => (
                 <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:700, color:'#1d4ed8', borderBottom:'2px solid #bfdbfe', whiteSpace:'nowrap' }}>{h}</th>
               ))}
             </tr>
@@ -3697,9 +3707,10 @@ function MatieresPremières() {
                   color: parseFloat(m.stock_mini||0) > 0 && parseFloat(m.stock_total||0) <= parseFloat(m.stock_mini||0) ? '#dc2626' : '#15803d' }}>
                   {parseFloat(m.stock_total||0).toFixed(1)}
                 </td>
-                <td style={{ padding:'9px 14px', color:'#6b7280' }}>
-                  {m.temperature_fusion ? `${m.temperature_fusion}°C` : '—'}
-                </td>
+                <td style={{ padding:'9px 14px', color:'#6b7280', fontSize:12 }}>{m.stock_mini||0}</td>
+                <td style={{ padding:'9px 14px', color:'#6b7280', fontSize:12 }}>{m.stock_maxi||'—'}</td>
+                <td style={{ padding:'9px 14px', color:'#6b7280', fontSize:12 }}>{m.prix_achat?parseFloat(m.prix_achat).toLocaleString('fr-FR')+' FCFA':'—'}</td>
+                <td style={{ padding:'9px 14px', color:'#6b7280', fontSize:12 }}>{prixMoyens[m.id]?`${prixMoyens[m.id].prix_moyen.toLocaleString('fr-FR')} FCFA`:'—'}</td>
                 <td style={{ padding:'9px 14px' }}>
                   <div style={{ display:'flex', gap:4 }}>
                     {m.fiche_technique_path && (
@@ -3777,7 +3788,9 @@ function MatieresPremières() {
               ['Temp. traitement', detail.temperature_traitement ? detail.temperature_traitement+'°C' : null],
               ['Couleur', detail.couleur],
               ['Prix achat', detail.prix_achat ? detail.prix_achat+' FCFA' : null],
+              ['Prix moyen (receptions)', prixMoyens[detail.id] ? prixMoyens[detail.id].prix_moyen.toLocaleString('fr-FR')+' FCFA' : null],
               ['Stock mini', detail.stock_mini||'0'],
+              ['Stock maxi', detail.stock_maxi||null],
               ['Délai appro.', detail.delai_appro_jours ? detail.delai_appro_jours+' j' : null],
               ['DLC', detail.dlc_jours ? detail.dlc_jours+' j' : null],
               ['Temp. stockage', detail.temperature_stockage_min ? `${detail.temperature_stockage_min}→${detail.temperature_stockage_max}°C` : null],
@@ -6913,10 +6926,11 @@ function Alertes() {
         {alertes.length === 0 && (
           <div style={{ background:'#fff', borderRadius:14, padding:48, textAlign:'center', border:'1px solid #e5e7eb' }}>
             <div style={{ fontSize:36, marginBottom:8 }}>✅</div>
-            <p style={{ color:'#6b7280' }}>Aucune alerte — tout fonctionne normalement</p>
+            <p style={{ color:'#6b7280' }}>Aucune alerte de production</p>
           </div>
         )}
       </div>
+      <SectionStockBas />
     </div>
   );
 }
@@ -7549,7 +7563,7 @@ function OrdresLivraison() {
       case 'df': return <DemandesFabrication />;
       case 'ol': return <OrdresLivraison />;
       case 'of': return <OrdresFabrication setOngletActif={setOngletActif} />;
-      case 'dashboard': return (() => { if (user?.role === 'chef_atelier') return <DashboardAT3 />; if (user?.role === 'magasinier_mp') return <DashboardMagasinMP />; return <Dashboard />; })();
+      case 'dashboard': return (() => { if (user?.role === 'achat') return <DashboardAchat />; if (user?.role === 'chef_atelier') return <DashboardAT3 />; if (user?.role === 'magasinier_mp') return <DashboardMagasinMP />; return <Dashboard />; })();
       case 'production': return <SuiviProduction />;
       case 'planning': return <PlanningMachines />;
       case 'rapportjour': return <RapportsJournaliers />;
@@ -7559,7 +7573,9 @@ function OrdresLivraison() {
       case 'clients': return <Clients />;
       case 'vente': return <Vente />;
       case 'fournisseurs': return <Fournisseurs />;
-      case 'achat': return <Achat />;
+      case 'achat': return <AchatsV2 />;
+      case 'articles_divers': return <ArticlesDivers />;
+      case 'demandes_achat': return <DemandesAchatAtelier />;
       case 'cession': return <BonsCession />;
       case 'qhse': return <QHSE />;
       case 'rh': return <RH />;
