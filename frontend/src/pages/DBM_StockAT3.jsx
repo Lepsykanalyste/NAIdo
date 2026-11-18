@@ -13,6 +13,7 @@ import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { useAuth } from '../hooks/useAuth.jsx';
+import { ouvrirPdfSecurise } from '../utils/pdf';
 
 const API = '/api';
 
@@ -376,7 +377,7 @@ export function ModuleDBM() {
               <div style={{ textAlign:'right', display:'flex', flexDirection:'column', alignItems:'flex-end', gap:4 }}>
                 <div style={{ fontWeight:700, color:'#92400e' }}>{parseFloat(d.poids_total_demande||0).toFixed(1)} kg</div>
                 <div style={{ fontSize:11, color:'#15803d' }}>Livré : {parseFloat(d.poids_total_livre||0).toFixed(1)} kg</div>
-                <button onClick={e=>{e.stopPropagation();window.open(`/api/dbm/${d.id}/pdf?t=${Date.now()}`,'_blank');}}
+                <button onClick={e=>{e.stopPropagation();ouvrirPdfSecurise(`/api/dbm/${d.id}/pdf?t=${Date.now()}`);}}
                   style={{ background:'#fff7ed', color:'#92400e', border:'1px solid #fed7aa', borderRadius:6, padding:'3px 10px', cursor:'pointer', fontSize:11, fontWeight:600 }}>
                   🖨 PDF
                 </button>
@@ -683,7 +684,7 @@ export function ModuleReceptionDBM() {
                 </div>
                 <div style={{ textAlign:'right', display:'flex', flexDirection:'column', gap:4, alignItems:'flex-end' }}>
                   <div style={{ fontWeight:700, color:'#15803d' }}>Livré : {parseFloat(b.poids_livre||0).toFixed(1)} kg | Reçu : {parseFloat(b.poids_recu||0).toFixed(1)} kg</div>
-                  <button onClick={() => window.open(`/api/dbm/livraisons/${b.numero_livraison}/pdf?t=${Date.now()}`,'_blank')}
+                  <button onClick={() => ouvrirPdfSecurise(`/api/dbm/livraisons/${b.numero_livraison}/pdf?t=${Date.now()}`)}
                     style={{ background:'#f0f9ff', color:'#0369a1', border:'1px solid #bae6fd', borderRadius:6, padding:'3px 8px', cursor:'pointer', fontSize:11, fontWeight:600 }}>
                     🖨 PDF
                   </button>
@@ -951,7 +952,7 @@ export function ModuleReceptionAT3() {
                 <div style={{ textAlign:'right', display:'flex', flexDirection:'column', gap:4, alignItems:'flex-end' }}>
                   <div style={{ fontSize:12, color:'#7c3aed' }}>Livré : {parseFloat(b.poids_livre||0).toFixed(1)} kg</div>
                   <div style={{ fontSize:12, color:'#15803d', fontWeight:700 }}>Reçu : {parseFloat(b.poids_recu||0).toFixed(1)} kg</div>
-                  <button onClick={() => window.open(`/api/dbm/livraisons/${b.numero_livraison}/pdf?t=${Date.now()}`,'_blank')}
+                  <button onClick={() => ouvrirPdfSecurise(`/api/dbm/livraisons/${b.numero_livraison}/pdf?t=${Date.now()}`)}
                     style={{ background:'#f3e8ff', color:'#7c3aed', border:'1px solid #c4b5fd', borderRadius:6, padding:'3px 8px', cursor:'pointer', fontSize:11, fontWeight:600 }}>
                     🖨 PDF
                   </button>
@@ -1252,7 +1253,7 @@ export function ModuleStockMP() {
                   <td style={{ padding:'7px 10px', fontWeight:700, color:'#0369a1' }}>{parseFloat(l.qte_disponible).toFixed(3)} kg</td>
                   <td style={{ padding:'7px 10px', color:'#6b7280' }}>{parseFloat(l.prix_unitaire||0).toFixed(0)} FCFA</td>
                   <td style={{ padding:'7px 10px' }}>
-                    <button onClick={() => window.open(`/api/dbm/stock-mp/entree/${l.id}/pdf?t=${Date.now()}`,'_blank')}
+                    <button onClick={() => ouvrirPdfSecurise(`/api/dbm/stock-mp/entree/${l.id}/pdf?t=${Date.now()}`)}
                       style={{ background:'#e0f2fe', color:'#0369a1', border:'none', borderRadius:6, padding:'3px 8px', cursor:'pointer', fontSize:11, fontWeight:600 }}>
                       🖨 Fiche
                     </button>
@@ -1365,7 +1366,7 @@ export function DashboardMagasinMP() {
                 <div style={{ textAlign:'right', display:'flex', flexDirection:'column', alignItems:'flex-end', gap:4 }}>
                   <div style={{ fontWeight:700, color:'#15803d' }}>{parseFloat(d.poids_total_livre||0).toFixed(1)} kg</div>
                   <div style={{ fontSize:10, color:'#9ca3af' }}>{new Date(d.date_livraison||d.date_demande).toLocaleDateString('fr-FR')}</div>
-                  <button onClick={() => window.open(`/api/dbm/${d.id}/pdf?t=${Date.now()}`,'_blank')}
+                  <button onClick={() => ouvrirPdfSecurise(`/api/dbm/${d.id}/pdf?t=${Date.now()}`)}
                     style={{ background:'#f0fdf4', color:'#15803d', border:'1px solid #86efac', borderRadius:6, padding:'3px 8px', cursor:'pointer', fontSize:11, fontWeight:600 }}>
                     🖨 PDF
                   </button>

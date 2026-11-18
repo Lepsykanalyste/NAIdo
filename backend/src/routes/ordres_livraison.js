@@ -107,7 +107,7 @@ router.put('/:id/statut', auth, async (req, res) => {
 });
 
 // GET /api/ol/:id/pdf
-router.get('/:id/pdf', async (req, res) => {
+router.get('/:id/pdf', auth, async (req, res) => {
   try {
     const { rows } = await db.query(`
       SELECT ol.*, c.raison_sociale AS client_nom, c.telephone, c.adresse,

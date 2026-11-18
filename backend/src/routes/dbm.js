@@ -35,7 +35,7 @@ router.get('/', auth, async (req, res) => {
 // GET /api/dbm/:id — détail DBM avec lignes
 
 // GET /api/dbm/:id/pdf — Bon de livraison DBM
-router.get('/:id/pdf', async (req, res) => {
+router.get('/:id/pdf', auth, async (req, res) => {
   try {
     const { rows } = await db.query(`
       SELECT d.*, o.numero_of,
@@ -587,7 +587,7 @@ router.get('/lots/:article_id', auth, async (req, res) => {
 
 
 // GET /api/dbm/stock-mp/entree/:lot_id/pdf — Fiche entrée fournisseur
-router.get('/stock-mp/entree/:lot_id/pdf', async (req, res) => {
+router.get('/stock-mp/entree/:lot_id/pdf', auth, async (req, res) => {
   try {
     const { rows } = await db.query(`
       SELECT ls.*, a.code AS article_code, a.designation AS article_nom,

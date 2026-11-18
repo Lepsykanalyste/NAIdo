@@ -11,6 +11,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
 import { useAuth } from '../hooks/useAuth.jsx';
+import { ouvrirPdfSecurise } from '../utils/pdf';
 
 const API = '/api';
 const ROLES_DIRECTION = ['directeur', 'super_admin'];
@@ -234,7 +235,7 @@ function DetailCommande({ id, role, onClose, onChange, onReceptionner, onHistori
       </div>
       {c.notes && <div style={{ background: '#f9fafb', borderRadius: 8, padding: '8px 10px', fontSize: 12, marginBottom: 12 }}><b>Notes :</b> {c.notes}</div>}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <Btn plein onClick={() => window.open(`${API}/achat/commandes/${id}/pdf`, '_blank')}>📄 PDF</Btn>
+        <Btn plein onClick={() => ouvrirPdfSecurise(`${API}/achat/commandes/${id}/pdf`)}>📄 PDF</Btn>
         {c.statut === 'envoye' && direction && <Btn plein color="#15803d" onClick={() => statut('confirme')}>✓ Confirmer (direction)</Btn>}
         {['envoye', 'confirme', 'brouillon'].includes(c.statut) && achat && <Btn plein bg="#fee2e2" color="#dc2626" onClick={() => { if (window.confirm('Annuler cette commande ?')) statut('annule'); }}>Annuler la commande</Btn>}
         {['confirme', 'receptionne_partiel'].includes(c.statut) && achat && <Btn plein color="#0369a1" onClick={() => onReceptionner(c)}>📥 Réceptionner</Btn>}
@@ -270,7 +271,7 @@ function Reception({ commande, onClose, onFait }) {
       toast.success(data.message || 'Réception enregistrée');
       if (data.plafonnees?.length) toast(`Quantité limitée au reste à recevoir : ${data.plafonnees.join(', ')}`, { icon: '⚠️' });
       if (data.stock_non_mis_a_jour?.length) toast.error(`Stock non mis à jour (aucun emplacement) : ${data.stock_non_mis_a_jour.join(', ')}`);
-      if (data.reception_id) window.open(`${API}/achat/receptions/${data.reception_id}/pdf`, '_blank');
+      if (data.reception_id) ouvrirPdfSecurise(`${API}/achat/receptions/${data.reception_id}/pdf`);
       onFait();
     } catch (e) { toast.error(msg(e)); }
     setEnvoi(false);
@@ -321,7 +322,7 @@ function Historique({ commande, onClose }) {
         <div key={r.id} style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 12, marginBottom: 10 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
             <div><b style={{ fontFamily: 'monospace', color: '#6d28d9' }}>{r.numero_reception}</b> <span style={{ fontSize: 12, color: '#6b7280' }}>· {jour(r.date_reception)} · BL : {r.reference_bl || '—'} · {r.cree_par_nom || ''}</span></div>
-            <Btn onClick={() => window.open(`${API}/achat/receptions/${r.id}/pdf`, '_blank')}>📄 PDF</Btn>
+            <Btn onClick={() => ouvrirPdfSecurise(`${API}/achat/receptions/${r.id}/pdf`)}>📄 PDF</Btn>
           </div>
           {(r.lignes || []).map(l => <div key={l.id} style={{ fontSize: 12 }}>{l.article_code || ''} {l.designation} : <b>{qte(l.quantite_recue)}</b> à {fcfa(l.prix_unitaire_ht)}</div>)}
           {r.notes && <div style={{ fontSize: 11, color: '#6b7280', marginTop: 4 }}>{r.notes}</div>}
@@ -579,7 +580,7 @@ export default function AchatsV2() {
                     <td style={tdStyle}>
                       <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
                         <Btn onClick={() => setDetail(c.id)}>👁 Voir</Btn>
-                        <Btn bg="#f3f4f6" color="#374151" onClick={() => window.open(`${API}/achat/commandes/${c.id}/pdf`, '_blank')}>📄 PDF</Btn>
+                        <Btn bg="#f3f4f6" color="#374151" onClick={() => ouvrirPdfSecurise(`${API}/achat/commandes/${c.id}/pdf`)}>📄 PDF</Btn>
                         {c.statut === 'envoye' && direction && <Btn bg="#dcfce7" color="#15803d" onClick={() => statut(c, 'confirme')}>✓ Confirmer</Btn>}
                         {c.statut === 'envoye' && !direction && <span style={{ fontSize: 10, color: '#9ca3af', fontStyle: 'italic', alignSelf: 'center' }}>Validation direction</span>}
                         {['confirme', 'receptionne_partiel'].includes(c.statut) && achat && <Btn bg="#e0f2fe" color="#0369a1" onClick={() => setRecep(c)}>📥 Réceptionner</Btn>}

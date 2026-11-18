@@ -876,8 +876,6 @@ CREATE INDEX idx_ot_statut ON ordres_travail(statut, priorite);
 -- 14. DONNÉES DE BASE
 -- ============================================================
 
--- Admin par défaut (password: Admin2026!)
-INSERT INTO utilisateurs (matricule, nom, prenom, login, password_hash, role_id, atelier_id, badge_qr)
-VALUES ('ADM001', 'Admin', 'NAIdo',
-  'admin', '$2b$10$rQZ8K1mN9pLxVvYwX3aKsuPQj7iE6nH2bF5cM0dT4gW8sR6uJ1oAe',
-  1, 8, 'BADGE-ADMIN-001');
+-- Administrateur a creer explicitement
+-- Aucun administrateur predefini : utiliser backend/scripts/create_admin.js apres initialisation.
+

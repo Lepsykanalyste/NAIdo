@@ -151,7 +151,7 @@ router.post('/:id/transformer-bc', auth, async (req, res) => {
 });
 
 // GET /api/devis/:id/pdf
-router.get('/:id/pdf', async (req, res) => {
+router.get('/:id/pdf', auth, async (req, res) => {
   try {
     const { rows: dv } = await db.query(`
       SELECT d.*, c.raison_sociale AS client_nom, c.telephone, c.email, c.adresse,

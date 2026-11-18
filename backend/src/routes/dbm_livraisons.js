@@ -117,7 +117,7 @@ router.get('/livraisons/:numero', auth, async (req, res) => {
 });
 
 // GET /api/dbm/livraisons/:numero/pdf — bon imprimable (ouvert via window.open, sans en-tete auth)
-router.get('/livraisons/:numero/pdf', async (req, res) => {
+router.get('/livraisons/:numero/pdf', auth, async (req, res) => {
   try {
     const lignes = await chargerBon(req.params.numero);
     if (!lignes.length) return res.status(404).send('<h1>Bon de livraison introuvable</h1>');
@@ -192,7 +192,7 @@ async function chargerDbm(id) {
 }
 
 // GET /api/dbm/:id/pdf — fiche DBM imprimable
-router.get('/:id/pdf', async (req, res, next) => {
+router.get('/:id/pdf', auth, async (req, res, next) => {
   if (!UUID.test(req.params.id)) return next();
   try {
     const d = await chargerDbm(req.params.id);
@@ -285,8 +285,16 @@ router.put('/:id/livrer', auth, async (req, res, next) => {
         await client.query(`UPDATE lots_stock SET qte_disponible = GREATEST(0, qte_disponible - $1) WHERE article_id = $2 AND numero_lot = $3`,
           [it.qte, l.article_id, it.lot]);
       }
-      await client.query(`UPDATE stock_articles SET qte_disponible = GREATEST(0, qte_disponible - $1) WHERE article_id = $2`,
-        [it.qte, l.article_id]);
+      // Stock magasin : la quantite est prise UNE SEULE FOIS, emplacement le plus garni d'abord
+      // (et non retiree en entier de chaque emplacement)
+      let aPrendre = it.qte;
+      const empl = await client.query(`SELECT id, qte_disponible FROM stock_articles WHERE article_id = $1 AND qte_disponible > 0 ORDER BY qte_disponible DESC, id FOR UPDATE`, [l.article_id]);
+      for (const e of empl.rows) {
+        if (aPrendre <= EPS) break;
+        const prise = Math.min(aPrendre, num(e.qte_disponible));
+        await client.query(`UPDATE stock_articles SET qte_disponible = qte_disponible - $1 WHERE id = $2`, [prise, e.id]);
+        aPrendre -= prise;
+      }
     }
 
     await client.query(`UPDATE dbm SET statut='en_preparation', livre_par=$1, date_livraison=NOW(), notes_magasin=$2 WHERE id=$3`,

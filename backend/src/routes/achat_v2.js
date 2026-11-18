@@ -230,7 +230,7 @@ router.get('/commandes/:id/receptions', auth, async (req, res, next) => {
 });
 
 // GET /commandes/:id/pdf — bon de commande
-router.get('/commandes/:id/pdf', async (req, res, next) => {
+router.get('/commandes/:id/pdf', auth, async (req, res, next) => {
   if (!UUID.test(req.params.id)) return next();
   try {
     const c = await db.query(`
@@ -278,7 +278,7 @@ router.get('/commandes/:id/pdf', async (req, res, next) => {
 });
 
 // GET /receptions/:id/pdf — bordereau de reception
-router.get('/receptions/:id/pdf', async (req, res, next) => {
+router.get('/receptions/:id/pdf', auth, async (req, res, next) => {
   if (!UUID.test(req.params.id)) return next();
   try {
     const r = await db.query(`SELECT commande_id FROM receptions_achat WHERE id=$1`, [req.params.id]);

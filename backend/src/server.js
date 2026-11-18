@@ -4,6 +4,9 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
 require('dotenv').config();
+if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32 || process.env.JWT_SECRET.startsWith('REPLACE_')) {
+  throw new Error('JWT_SECRET doit être défini (32 caractères minimum)');
+}
 
 // Import cron jobs
 require('./jobs/alertes.cron');
@@ -13,7 +16,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(helmet({ contentSecurityPolicy: false }));
-app.use(cors({ origin: process.env.FRONTEND_URL || '*', credentials: true }));
+app.use(cors({ origin: process.env.FRONTEND_URL || false, credentials: true }));
 // Rate limit global — toutes routes
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 500, standardHeaders: true, legacyHeaders: false }));
 
@@ -94,19 +97,18 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', version: '3.0.0', app: 'NAIdo ERP/MES — Green Industry' });
 });
 
+app.use('/api/at3', require('./routes/at3_flux'));
+app.use('/api/dbm', require('./routes/dbm_livraisons'));
+app.use('/api/dbm', require('./routes/dbm'));
+app.use('/api/rondes',          require('./routes/rondes'));
+app.use('/api/non-conformites', require('./routes/non_conformites'));
+app.use('/api/cessions',        require('./routes/cessions'));
+app.use('/api/regleur', require('./routes/regleur_historique'));
+
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(err.status || 500).json({ error: err.message || 'Erreur serveur' });
 });
 
-app.use('/api/at3', require('./routes/at3_flux'));
-app.use('/api/dbm', require('./routes/dbm_livraisons'));
-app.use('/api/dbm', require('./routes/dbm'));
 app.listen(PORT, () => console.log(`NAIdo v3 démarré sur le port ${PORT}`));
 module.exports = app;
-
-app.use('/api/rondes',          require('./routes/rondes'));
-app.use('/api/non-conformites', require('./routes/non_conformites'));
-app.use('/api/cessions',        require('./routes/cessions'));
-app.use('/api/regleur', require('./routes/regleur_historique'));
-// Routes additionnelles

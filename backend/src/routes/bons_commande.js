@@ -94,7 +94,7 @@ router.get('/:id/lignes', auth, async (req, res) => {
 });
 
 // GET /api/bc/:id/pdf
-router.get('/:id/pdf', async (req, res) => {
+router.get('/:id/pdf', auth, async (req, res) => {
   try {
     const { rows } = await db.query(`
       SELECT bc.*, c.raison_sociale AS client_nom, c.telephone, c.email, c.adresse,

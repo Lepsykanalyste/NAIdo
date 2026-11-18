@@ -2,6 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form, Req
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import asyncpg, os, json
+from html import escape as html_escape
 from contextlib import asynccontextmanager
 from typing import Optional, List, Any
 from pydantic import BaseModel
@@ -10,8 +11,10 @@ from pathlib import Path
 from datetime import datetime, date
 
 # ── CONFIG ─────────────────────────────────────────────────────
-DB_URL = os.getenv("DATABASE_URL", "postgresql://naido_user:NAId0ProdSecure2026xK9mQ@postgres:5432/naido_db")
-JWT_SECRET = os.getenv("JWT_SECRET", "naido_secret_2026")
+DB_URL = os.environ.get("DATABASE_URL")
+JWT_SECRET = os.environ.get("JWT_SECRET")
+if not DB_URL or not JWT_SECRET or len(JWT_SECRET) < 32 or JWT_SECRET.startswith('REPLACE_') or 'REPLACE_' in DB_URL:
+    raise RuntimeError("DATABASE_URL et JWT_SECRET (32 caracteres minimum) sont requis")
 
 # ── DB POOL ────────────────────────────────────────────────────
 pool = None
@@ -53,7 +56,7 @@ from qhse_routes import (
     get_accidents_list, get_habilitations_list
 )
 
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=[os.environ.get("FRONTEND_URL")] if os.environ.get("FRONTEND_URL") else [], allow_methods=["*"], allow_headers=["Authorization", "Content-Type"])
 
 # ── AUTH ───────────────────────────────────────────────────────
 import jwt, bcrypt
@@ -922,15 +925,21 @@ async def api_create_document(payload: dict, user=Depends(get_current_user)):
 async def api_update_doc_statut(doc_id: str, payload: dict, user=Depends(get_current_user)):
     async with pool.acquire() as conn:
         statut = payload.get("statut")
+        if not statut:
+            raise HTTPException(400, "Statut requis")
         extra = ""
+        params = [statut, doc_id]
         if statut == "approuve":
-            extra = ", date_approbation=CURRENT_DATE, approbateur_id='" + user.get("id","") + "'"
+            extra = ", date_approbation=CURRENT_DATE, approbateur_id=$3"
+            params.append(user.get("id"))
         elif statut == "en_verification":
             extra = ", date_verification=CURRENT_DATE"
         row = await conn.fetchrow(
             f"UPDATE documents_qhse SET statut=$1{extra}, updated_at=NOW() WHERE id=$2 RETURNING *",
-            statut, doc_id
+            *params
         )
+        if not row:
+            raise HTTPException(404, "Document introuvable")
         return dict(row)
 
 # ── AUDITS ────────────────────────────────────────────────────
@@ -2580,18 +2589,6 @@ Fournis:
         
         return {"resume_ia": resume, "modele": result.get("modele",""), "code": doc["code"]}
 
-@app.get("/api/qhse/documents/{doc_id}/telecharger")
-async def telecharger_document(doc_id: str, user=Depends(get_current_user)):
-    from fastapi.responses import FileResponse
-    async with pool.acquire() as conn:
-        row = await conn.fetchrow("SELECT * FROM documents_qhse WHERE id=$1", doc_id)
-        if not row: raise HTTPException(404)
-        fp = row["file_path"]
-        if not fp or not Path(fp).exists():
-            raise HTTPException(404, "Fichier non trouvé sur le serveur")
-        return FileResponse(fp, filename=row["file_name"], 
-                           media_type="application/octet-stream")
-
 # ── HEALTH CHECK ───────────────────────────────────────────────
 @app.get("/api/health")
 async def health():
@@ -2602,7 +2599,7 @@ if __name__ == "__main__":
 
 # ── PDF TICKETS ────────────────────────────────────────────────
 @app.get("/api/df/{df_id}/pdf")
-async def df_pdf(df_id: str, token: str = ""):
+async def df_pdf(df_id: str, user=Depends(get_current_user)):
     try:
         from weasyprint import HTML
         import asyncio
@@ -2626,7 +2623,8 @@ async def df_pdf(df_id: str, token: str = ""):
             """, df_id)
         if not row:
             raise HTTPException(status_code=404, detail="DF introuvable")
-        d = dict(row)
+        d = {k: html_escape(v, quote=True) if isinstance(v, str) and k != 'composition' else v
+             for k, v in dict(row).items()}
         
         from datetime import datetime
         date_str = d['created_at'].strftime('%d/%m/%Y') if d.get('created_at') else '—'
@@ -2639,7 +2637,7 @@ async def df_pdf(df_id: str, token: str = ""):
         etoiles = {1:'Basse',2:'Normale',3:'Haute',4:'Urgente',5:'Critique'}.get(d.get('priorite') or 1,'Normale')
         
         qr_text = f"NAI DF\nN: {d['numero_df']}\nARTICLE: {d['article_code']} {d['article_nom']}\nQTE: {d['quantite_demandee']} kg\nCLIENT: {d['client_nom'] or '—'}\nSTATUT: {d['statut']}\nOF: {d.get('numero_of') or '—'}"
-        pdf_url = f"{os.environ.get('APP_BASE_URL','http://192.100.100.6:8095')}/api/df/{df_id}/pdf"
+        pdf_url = f"{os.environ.get('APP_BASE_URL','http://localhost:8095')}/api/df/{df_id}/pdf"
         import qrcode as _qr, base64 as _b64, urllib.parse as _up
         from io import BytesIO as _BIO
         _q = _qr.QRCode(version=1, box_size=3, border=2, error_correction=_qr.constants.ERROR_CORRECT_M)
@@ -2739,21 +2737,10 @@ async def df_pdf(df_id: str, token: str = ""):
 
 
 @app.get("/api/df/{df_id}/view")
-async def df_view(df_id: str):
-    from fastapi.responses import HTMLResponse
-    pdf_url = f"{os.environ.get('APP_BASE_URL','http://192.100.100.6:8095')}/api/df/{df_id}/pdf"
-    html = f"""<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>DF {df_id}</title>
-<style>*{{margin:0;padding:0;box-sizing:border-box;}}body{{background:#1f2937;display:flex;flex-direction:column;height:100vh;}}
-.bar{{background:#7c3aed;color:#fff;padding:12px 16px;font-family:Arial;font-size:14px;font-weight:700;display:flex;justify-content:space-between;align-items:center;}}
-a{{color:#fff;font-size:12px;background:rgba(255,255,255,0.2);padding:6px 12px;border-radius:6px;text-decoration:none;}}
-iframe{{flex:1;width:100%;border:none;}}</style></head>
-<body>
-<div class="bar"><span>📄 Demande de Fabrication</span><a href="{pdf_url}" download>⬇ Télécharger</a></div>
-<iframe src="{pdf_url}"></iframe>
-</body></html>"""
-    return HTMLResponse(html)
+async def df_view(df_id: str, user=Depends(get_current_user)):
+    # L'ancien viewer ouvrait le PDF dans une iframe sans en-tête Bearer.
+    # Utiliser le bouton sécurisé de l'interface React.
+    raise HTTPException(status_code=410, detail="Ouvrez le PDF depuis l'interface NAIdo")
 
 # ── PDF ORDRE DE FABRICATION ───────────────────────────────────
 def _compo_html(composition_raw):
@@ -2775,8 +2762,8 @@ def _compo_html(composition_raw):
             pct = float(c.get('pct') or 0)
             total_pct += pct
             rows += f"""<tr style="background:{bg};">
-                <td style="padding:4px 8px;font-weight:700;color:#92400e;">{c.get('code','—')}</td>
-                <td style="padding:4px 8px;">{c.get('designation','—')}</td>
+                <td style="padding:4px 8px;font-weight:700;color:#92400e;">{html_escape(str(c.get('code','—')))}</td>
+                <td style="padding:4px 8px;">{html_escape(str(c.get('designation','—')))}</td>
                 <td style="padding:4px 8px;text-align:center;font-weight:700;">{pct:.1f}%</td>
             </tr>"""
         return f"""
@@ -2803,7 +2790,7 @@ def _compo_html(composition_raw):
 
 
 @app.get("/api/of/{of_id}/pdf")
-async def of_pdf(of_id: str):
+async def of_pdf(of_id: str, user=Depends(get_current_user)):
     try:
         from weasyprint import HTML
         import asyncio
@@ -2856,7 +2843,8 @@ async def of_pdf(of_id: str):
 
         if not row:
             raise HTTPException(status_code=404, detail="OF introuvable")
-        d = dict(row)
+        d = {k: html_escape(v, quote=True) if isinstance(v, str) and k != 'composition' else v
+             for k, v in dict(row).items()}
         lots_list = [dict(l) for l in lots]
 
         from datetime import datetime
@@ -2893,9 +2881,9 @@ async def of_pdf(of_id: str):
                     qte = round((pct/100)*poids_cible, 1)
                 total_pct += pct
                 total_kg += qte
-                groupe = item.get('groupe_libelle') or item.get('famille_libelle') or '-'
-                code = item.get('mp_code') or groupe
-                nom = item.get('mp_nom') or item.get('groupe_libelle') or '-'
+                groupe = html_escape(str(item.get('groupe_libelle') or item.get('famille_libelle') or '-'))
+                code = html_escape(str(item.get('mp_code') or groupe))
+                nom = html_escape(str(item.get('mp_nom') or item.get('groupe_libelle') or '-'))
                 pct_str = str(round(pct,1)) + '%'
                 qte_str = str(round(qte,1)) + ' kg'
                 rows_html += '<tr style="background:#fff;"><td style="padding:5px 8px;font-size:7pt;color:#6b7280;">' + groupe + '</td><td style="padding:5px 8px;font-weight:700;color:#92400e;">' + code + '</td><td style="padding:5px 8px;">' + nom + '</td><td style="padding:5px 8px;text-align:center;font-weight:700;">' + pct_str + '</td><td style="padding:5px 8px;text-align:center;font-weight:700;color:#15803d;">' + qte_str + '</td></tr>'
@@ -3033,7 +3021,7 @@ async def of_pdf(of_id: str):
 
 # ── PDF TICKET PRODUCTION ───────────────────────────────────────
 @app.get("/api/ticket-prod/{ticket_id}/pdf")
-async def ticket_prod_pdf(ticket_id: str):
+async def ticket_prod_pdf(ticket_id: str, user=Depends(get_current_user)):
     try:
         from weasyprint import HTML
         import asyncio, httpx
@@ -3060,7 +3048,8 @@ async def ticket_prod_pdf(ticket_id: str):
 
         if not row:
             raise HTTPException(status_code=404, detail="Ticket introuvable")
-        t = dict(row)
+        t = {k: html_escape(v, quote=True) if isinstance(v, str) else v
+             for k, v in dict(row).items()}
 
         from datetime import datetime
         client = t.get('client_nom') or t.get('client_nom_of') or 'NAI'
@@ -3076,8 +3065,13 @@ async def ticket_prod_pdf(ticket_id: str):
         }
         type_label, couleur = type_labels.get(t.get('type_ticket','extrusion'), ('🏭 PRODUCTION', '#0369a1'))
 
-        pdf_url = f"http://192.100.100.6:8095/api/ticket-prod/{ticket_id}/pdf"
-        qr_url = f"https://api.qrserver.com/v1/create-qr-code/?size=100x100&data={pdf_url.replace(':','%3A').replace('/','%2F')}&color={couleur.replace('#','')}"
+        pdf_url = f"{os.environ.get('APP_BASE_URL', 'http://localhost:8095')}/api/ticket-prod/{ticket_id}/pdf"
+        import qrcode as _qr, base64 as _b64
+        from io import BytesIO as _BIO
+        _q = _qr.make(pdf_url)
+        _buf = _BIO()
+        _q.save(_buf, format='PNG')
+        qr_url = 'data:image/png;base64,' + _b64.b64encode(_buf.getvalue()).decode()
 
         poids_net = float(t.get('poids_net_kg') or 0)
         poids_brut = float(t.get('poids_brut_kg') or 0)

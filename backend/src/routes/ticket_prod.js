@@ -2,9 +2,14 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
 const { auth } = require('../middleware/auth');
+const QRCode = require('qrcode');
+
+const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({
+  '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+})[c]);
 
 // GET /api/ticket-prod/:id — HTML du ticket
-router.get('/:id', async (req, res) => {
+router.get('/:id', auth, async (req, res) => {
   try {
     const { rows } = await db.query(`
       SELECT t.*,
@@ -26,7 +31,10 @@ router.get('/:id', async (req, res) => {
     `, [req.params.id]);
 
     if (!rows.length) return res.status(404).json({ error: 'Ticket introuvable' });
-    const t = rows[0];
+    const raw = rows[0];
+    const t = Object.fromEntries(Object.entries(raw).map(([key, value]) => [
+      key, typeof value === 'string' ? escapeHtml(value) : value
+    ]));
 
     const client = t.client_nom || t.client_nom_of || 'NAI';
     const date_str = t.date_session 
@@ -44,8 +52,8 @@ router.get('/:id', async (req, res) => {
       of_recap: '📋 RÉCAP OF'
     }[t.type_ticket] || '🏭 PRODUCTION';
 
-    const qr_data = `NAI PROD\nOF: ${t.numero_of||''}\nTICKET: ${t.numero_ticket||''}\nARTICLE: ${t.article_code||''} ${t.article_nom||''}\nMACHINE: ${t.machine_code||''}\nPOIDS NET: ${t.poids_net_kg||0} kg\nDATE: ${date_str}\nCLIENT: ${client}`;
-
+    const qrText = `NAI PROD\nOF: ${raw.numero_of || ''}\nTICKET: ${raw.numero_ticket || ''}\nARTICLE: ${raw.article_code || ''} ${raw.article_nom || ''}\nMACHINE: ${raw.machine_code || ''}\nPOIDS NET: ${raw.poids_net_kg || 0} kg\nDATE: ${date_str}\nCLIENT: ${raw.client_nom || raw.client_nom_of || 'NAI'}`;
+    const qrImage = await QRCode.toDataURL(qrText, { width: 100, margin: 1 });
     const html = `<!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -157,10 +165,10 @@ ${t.etape_dest ? `
 ` : ''}
 
 <div class="qr-wrap">
-  <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(qr_data)}&color=0369a1" 
+  <img src="${qrImage}" 
        alt="QR Code" width="100" height="100"
        onerror="this.style.display='none'"/>
-  <div class="qr-data">${qr_data}</div>
+  <div class="qr-data">${escapeHtml(qrText)}</div>
 </div>
 
 <div class="footer">
@@ -175,12 +183,14 @@ ${t.etape_dest ? `
 </html>`;
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('Content-Security-Policy', "default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'");
     res.send(html);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // GET /api/ticket-prod/of/:of_id — tous les tickets d'un OF
-router.get('/of/:of_id', async (req, res) => {
+router.get('/of/:of_id', auth, async (req, res) => {
   try {
     const { rows } = await db.query(`
       SELECT t.id, t.numero_ticket, t.type_ticket, t.created_at,

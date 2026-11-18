@@ -4,7 +4,7 @@ Logique : stock par emplacement, tout manuel, journal complet
 """
 from fastapi import APIRouter, Depends, HTTPException
 from typing import Optional
-import asyncpg, json
+import asyncpg, json, math
 from datetime import datetime
 
 router = APIRouter(prefix="/api/stock", tags=["stock"])
@@ -69,28 +69,24 @@ async def inventaire_handler(pool, search=None, atelier_id=None, type_article=No
 async def resume_handler(pool):
     async with pool.acquire() as conn:
         row = await conn.fetchrow("""
-            SELECT
-                COUNT(DISTINCT sa.article_id) AS nb_articles,
-                COUNT(DISTINCT sa.emplacement_id) AS nb_emplacements,
-                COALESCE(SUM(sa.qte_disponible), 0) AS qte_totale,
-                COALESCE(SUM(sa.valeur_stock), 0) AS valeur_totale,
-                COUNT(*) FILTER (
-                    WHERE sa.qte_disponible <= COALESCE(a.stock_mini, 0)
-                    AND COALESCE(a.stock_mini, 0) > 0
-                ) AS nb_alertes,
-                COUNT(DISTINCT ls.id) FILTER (WHERE ls.statut = 'disponible') AS nb_lots_actifs,
-                COUNT(DISTINCT ls.id) FILTER (
-                    WHERE ls.date_dlc IS NOT NULL AND ls.date_dlc < CURRENT_DATE
-                ) AS nb_lots_expires,
-                COUNT(DISTINCT ls.id) FILTER (
-                    WHERE ls.date_dlc IS NOT NULL
-                    AND ls.date_dlc >= CURRENT_DATE
-                    AND ls.date_dlc <= CURRENT_DATE + INTERVAL '30 days'
-                ) AS nb_lots_proches
-            FROM stock_articles sa
-            JOIN articles a ON a.id = sa.article_id
-            LEFT JOIN lots_stock ls ON ls.article_id = sa.article_id
-            WHERE a.actif = true
+            WITH stock_metrics AS (
+                SELECT COUNT(DISTINCT sa.article_id) AS nb_articles,
+                       COUNT(DISTINCT sa.emplacement_id) AS nb_emplacements,
+                       COALESCE(SUM(sa.qte_disponible),0) AS qte_totale,
+                       COALESCE(SUM(sa.valeur_stock),0) AS valeur_totale,
+                       COUNT(*) FILTER (
+                           WHERE sa.qte_disponible <= COALESCE(a.stock_mini,0)
+                             AND COALESCE(a.stock_mini,0) > 0
+                       ) AS nb_alertes
+                FROM stock_articles sa JOIN articles a ON a.id=sa.article_id
+                WHERE a.actif=true
+            ), lot_metrics AS (
+                SELECT COUNT(*) FILTER (WHERE ls.statut='disponible') AS nb_lots_actifs,
+                       COUNT(*) FILTER (WHERE ls.date_dlc IS NOT NULL AND ls.date_dlc<CURRENT_DATE) AS nb_lots_expires,
+                       COUNT(*) FILTER (WHERE ls.date_dlc BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days') AS nb_lots_proches
+                FROM lots_stock ls JOIN articles a ON a.id=ls.article_id
+                WHERE a.actif=true
+            ) SELECT * FROM stock_metrics CROSS JOIN lot_metrics
         """)
         return dict(row)
 

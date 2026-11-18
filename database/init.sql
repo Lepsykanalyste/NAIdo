@@ -330,11 +330,8 @@ GROUP BY sp.machine_id, m.code, m.nom, sp.date_session, sp.shift_id, sh.nom;
 
 -- ============================================================
 -- UTILISATEUR ADMIN PAR DÉFAUT
--- password: Admin2026! (bcrypt hash)
+-- Mot de passe admin : jamais stocke dans les scripts
 -- ============================================================
 
-INSERT INTO utilisateurs (nom, prenom, login, password_hash, role_id, badge_qr) VALUES
-  ('Admin', 'NAIdo', 'admin',
-   '$2b$10$rQZ8K1mN9pLxVvYwX3aKsuPQj7iE6nH2bF5cM0dT4gW8sR6uJ1oAe',
-   (SELECT id FROM roles WHERE nom = 'chef_atelier'),
-   'BADGE-ADMIN-001');
+-- Aucun administrateur predefini : utiliser backend/scripts/create_admin.js apres initialisation.
+

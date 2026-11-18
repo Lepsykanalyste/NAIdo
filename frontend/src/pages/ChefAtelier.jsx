@@ -11,6 +11,7 @@ import ControleAvantCession from './ControleAvantCession';
 import { CompositionFicheArticle, CompositionOF } from './CompositionArticle';
 import AchatsV2, { ArticlesDivers, DashboardAchat, DemandesAchatAtelier, SectionStockBas } from './Achats';
 import toast from 'react-hot-toast';
+import { ouvrirPdfSecurise, telechargerSecurise } from '../utils/pdf';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
 const API = '/api';
@@ -384,7 +385,7 @@ function GestionDevis() {
                     <span style={{background:bgStatut(d.statut),color:couleurStatut(d.statut),padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:700}}>{labelStatut(d.statut)}</span>
                   </td>
                   <td style={{padding:'9px 12px',display:'flex',gap:5}}>
-                    <button onClick={()=>window.open(`/api/devis/${d.id}/pdf`,'_blank')} style={{background:'#e0f2fe',color:'#0891b2',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>🖨</button>
+                    <button onClick={()=>ouvrirPdfSecurise(`/api/devis/${d.id}/pdf`)} style={{background:'#e0f2fe',color:'#0891b2',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>🖨</button>
                     {(d.statut==='brouillon'||d.statut==='envoye')&&<button onClick={()=>setShowEmail(d)} style={{background:'#fef3c7',color:'#d97706',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>✉ Email</button>}
                     {d.statut==='brouillon'&&<button onClick={()=>changerStatut(d.id,'envoye')} style={{background:'#dbeafe',color:'#0369a1',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>📤</button>}
                     {d.statut==='envoye'&&<button onClick={()=>changerStatut(d.id,'accepte')} style={{background:'#dcfce7',color:'#15803d',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>✓</button>}
@@ -868,7 +869,7 @@ function GestionBC() {
                   </td>
                   <td style={{padding:'9px 12px',fontWeight:600,color:'#7c3aed',fontSize:12}}>{b.numero_df||'—'}</td>
                   <td style={{padding:'9px 12px',display:'flex',gap:6}}>
-                    <button onClick={()=>window.open(`/api/bc/${b.id}/pdf`,'_blank')} style={{background:'#e0f2fe',color:'#0369a1',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>🖨 PDF</button>
+                    <button onClick={()=>ouvrirPdfSecurise(`/api/bc/${b.id}/pdf`)} style={{background:'#e0f2fe',color:'#0369a1',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>🖨 PDF</button>
                     {b.statut==='recu' && (
                       <button onClick={()=>ouvrirDfModal(b)} style={{background:'#f5f3ff',color:'#7c3aed',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11,fontWeight:700}}>→ DF</button>
                     )}
@@ -918,7 +919,7 @@ function GestionBC() {
                 Total TTC : {bcDetailLignes.reduce((s,l)=>s+parseFloat(l.montant_ttc||0),0).toLocaleString('fr-FR')} FCFA
               </div>
               <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:16}}>
-                <button onClick={()=>window.open(`/api/bc/${bcDetail.id}/pdf`,'_blank')}
+                <button onClick={()=>ouvrirPdfSecurise(`/api/bc/${bcDetail.id}/pdf`)}
                   style={{padding:'8px 16px',borderRadius:8,border:'none',background:'#0369a1',color:'#fff',cursor:'pointer',fontSize:13}}>🖨 PDF</button>
                 <button onClick={()=>setBcDetail(null)}
                   style={{padding:'8px 16px',borderRadius:8,border:'1px solid #e5e7eb',background:'#f9fafb',cursor:'pointer',fontSize:13}}>Fermer</button>
@@ -1018,7 +1019,7 @@ function MenuActionsDF({ df, isDir, user, onValider, onRefuser, onAnnuler, onMod
                 </div>
                 {df.description && <div style={{background:"#faf5ff",borderRadius:8,padding:12,fontSize:13,marginBottom:12}}><strong>Description :</strong> {df.description}</div>}
                 <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                  <button onClick={()=>window.open("/api/df/"+df.id+"/pdf","_blank")} style={{background:"#7c3aed",color:"#fff",border:"none",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:13}}>🖨 PDF</button>
+                  <button onClick={()=>ouvrirPdfSecurise("/api/df/"+df.id+"/pdf")} style={{background:"#7c3aed",color:"#fff",border:"none",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:13}}>🖨 PDF</button>
                   {df.statut==="en_attente" && isDir && <button onClick={()=>{onValider();setShow(false);}} style={{background:"#dcfce7",color:"#15803d",border:"none",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:13,fontWeight:700}}>✓ Valider → OF</button>}
                   {df.statut==="en_attente" && isDir && <button onClick={()=>{const m=window.prompt("Motif refus :");if(m){onRefuser(m);setShow(false);}}} style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:13}}>✗ Refuser</button>}
                   <button onClick={()=>{onAnnuler();setShow(false);}} style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:13}}>🗑 Annuler</button>
@@ -1378,7 +1379,7 @@ function DemandesFabrication() {
                   </td>
                   <td style={{padding:'9px 12px',fontSize:12,color:'#0369a1',fontWeight:600}}>{df.numero_of||'—'}</td>
                   <td style={{padding:'9px 12px',textAlign:'center'}}>
-                    <button onClick={()=>window.open(`/api/df/${df.id}/pdf?t=${Date.now()}`,'_blank')}
+                    <button onClick={()=>ouvrirPdfSecurise(`/api/df/${df.id}/pdf?t=${Date.now()}`)}
                       title="Imprimer PDF"
                       style={{background:'#f5f3ff',color:'#7c3aed',border:'none',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:12}}>
                       🖨 PDF
@@ -1450,7 +1451,7 @@ function DemandesFabrication() {
                   )}
                   {dfSelectionne.description && <div style={{background:'#faf5ff',borderRadius:8,padding:12,fontSize:13,marginBottom:12}}><strong>Description :</strong> {dfSelectionne.description}</div>}
                   <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-                    <button onClick={()=>window.open('/api/df/'+dfSelectionne.id+'/pdf','_blank')} style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:8,padding:'8px 14px',cursor:'pointer',fontSize:13}}>🖨 PDF</button>
+                    <button onClick={()=>ouvrirPdfSecurise('/api/df/'+dfSelectionne.id+'/pdf')} style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:8,padding:'8px 14px',cursor:'pointer',fontSize:13}}>🖨 PDF</button>
                     {dfSelectionne.statut==='en_attente' && isDir && <button onClick={()=>{setShowValider(dfSelectionne);chargerMachines('AT3');setDfSelectionne(null);}} style={{background:'#dcfce7',color:'#15803d',border:'none',borderRadius:8,padding:'8px 14px',cursor:'pointer',fontSize:13,fontWeight:700}}>✓ Valider</button>}
                     {dfSelectionne.statut==='en_attente' && isDir && <button onClick={()=>{const m=window.prompt('Motif refus :');if(m){refuser(dfSelectionne.id,m);setDfSelectionne(null);}}} style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:8,padding:'8px 14px',cursor:'pointer',fontSize:13}}>✗ Refuser</button>}
                     <button onClick={()=>{annulerDF(dfSelectionne.id);setDfSelectionne(null);}} style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:8,padding:'8px 14px',cursor:'pointer',fontSize:13}}>🗑 Annuler</button>
@@ -2103,7 +2104,7 @@ function OrdresFabrication({ setOngletActif }) {
                 </td>
                 <td style={{padding:'9px 12px',textAlign:'center'}} onClick={e=>e.stopPropagation()}>
                   <button
-onClick={()=>window.open(`/api/of/${of.id}/pdf`,'_blank')}
+onClick={()=>ouvrirPdfSecurise(`/api/of/${of.id}/pdf`)}
                     title="Voir tickets"
                     style={{background:'#e0f2fe',color:'#0369a1',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>
                     🖨
@@ -4781,7 +4782,7 @@ function QHSE() {
                       <td style={{padding:'9px 12px'}}>
                         <div style={{display:'flex',gap:5}}>
                           {d.file_path&&<button onClick={async()=>{
-                            try{window.open(`${API}/qhse/documents/${d.id}/telecharger`,'_blank');}
+                            try{telechargerSecurise(`${API}/qhse/documents/${d.id}/telecharger`, d.file_name || d.titre || 'document');}
                             catch{toast.error('Erreur téléchargement');}
                           }} style={{background:'#dbeafe',color:'#1d4ed8',border:'none',padding:'3px 8px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>⬇</button>}
                           {d.statut==='brouillon'&&<button onClick={async()=>{await axios.put(`${API}/qhse/documents/${d.id}/statut`,{statut:'approuve'});chargerOnglet('documents');toast.success('Approuvé');}}
@@ -6315,7 +6316,7 @@ function KPIRapports() {
                   <td style={{ padding:'10px 14px', fontFamily:'monospace', fontSize:12 }}>{r.periode_debut} → {r.periode_fin}</td>
                   <td style={{ padding:'10px 14px', fontSize:12, color:'#6b7280' }}>{new Date(r.created_at).toLocaleString('fr-FR')}</td>
                   <td style={{ padding:'10px 14px', display:'flex', gap:6 }}>
-                    {r.pdf_id && <button onClick={async()=>{const {data}=await axios.get(`${API}/rapports/${r.pdf_id}/pdf`,{responseType:'blob'});const url=URL.createObjectURL(data);window.open(url,'_blank');}} style={{ background:'#fee2e2', color:'#dc2626', border:'1px solid #fca5a5', padding:'3px 10px', borderRadius:6, cursor:'pointer', fontSize:11 }}>📄 PDF</button>}
+                    {r.pdf_id && <button onClick={async()=>{const {data}=await axios.get(`${API}/rapports/${r.pdf_id}/pdf`,{responseType:'blob'});const url=URL.createObjectURL(data);ouvrirPdfSecurise(url);}} style={{ background:'#fee2e2', color:'#dc2626', border:'1px solid #fca5a5', padding:'3px 10px', borderRadius:6, cursor:'pointer', fontSize:11 }}>📄 PDF</button>}
                     {r.excel_id && <button onClick={async()=>{const {data}=await axios.get(`${API}/rapports/${r.excel_id}/excel`,{responseType:'blob'});const url=URL.createObjectURL(data);const a=document.createElement('a');a.href=url;a.download='rapport.xlsx';a.click();}} style={{ background:'#dcfce7', color:'#15803d', border:'1px solid #86efac', padding:'3px 10px', borderRadius:6, cursor:'pointer', fontSize:11 }}>📊 Excel</button>}
                   </td>
                 </tr>
@@ -7428,7 +7429,7 @@ function OrdresLivraison() {
                   <td style={{padding:'9px 12px'}}><span style={{background:bgOL(ol.statut),color:clOL(ol.statut),padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:700}}>{lbOL(ol.statut)}</span></td>
                   <td style={{padding:'9px 12px',textAlign:'center'}}>{ol.est_derogatoire?'⚠ Oui':'—'}</td>
                   <td style={{padding:'9px 12px'}}><div style={{display:'flex',gap:5,alignItems:'center'}}>
-                    <button onClick={()=>window.open(`/api/ol/${ol.id}/pdf`,'_blank')} style={{background:'#e0f2fe',color:'#0891b2',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>🖨</button>
+                    <button onClick={()=>ouvrirPdfSecurise(`/api/ol/${ol.id}/pdf`)} style={{background:'#e0f2fe',color:'#0891b2',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>🖨</button>
                       <button onClick={()=>{setOlEdit(ol);ouvrirModalEdit(ol);}} style={{background:'#fef3c7',color:'#d97706',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>✏</button>
                     <select value={ol.statut} onChange={e=>changerStatut(ol.id,e.target.value)} style={{padding:'4px 6px',borderRadius:6,border:'1px solid #e5e7eb',fontSize:11}}>
                       <option value="brouillon">Brouillon</option><option value="confirme">Confirmé</option><option value="en_livraison">En livraison</option><option value="livre">Livré</option><option value="annule">Annulé</option>
@@ -7540,7 +7541,7 @@ function OrdresLivraison() {
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
               <div style={{fontWeight:800,fontSize:16,color:'#15803d'}}>{olDetail.numero_ol}</div>
               <div style={{display:'flex',gap:8}}>
-                <button onClick={()=>window.open(`/api/ol/${olDetail.id}/pdf`,'_blank')} style={{background:'#e0f2fe',color:'#0891b2',border:'none',borderRadius:6,padding:'5px 12px',cursor:'pointer',fontSize:12,fontWeight:600}}>🖨 PDF</button>
+                <button onClick={()=>ouvrirPdfSecurise(`/api/ol/${olDetail.id}/pdf`)} style={{background:'#e0f2fe',color:'#0891b2',border:'none',borderRadius:6,padding:'5px 12px',cursor:'pointer',fontSize:12,fontWeight:600}}>🖨 PDF</button>
                 <button onClick={()=>setOlDetail(null)} style={{background:'none',border:'none',fontSize:20,cursor:'pointer',color:'#9ca3af'}}>✕</button>
               </div>
             </div>

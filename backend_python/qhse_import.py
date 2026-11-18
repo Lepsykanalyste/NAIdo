@@ -92,7 +92,7 @@ async def importer_zip(zip_path: str, upload_dir: str = "/app/uploads/qhse"):
     """Import d'un ZIP de documents QHSE"""
     import zipfile, shutil
     
-    DB_URL = os.environ.get("DATABASE_URL", "postgresql://naido_user:naido_pass_2026@localhost:5436/naido_db")
+    DB_URL = os.environ["DATABASE_URL"]
     conn = await asyncpg.connect(DB_URL)
     
     zip_path = Path(zip_path)
