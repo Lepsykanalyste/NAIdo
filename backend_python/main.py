@@ -9,6 +9,7 @@ from pydantic import BaseModel
 import uvicorn
 from pathlib import Path
 from datetime import datetime, date
+from rbac import RbacMiddleware
 
 # ── CONFIG ─────────────────────────────────────────────────────
 DB_URL = os.environ.get("DATABASE_URL")
@@ -56,6 +57,7 @@ from qhse_routes import (
     get_accidents_list, get_habilitations_list
 )
 
+app.add_middleware(RbacMiddleware)   # controle d'acces par role (permissions.json), place avant CORS pour que les refus portent les en-tetes CORS
 app.add_middleware(CORSMiddleware, allow_origins=[os.environ.get("FRONTEND_URL")] if os.environ.get("FRONTEND_URL") else [], allow_methods=["*"], allow_headers=["Authorization", "Content-Type"])
 
 # ── AUTH ───────────────────────────────────────────────────────
@@ -2022,6 +2024,8 @@ async def create_utilisateur(payload: dict, user=Depends(get_current_user)):
         d = payload
         if not d.get("login") or not d.get("password"):
             raise HTTPException(400, "Login et mot de passe requis")
+        if str(d.get("role") or "operateur").lower() in ("super_admin", "directeur") and not is_super_admin(user):
+            raise HTTPException(403, "Seul le super administrateur peut creer un compte direction")
         
         # Vérifier login unique
         existing = await conn.fetchval("SELECT id FROM utilisateurs WHERE login=$1", d["login"])
@@ -2063,7 +2067,12 @@ async def create_utilisateur(payload: dict, user=Depends(get_current_user)):
 async def update_utilisateur(user_id: str, payload: dict, user=Depends(get_current_user)):
     async with pool.acquire() as conn:
         d = payload
-        sets, vals = ["role=$1","actif=$2","atelier_id=$3"], [
+        cible = await conn.fetchrow("SELECT COALESCE(u.role, r.nom) AS role FROM utilisateurs u LEFT JOIN roles r ON r.id=u.role_id WHERE u.id=$1", user_id)
+        if not cible:
+            raise HTTPException(404, "Utilisateur introuvable")
+        if not is_super_admin(user) and (str(cible["role"] or "").lower() in ("super_admin", "directeur") or str(d.get("role") or "").lower() in ("super_admin", "directeur")):
+            raise HTTPException(403, "Seul le super administrateur peut modifier un compte direction ou attribuer ce role")
+        sets, vals = ["role=COALESCE($1,role)","actif=$2","atelier_id=$3"], [
             d.get("role"), bool(d.get("actif",True)),
             int(d["atelier_id"]) if d.get("atelier_id") else None
         ]
@@ -2075,7 +2084,7 @@ async def update_utilisateur(user_id: str, payload: dict, user=Depends(get_curre
             vals.append(d["prenom"]); sets.append(f"prenom=${len(vals)}")
         vals.append(user_id)
         row = await conn.fetchrow(
-            f"UPDATE utilisateurs SET {','.join(sets)} WHERE id=${len(vals)} RETURNING *",
+            f"UPDATE utilisateurs SET {','.join(sets)} WHERE id=${len(vals)} RETURNING id, login, nom, prenom, email, role, actif, atelier_id, created_at",
             *vals
         )
         return dict(row)
@@ -2087,6 +2096,11 @@ async def reset_password(user_id: str, payload: dict, user=Depends(get_current_u
         new_pwd = payload.get("password")
         if not new_pwd or len(new_pwd) < 6:
             raise HTTPException(400, "Mot de passe trop court (min 6 caractères)")
+        cible = await conn.fetchrow("SELECT COALESCE(u.role, r.nom) AS role FROM utilisateurs u LEFT JOIN roles r ON r.id=u.role_id WHERE u.id=$1", user_id)
+        if not cible:
+            raise HTTPException(404, "Utilisateur introuvable")
+        if str(cible["role"] or "").lower() in ("super_admin", "directeur") and not is_super_admin(user):
+            raise HTTPException(403, "Seul le super administrateur peut reinitialiser le mot de passe d'un compte direction")
         pwd_hash = bcrypt.hashpw(new_pwd.encode(), bcrypt.gensalt()).decode()
         await conn.execute(
             "UPDATE utilisateurs SET password_hash=$1 WHERE id=$2",

@@ -66,17 +66,17 @@ export default function App() {
           </PrivateRoute>
         }/>
         <Route path="/ronde/*" element={
-          <PrivateRoute roles={['chef_atelier','admin']}>
+          <PrivateRoute roles={['chef_atelier','directeur','super_admin']}>
             <RondeChef/>
           </PrivateRoute>
         }/>
         <Route path="/non-conformite/*" element={
-          <PrivateRoute roles={['qualite','chef_atelier','admin']}>
+          <PrivateRoute roles={['qualite','chef_atelier','directeur','super_admin']}>
             <NonConformite/>
           </PrivateRoute>
         }/>
         <Route path="/cession/*" element={
-          <PrivateRoute roles={['qualite','chef_atelier','admin']}>
+          <PrivateRoute roles={['qualite','chef_atelier','directeur','super_admin']}>
             <ControleAvantCession/>
           </PrivateRoute>
         }/>

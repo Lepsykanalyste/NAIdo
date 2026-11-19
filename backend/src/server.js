@@ -32,6 +32,7 @@ const loginLimiter = rateLimit({
 app.use('/api/auth/login', loginLimiter);
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true }));
+app.use('/api', require('./middleware/rbac'));   // controle d'acces par role (config/permissions.json)
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // ── ROUTES ────────────────────────────────────────────────────

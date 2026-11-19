@@ -137,6 +137,7 @@ const MENU = [
   { id:'ronde',       label:'Ronde Chef de Quart',  icon:'qhse',        color:'#d97706' },
   { id:'nc',          label:'Non-Conformités',       icon:'qhse',        color:'#dc2626' },
   { id:'cession_ctrl',label:'Contrôle Avant Cession',icon:'cession',    color:'#059669' },
+  { id:'qhse',        label:'QHSE',                icon:'qhse',        color:'#16a34a' },
   { id:'gmao',        label:'GMAO / Maintenance',  icon:'gmao',        color:'#92400e' },
 
   { id:'separator4b', label:'RESSOURCES HUMAINES', separator:true },
@@ -176,11 +177,17 @@ const MENU_PAR_ROLE = {
   technicien:    ['dashboard','separator3','gmao','alertes'],
   achat:         ['dashboard','separator2','matieres','articles_divers','referentiels','fournisseurs','achat','alertes'],
   vente:         ['dashboard','separator2b','clients','vente','alertes'],
+  responsable_qhse:  ['dashboard','separator3','qhse','gmao','alertes'],
+  responsable_rh:    ['dashboard','separator4b','rh','alertes'],
+  technicien_gmao:   ['dashboard','separator3','gmao','alertes'],
+  responsable_stock: ['dashboard','separator2','stock','cession','alertes'],
+  comptable:         ['dashboard','separator2','stock','separator2b','vente','achat','alertes'],
 };
 
 function getMenuFiltre(role) {
   const autorise = MENU_PAR_ROLE[role];
-  if (!autorise) return MENU; // super_admin et directeur voient tout
+  if (autorise === null) return MENU; // super_admin et directeur voient tout
+  if (!autorise) return MENU.filter(item => ['dashboard', 'alertes'].includes(item.id)); // role inconnu : acces minimal
   return MENU.filter(item => autorise.includes(item.id));
 }
 

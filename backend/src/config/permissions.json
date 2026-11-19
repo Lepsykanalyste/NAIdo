@@ -1,0 +1,910 @@
+{
+ "version": 1,
+ "description": "Droits par role pour NAIdo. Source unique lue par le serveur Node ET par le serveur Python. directeur et super_admin ont acces a tout, sauf aux regles 'super_admin_seulement'.",
+ "alias": {
+  "responsable_qhse": "qhse",
+  "responsable_rh": "rh",
+  "technicien_gmao": "technicien",
+  "responsable_stock": "magasinier_central"
+ },
+ "publiques": [
+  {
+   "methodes": [
+    "POST"
+   ],
+   "motif": "/api/auth/login"
+  },
+  {
+   "methodes": [
+    "POST"
+   ],
+   "motif": "/api/auth/login-badge"
+  },
+  {
+   "methodes": [
+    "GET"
+   ],
+   "motif": "/api/health"
+  },
+  {
+   "methodes": [
+    "GET"
+   ],
+   "motif": "/api/tickets/*/view"
+  },
+  {
+   "methodes": [
+    "GET"
+   ],
+   "motif": "/api/regleur/ticket/*/view"
+  }
+ ],
+ "tous_connectes": [
+  {
+   "methodes": [
+    "GET"
+   ],
+   "motif": "/api/permissions/moi"
+  },
+  {
+   "methodes": [
+    "GET",
+    "PUT",
+    "POST"
+   ],
+   "motif": "/api/alertes"
+  },
+  {
+   "methodes": [
+    "GET"
+   ],
+   "motif": "/api/ateliers"
+  },
+  {
+   "methodes": [
+    "GET"
+   ],
+   "motif": "/api/kpi/dashboard"
+  },
+  {
+   "methodes": [
+    "GET"
+   ],
+   "motif": "/api/kpi/trs"
+  },
+  {
+   "methodes": [
+    "GET"
+   ],
+   "motif": "/api/kpi/rebus"
+  },
+  {
+   "methodes": [
+    "GET"
+   ],
+   "motif": "/api/gmao/dashboard"
+  },
+  {
+   "methodes": [
+    "GET"
+   ],
+   "motif": "/api/gmao/energie/dashboard"
+  },
+  {
+   "methodes": [
+    "GET"
+   ],
+   "motif": "/api/rh/dashboard"
+  },
+  {
+   "methodes": [
+    "GET"
+   ],
+   "motif": "/api/qhse/dashboard"
+  },
+  {
+   "methodes": [
+    "GET"
+   ],
+   "motif": "/api/stock/resume"
+  }
+ ],
+ "super_admin_seulement": [
+  {
+   "methodes": [
+    "POST",
+    "PUT",
+    "PATCH",
+    "DELETE"
+   ],
+   "motif": "/api/permissions"
+  }
+ ],
+ "regles": [
+  {
+   "motif": "/api/achat",
+   "lecture": [
+    "achat",
+    "chef_atelier",
+    "commercial",
+    "directeur",
+    "magasinier",
+    "magasinier_at3",
+    "magasinier_central",
+    "magasinier_mp",
+    "qhse",
+    "rh",
+    "super_admin",
+    "technicien",
+    "vente",
+    "comptable"
+   ],
+   "ecriture": [
+    "achat",
+    "chef_atelier",
+    "directeur",
+    "super_admin"
+   ]
+  },
+  {
+   "motif": "/api/arrets",
+   "lecture": [
+    "chef_atelier",
+    "technicien",
+    "qhse",
+    "regleur",
+    "technicien_regleur"
+   ],
+   "ecriture": [
+    "operateur",
+    "operateur_ext",
+    "operateur_sou",
+    "operateur_imp",
+    "operateur_dec"
+   ]
+  },
+  {
+   "motif": "/api/articles",
+   "lecture": [
+    "achat",
+    "chef_atelier",
+    "commercial",
+    "directeur",
+    "magasinier",
+    "magasinier_at3",
+    "magasinier_central",
+    "super_admin",
+    "vente",
+    "comptable"
+   ],
+   "ecriture": [
+    "achat",
+    "directeur",
+    "super_admin"
+   ]
+  },
+  {
+   "motif": "/api/at3",
+   "lecture": [
+    "chef_atelier",
+    "directeur",
+    "magasinier_mp",
+    "super_admin"
+   ],
+   "ecriture": [
+    "chef_atelier",
+    "directeur",
+    "super_admin"
+   ]
+  },
+  {
+   "motif": "/api/ateliers",
+   "lecture": [
+    "achat",
+    "chef_atelier",
+    "directeur",
+    "magasinier",
+    "magasinier_at3",
+    "magasinier_central",
+    "qhse",
+    "rh",
+    "super_admin",
+    "technicien"
+   ],
+   "ecriture": [
+    "achat",
+    "directeur",
+    "super_admin"
+   ]
+  },
+  {
+   "motif": "/api/bc",
+   "lecture": [
+    "commercial",
+    "directeur",
+    "super_admin",
+    "comptable"
+   ],
+   "ecriture": [
+    "commercial",
+    "directeur",
+    "super_admin"
+   ]
+  },
+  {
+   "motif": "/api/cessions",
+   "lecture": [
+    "chef_atelier",
+    "directeur",
+    "qualite",
+    "super_admin"
+   ],
+   "ecriture": [
+    "chef_atelier",
+    "directeur",
+    "qualite",
+    "super_admin"
+   ]
+  },
+  {
+   "motif": "/api/composition",
+   "lecture": [
+    "directeur",
+    "super_admin",
+    "chef_atelier",
+    "commercial"
+   ],
+   "ecriture": [
+    "directeur",
+    "super_admin",
+    "chef_atelier",
+    "commercial"
+   ]
+  },
+  {
+   "motif": "/api/dbm",
+   "lecture": [
+    "chef_atelier",
+    "directeur",
+    "magasinier_mp",
+    "super_admin"
+   ],
+   "ecriture": [
+    "chef_atelier",
+    "directeur",
+    "magasinier_mp",
+    "super_admin"
+   ]
+  },
+  {
+   "motif": "/api/devis",
+   "lecture": [
+    "commercial",
+    "directeur",
+    "super_admin",
+    "comptable"
+   ],
+   "ecriture": [
+    "commercial",
+    "directeur",
+    "super_admin"
+   ]
+  },
+  {
+   "motif": "/api/df",
+   "lecture": [
+    "commercial",
+    "directeur",
+    "super_admin",
+    "comptable"
+   ],
+   "ecriture": [
+    "commercial",
+    "directeur",
+    "super_admin"
+   ]
+  },
+  {
+   "motif": "/api/emplacements",
+   "lecture": [
+    "directeur",
+    "magasinier",
+    "magasinier_at3",
+    "magasinier_central",
+    "super_admin",
+    "comptable"
+   ],
+   "ecriture": [
+    "magasinier",
+    "magasinier_at3",
+    "magasinier_central"
+   ]
+  },
+  {
+   "motif": "/api/equipements",
+   "lecture": [
+    "regleur",
+    "technicien_regleur",
+    "chef_atelier",
+    "directeur",
+    "qhse",
+    "rh",
+    "super_admin",
+    "technicien"
+   ],
+   "ecriture": [
+    "chef_atelier",
+    "directeur",
+    "qhse",
+    "rh",
+    "super_admin",
+    "technicien"
+   ]
+  },
+  {
+   "motif": "/api/fichiers-article",
+   "lecture": [],
+   "ecriture": [
+    "achat",
+    "directeur",
+    "super_admin"
+   ]
+  },
+  {
+   "motif": "/api/fournisseurs",
+   "lecture": [
+    "chef_atelier",
+    "directeur",
+    "qhse",
+    "super_admin",
+    "technicien",
+    "comptable"
+   ],
+   "ecriture": []
+  },
+  {
+   "motif": "/api/gmao",
+   "lecture": [
+    "chef_atelier",
+    "directeur",
+    "qhse",
+    "rh",
+    "super_admin",
+    "technicien"
+   ],
+   "ecriture": [
+    "chef_atelier",
+    "directeur",
+    "qhse",
+    "rh",
+    "super_admin",
+    "technicien"
+   ]
+  },
+  {
+   "motif": "/api/ia",
+   "lecture": [],
+   "ecriture": []
+  },
+  {
+   "motif": "/api/ia/analyser-nc",
+   "lecture": [],
+   "ecriture": [
+    "chef_atelier",
+    "qualite",
+    "qhse"
+   ]
+  },
+  {
+   "motif": "/api/ia/analyser-panne",
+   "lecture": [],
+   "ecriture": [
+    "chef_atelier",
+    "technicien",
+    "qhse"
+   ]
+  },
+  {
+   "motif": "/api/ia/analyser-processus",
+   "lecture": [],
+   "ecriture": [
+    "qhse"
+   ]
+  },
+  {
+   "motif": "/api/ia/analyser-stock",
+   "lecture": [],
+   "ecriture": [
+    "chef_atelier",
+    "magasinier",
+    "magasinier_at3",
+    "magasinier_central",
+    "magasinier_mp"
+   ]
+  },
+  {
+   "motif": "/api/ia/chat",
+   "lecture": [],
+   "ecriture": []
+  },
+  {
+   "motif": "/api/ia/rapport-journalier",
+   "lecture": [],
+   "ecriture": [
+    "chef_atelier"
+   ]
+  },
+  {
+   "motif": "/api/import",
+   "lecture": [
+    "chef_atelier"
+   ],
+   "ecriture": [
+    "chef_atelier"
+   ]
+  },
+  {
+   "motif": "/api/incidents",
+   "lecture": [
+    "chef_atelier",
+    "directeur",
+    "qhse",
+    "rh",
+    "super_admin",
+    "technicien"
+   ],
+   "ecriture": [
+    "chef_atelier",
+    "directeur",
+    "qhse",
+    "rh",
+    "super_admin",
+    "technicien"
+   ]
+  },
+  {
+   "motif": "/api/kpi",
+   "lecture": [
+    "chef_atelier",
+    "directeur",
+    "super_admin",
+    "comptable"
+   ],
+   "ecriture": []
+  },
+  {
+   "motif": "/api/logs",
+   "lecture": [],
+   "ecriture": []
+  },
+  {
+   "motif": "/api/lots-prod",
+   "lecture": [
+    "chef_atelier",
+    "directeur",
+    "operateur",
+    "operateur_dec",
+    "operateur_ext",
+    "operateur_imp",
+    "operateur_sou",
+    "qualite",
+    "super_admin",
+    "regleur",
+    "technicien_regleur"
+   ],
+   "ecriture": [
+    "chef_atelier",
+    "directeur",
+    "super_admin"
+   ]
+  },
+  {
+   "motif": "/api/machines",
+   "lecture": [
+    "chef_atelier",
+    "commercial",
+    "directeur",
+    "qualite",
+    "super_admin",
+    "operateur",
+    "operateur_ext",
+    "operateur_sou",
+    "operateur_imp",
+    "operateur_dec",
+    "regleur",
+    "technicien_regleur",
+    "technicien",
+    "qhse"
+   ],
+   "ecriture": []
+  },
+  {
+   "motif": "/api/mouvements",
+   "lecture": [
+    "chef_atelier",
+    "directeur",
+    "magasinier",
+    "magasinier_at3",
+    "magasinier_central",
+    "super_admin",
+    "comptable"
+   ],
+   "ecriture": [
+    "chef_atelier",
+    "directeur",
+    "magasinier",
+    "magasinier_at3",
+    "magasinier_central",
+    "super_admin"
+   ]
+  },
+  {
+   "motif": "/api/non-conformites",
+   "lecture": [
+    "chef_atelier",
+    "directeur",
+    "qualite",
+    "super_admin"
+   ],
+   "ecriture": [
+    "chef_atelier",
+    "directeur",
+    "qualite",
+    "super_admin"
+   ]
+  },
+  {
+   "motif": "/api/of",
+   "lecture": [
+    "chef_atelier",
+    "directeur",
+    "operateur",
+    "operateur_dec",
+    "operateur_ext",
+    "operateur_imp",
+    "operateur_sou",
+    "qualite",
+    "regleur",
+    "super_admin",
+    "technicien_regleur"
+   ],
+   "ecriture": [
+    "chef_atelier",
+    "directeur",
+    "regleur",
+    "super_admin",
+    "technicien_regleur"
+   ]
+  },
+  {
+   "motif": "/api/of/*/valider-regleur",
+   "lecture": [],
+   "ecriture": [
+    "regleur",
+    "technicien_regleur",
+    "chef_atelier"
+   ]
+  },
+  {
+   "motif": "/api/ol",
+   "lecture": [
+    "commercial",
+    "directeur",
+    "super_admin",
+    "comptable"
+   ],
+   "ecriture": [
+    "commercial",
+    "directeur",
+    "super_admin"
+   ]
+  },
+  {
+   "motif": "/api/ot",
+   "lecture": [
+    "chef_atelier",
+    "directeur",
+    "qhse",
+    "rh",
+    "super_admin",
+    "technicien"
+   ],
+   "ecriture": [
+    "chef_atelier",
+    "directeur",
+    "qhse",
+    "rh",
+    "super_admin",
+    "technicien"
+   ]
+  },
+  {
+   "motif": "/api/parametres",
+   "lecture": [],
+   "ecriture": []
+  },
+  {
+   "motif": "/api/permissions",
+   "lecture": [],
+   "ecriture": []
+  },
+  {
+   "motif": "/api/planning",
+   "lecture": [
+    "chef_atelier",
+    "directeur",
+    "super_admin"
+   ],
+   "ecriture": [
+    "chef_atelier",
+    "directeur",
+    "super_admin",
+    "regleur",
+    "technicien_regleur"
+   ]
+  },
+  {
+   "motif": "/api/processus",
+   "lecture": [
+    "directeur",
+    "qhse",
+    "super_admin",
+    "qualite"
+   ],
+   "ecriture": [
+    "directeur",
+    "qhse",
+    "super_admin"
+   ]
+  },
+  {
+   "motif": "/api/qhse",
+   "lecture": [
+    "directeur",
+    "qhse",
+    "super_admin",
+    "qualite"
+   ],
+   "ecriture": [
+    "directeur",
+    "qhse",
+    "super_admin"
+   ]
+  },
+  {
+   "motif": "/api/qualite",
+   "lecture": [
+    "qualite",
+    "chef_atelier"
+   ],
+   "ecriture": [
+    "qualite",
+    "chef_atelier"
+   ]
+  },
+  {
+   "motif": "/api/rapports",
+   "lecture": [
+    "chef_atelier"
+   ],
+   "ecriture": [
+    "chef_atelier"
+   ]
+  },
+  {
+   "motif": "/api/rapports-journaliers",
+   "lecture": [
+    "chef_atelier"
+   ],
+   "ecriture": [
+    "chef_atelier",
+    "operateur"
+   ]
+  },
+  {
+   "motif": "/api/referentiels",
+   "lecture": [
+    "achat",
+    "chef_atelier",
+    "directeur",
+    "super_admin"
+   ],
+   "ecriture": [
+    "achat",
+    "directeur",
+    "super_admin"
+   ]
+  },
+  {
+   "motif": "/api/regleur",
+   "lecture": [
+    "regleur",
+    "technicien_regleur",
+    "chef_atelier"
+   ],
+   "ecriture": [
+    "regleur",
+    "technicien_regleur"
+   ]
+  },
+  {
+   "motif": "/api/rh",
+   "lecture": [
+    "rh"
+   ],
+   "ecriture": [
+    "rh"
+   ]
+  },
+  {
+   "motif": "/api/rondes",
+   "lecture": [
+    "chef_atelier",
+    "directeur",
+    "qualite",
+    "super_admin"
+   ],
+   "ecriture": [
+    "chef_atelier",
+    "directeur",
+    "qualite",
+    "super_admin"
+   ]
+  },
+  {
+   "motif": "/api/sessions",
+   "lecture": [
+    "chef_atelier",
+    "directeur",
+    "regleur",
+    "super_admin",
+    "technicien_regleur",
+    "operateur",
+    "operateur_ext",
+    "operateur_sou",
+    "operateur_imp",
+    "operateur_dec",
+    "qualite"
+   ],
+   "ecriture": [
+    "operateur",
+    "operateur_dec",
+    "operateur_ext",
+    "operateur_imp",
+    "operateur_sou",
+    "regleur",
+    "technicien_regleur",
+    "chef_atelier"
+   ]
+  },
+  {
+   "motif": "/api/sessions/*/valider-regleur",
+   "lecture": [],
+   "ecriture": [
+    "regleur",
+    "technicien_regleur",
+    "chef_atelier"
+   ]
+  },
+  {
+   "motif": "/api/shifts",
+   "lecture": [
+    "operateur",
+    "operateur_dec",
+    "operateur_ext",
+    "operateur_imp",
+    "operateur_sou",
+    "regleur",
+    "technicien_regleur",
+    "chef_atelier"
+   ],
+   "ecriture": []
+  },
+  {
+   "motif": "/api/stock",
+   "lecture": [
+    "chef_atelier",
+    "directeur",
+    "magasinier",
+    "magasinier_at3",
+    "magasinier_central",
+    "super_admin",
+    "comptable"
+   ],
+   "ecriture": [
+    "directeur",
+    "magasinier",
+    "magasinier_at3",
+    "magasinier_central",
+    "super_admin"
+   ]
+  },
+  {
+   "motif": "/api/ticket-prod",
+   "lecture": [
+    "chef_atelier",
+    "qualite"
+   ],
+   "ecriture": []
+  },
+  {
+   "motif": "/api/tickets",
+   "lecture": [
+    "operateur",
+    "operateur_dec",
+    "operateur_ext",
+    "operateur_imp",
+    "operateur_sou",
+    "regleur",
+    "technicien_regleur",
+    "chef_atelier",
+    "qualite"
+   ],
+   "ecriture": [
+    "operateur",
+    "operateur_dec",
+    "operateur_ext",
+    "operateur_imp",
+    "operateur_sou",
+    "regleur",
+    "technicien_regleur",
+    "chef_atelier"
+   ]
+  },
+  {
+   "motif": "/api/tracabilite",
+   "lecture": [
+    "chef_atelier",
+    "qualite",
+    "qhse",
+    "magasinier_mp",
+    "regleur",
+    "technicien_regleur"
+   ],
+   "ecriture": [
+    "chef_atelier",
+    "regleur",
+    "technicien_regleur"
+   ]
+  },
+  {
+   "motif": "/api/users",
+   "lecture": [
+    "chef_atelier",
+    "qhse",
+    "technicien",
+    "rh",
+    "qualite"
+   ],
+   "ecriture": []
+  },
+  {
+   "motif": "/api/utilisateurs",
+   "lecture": [],
+   "ecriture": []
+  },
+  {
+   "motif": "/api/vente",
+   "lecture": [
+    "chef_atelier",
+    "commercial",
+    "directeur",
+    "magasinier_central",
+    "super_admin",
+    "vente",
+    "comptable"
+   ],
+   "ecriture": [
+    "commercial",
+    "directeur",
+    "magasinier_central",
+    "super_admin",
+    "vente"
+   ]
+  }
+ ],
+ "defaut": {
+  "lecture": [],
+  "ecriture": []
+ }
+}
