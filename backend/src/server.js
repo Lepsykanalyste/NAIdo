@@ -13,25 +13,31 @@ require('./jobs/alertes.cron');
 require('./jobs/rapports.cron');
 
 const app = express();
+app.set('trust proxy', 1);   // nginx est le seul intermediaire : req.ip = vraie adresse du visiteur
 const PORT = process.env.PORT || 3000;
 
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors({ origin: process.env.FRONTEND_URL || false, credentials: true }));
-// Rate limit global — toutes routes
-app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 500, standardHeaders: true, legacyHeaders: false }));
+// Rate limit global : large (toute l'usine sort par la meme adresse publique) ; il ne sert qu'a stopper un deluge
+app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 30000, standardHeaders: true, legacyHeaders: false }));
 
-// Rate limit strict — login uniquement (anti brute-force)
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10,                   // 10 tentatives max
-  message: { error: 'Trop de tentatives de connexion. Réessayez dans 15 minutes.' },
-  standardHeaders: true,
-  legacyHeaders: false,
-  skipSuccessfulRequests: true, // ne compte que les échecs
-});
-app.use('/api/auth/login', loginLimiter);
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// Limites de connexion (anti brute-force), apres lecture du corps pour distinguer les comptes :
+//  - 10 echecs / 15 min par COMPTE et par adresse : un compte vise ne bloque pas les autres utilisateurs ;
+//  - 60 echecs / 15 min par adresse : pulverisation de mots de passe sur plusieurs comptes.
+// La connexion par badge a son propre plafond par adresse. Seuls les echecs comptent.
+const MSG_LOGIN = { error: 'Trop de tentatives de connexion. Réessayez dans 15 minutes.' };
+const loginParCompte = rateLimit({
+  windowMs: 15 * 60 * 1000, max: 10, message: MSG_LOGIN, standardHeaders: true, legacyHeaders: false, skipSuccessfulRequests: true,
+  keyGenerator: (req) => `${req.ip}|${String((req.body && (req.body.login || req.body.badge_qr)) || '').toLowerCase().slice(0, 80)}`,
+});
+const loginParAdresse = rateLimit({ windowMs: 15 * 60 * 1000, max: 60, message: MSG_LOGIN, standardHeaders: true, legacyHeaders: false, skipSuccessfulRequests: true });
+// Badge : essayer des badges DIFFERENTS n'est pas arrete par la limite par compte, donc plafond plus bas par adresse (20 echecs / 15 min)
+const badgeParAdresse = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: MSG_LOGIN, standardHeaders: true, legacyHeaders: false, skipSuccessfulRequests: true });
+app.use('/api/auth/login', loginParAdresse, loginParCompte);
+app.use('/api/auth/login-badge', badgeParAdresse, loginParCompte);
 app.use('/api', require('./middleware/rbac'));   // controle d'acces par role (config/permissions.json)
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
