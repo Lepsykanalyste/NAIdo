@@ -48,6 +48,10 @@ export function ModuleDBM() {
   const [ofSel, setOfSel]         = useState(null);
   const [besoins, setBesoins]     = useState([]);
   const [lignes, setLignes]       = useState([]);
+  const [mps, setMps]             = useState([]);          // matieres premieres (articles) avec stock magasin
+  const [ajoutArt, setAjoutArt]   = useState('');
+  const [ajoutQte, setAjoutQte]   = useState('');
+  const [msgBesoins, setMsgBesoins] = useState('');        // '' | 'composition' | 'suffisant' | 'erreur'
   const [showForm, setShowForm]   = useState(false);
   const [urgence, setUrgence]     = useState(false);
   const [dateBesoin, setDateBesoin] = useState('');
@@ -57,11 +61,19 @@ export function ModuleDBM() {
 
   const charger = async () => {
     try {
-      const [d, o] = await Promise.all([
+      const [d, o, m] = await Promise.all([
         axios.get(`${API}/dbm`).catch(()=>({data:[]})),
         axios.get(`${API}/at3/of`).catch(()=>({data:[]})),
+        axios.get(`${API}/dbm/stock-mp/liste`).catch(()=>({data:[]})),
       ]);
       setDbms(d.data || []);
+      // Matieres premieres : une ligne par article (les stocks de plusieurs emplacements sont additionnes)
+      const parArticle = {};
+      (Array.isArray(m.data) ? m.data : []).forEach(a => {
+        const x = parArticle[a.id] || (parArticle[a.id] = { ...a, qte_disponible: 0 });
+        x.qte_disponible += parseFloat(a.qte_disponible || 0);
+      });
+      setMps(Object.values(parArticle));
       // Charger aussi les DBM en transit (en_preparation) pour réception
       setOfs((o.data || []).filter(o => ['planifie','assigne','en_attente','lance','en_cours'].includes(o.statut)));
     } catch { toast.error('Erreur chargement'); }
@@ -73,9 +85,11 @@ export function ModuleDBM() {
     const of = ofs.find(o => o.id === of_id);
     setOfSel(of);
     setLignes([]);
+    setMsgBesoins('');
     if (!of_id) return;
     try {
       const { data } = await axios.get(`${API}/dbm/of/${of_id}/besoins`).catch(()=>({data:[]}));
+      setMsgBesoins(Array.isArray(data) ? 'erreur' : (data.message ? 'composition' : (((data.besoins||[]).length && !(data.besoins||[]).some(b => b.qte_a_demander > 0)) ? 'suffisant' : '')));
       // Fusionner groupes (articles+stock mag) avec besoins (calculs AT3)
       const besoinsMap = {};
       (data.besoins || []).forEach(b => { besoinsMap[b.groupe_id] = b; });
@@ -110,9 +124,24 @@ export function ModuleDBM() {
 
   const supprimerLigne = (idx) => setLignes(prev => prev.filter((_, i) => i !== idx));
 
+  // Ajout direct d'une matiere (article) choisie dans la liste, avec ou sans composition
+  const ajouterMatiere = () => {
+    const a = mps.find(x => String(x.id) === String(ajoutArt));
+    const q = parseFloat(ajoutQte);
+    if (!a) return toast.error('Choisissez un article');
+    if (!(q > 0)) return toast.error('Indiquez une quantité supérieure à 0');
+    if (lignes.some(l => String(l.article_id) === String(a.id))) return toast.error('Cette matière est déjà dans la liste');
+    setLignes(prev => [...prev, { article_id: a.id, groupe_id: null, famille_id: null, code: a.code, designation: a.designation,
+      famille_libelle: a.famille_libelle, qte_necessaire: null, qte_dispo_at3: 0, qte_dispo_mag: parseFloat(a.qte_disponible || 0),
+      qte_demandee: q, unite: 'kg', manuel: true }]);
+    setAjoutArt(''); setAjoutQte('');
+  };
+
   const creerDbm = async () => {
     if (!ofSel) return toast.error('Sélectionnez un OF');
     if (!lignes.length) return toast.error('Aucune MP à demander');
+    if (lignes.some(l => !l.article_id)) return toast.error('Choisissez la matière (MP) de chaque ligne');
+    if (lignes.some(l => !(parseFloat(l.qte_demandee) > 0))) return toast.error('Indiquez une quantité supérieure à 0 pour chaque ligne');
     setLoading(true);
     try {
       const { data } = await axios.post(`${API}/dbm`, {
@@ -217,6 +246,56 @@ export function ModuleDBM() {
             </div>
           )}
 
+          {/* Messages d'aide quand aucune ligne n'est calculee */}
+          {ofSel && msgBesoins === 'composition' && (
+            <div style={{ background:'#fef3c7', border:'1px solid #fcd34d', borderRadius:8, padding:'10px 12px', fontSize:12, color:'#92400e', marginBottom:12 }}>
+              ⚠ Aucune composition n'est définie pour l'article de cet OF : ajoutez les matières à la main ci-dessous (ou définissez la composition dans Articles pour un calcul automatique).
+            </div>
+          )}
+          {ofSel && msgBesoins === 'suffisant' && (
+            <div style={{ background:'#f0fdf4', border:'1px solid #86efac', borderRadius:8, padding:'10px 12px', fontSize:12, color:'#15803d', marginBottom:12 }}>
+              ✓ Le stock de l'Atelier 3 couvre déjà le besoin calculé de cet OF. Vous pouvez tout de même ajouter une matière ci-dessous.
+            </div>
+          )}
+          {ofSel && msgBesoins === 'erreur' && (
+            <div style={{ background:'#fef2f2', border:'1px solid #fca5a5', borderRadius:8, padding:'10px 12px', fontSize:12, color:'#dc2626', marginBottom:12 }}>
+              ⚠ Le calcul des besoins n'a pas pu être chargé : ajoutez les matières à la main ci-dessous.
+            </div>
+          )}
+
+          {/* Ajout d'une matiere (article) a la main */}
+          {ofSel && (
+            <div style={{ background:'#f9fafb', border:'1px dashed #fcd34d', borderRadius:10, padding:12, marginBottom:16 }}>
+              <div style={{ fontWeight:700, fontSize:12, color:'#92400e', marginBottom:8 }}>➕ Ajouter une matière (article) à la demande</div>
+              {mps.filter(a => a.qte_disponible > 0).length === 0 && <div style={{ fontSize:11, color:'#dc2626', marginBottom:6 }}>Aucune matière première disponible au magasin.</div>}
+              <div style={{ display:'grid', gridTemplateColumns:'3fr 1fr auto', gap:8, alignItems:'flex-end' }}>
+                <div>
+                  <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Article</label>
+                  <select value={ajoutArt} onChange={e => setAjoutArt(e.target.value)}
+                    style={{ width:'100%', border:'2px solid #fcd34d', borderRadius:8, padding:'8px', fontSize:13 }}>
+                    <option value="">-- Choisir l'article --</option>
+                    {Object.entries(mps.filter(a => a.qte_disponible > 0).reduce((acc, a) => { const f = a.famille_libelle || 'Autres'; (acc[f] = acc[f] || []).push(a); return acc; }, {})).map(([fam, arts]) => (
+                      <optgroup key={fam} label={fam}>
+                        {arts.map(a => (
+                          <option key={a.id} value={a.id}>{a.code} — {a.designation}</option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Quantité (kg)</label>
+                  <input type="number" min="0" step="0.1" value={ajoutQte} onChange={e => setAjoutQte(e.target.value)} placeholder="0"
+                    style={{ width:'100%', border:'2px solid #fcd34d', borderRadius:8, padding:'8px', fontSize:13, boxSizing:'border-box' }} />
+                </div>
+                <button onClick={ajouterMatiere}
+                  style={{ background:'#15803d', color:'#fff', border:'none', padding:'10px 16px', borderRadius:8, cursor:'pointer', fontWeight:700, fontSize:13 }}>
+                  ➕ Ajouter
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Lignes à demander */}
           {lignes.length > 0 && (
             <div style={{ marginBottom:16 }}>
@@ -236,7 +315,7 @@ export function ModuleDBM() {
                     <tr key={i} style={{ borderBottom:'1px solid #fef3c7', background: i%2===0?'#fff':'#fffbeb' }}>
                       <td style={{ padding:'8px 10px' }}>
                         <div style={{ fontWeight:700, color:'#92400e', marginBottom:2 }}>{l.famille_libelle||l.code}</div>
-                        <select value={l.article_id||''} onChange={e => {
+                        {l.manuel ? (<div style={{ fontSize:12, color:'#374151' }}>{l.code} — {l.designation}</div>) : (<select value={l.article_id||''} onChange={e => {
                           const art = (besoins.find(b=>String(b.groupe_id)===String(l.groupe_id))?.articles||[]).find(a=>a.id===e.target.value);
                           setLignes(prev=>prev.map((x,j)=>j!==i?x:{...x,article_id:e.target.value,code:art?.code||x.code,designation:art?.designation||x.designation,qte_dispo_mag:parseFloat(art?.stock_magasin||0)}));
                         }} style={{fontSize:11,border:'1px solid #fcd34d',borderRadius:5,padding:'3px 6px',width:'100%'}}>
@@ -244,10 +323,10 @@ export function ModuleDBM() {
                           {(besoins.find(b=>String(b.groupe_id)===String(l.groupe_id))?.articles||[]).filter(a=>parseFloat(a.stock_magasin||0)>0).map(a=>(
                             <option key={a.id} value={a.id}>{a.code}</option>
                           ))}
-                        </select>
+                        </select>)}
                       </td>
                       <td style={{ padding:'8px 10px', fontSize:11, color:'#6b7280' }}>{l.famille_libelle}</td>
-                      <td style={{ padding:'8px 10px', fontWeight:600 }}>{l.qte_necessaire} kg</td>
+                      <td style={{ padding:'8px 10px', fontWeight:600 }}>{l.qte_necessaire != null ? `${l.qte_necessaire} kg` : '—'}</td>
                       <td style={{ padding:'8px 10px', color: l.qte_dispo_at3 > 0 ? '#15803d' : '#9ca3af' }}>
                         {l.qte_dispo_at3} kg
                       </td>
