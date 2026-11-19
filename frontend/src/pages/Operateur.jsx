@@ -290,6 +290,8 @@ export default function Operateur() {
   const [ofSel,    setOfSel]    = useState(()=>loadLS('naido_of'));
   const [shiftSel, setShiftSel] = useState(()=>loadLS('naido_shift'));
   const [machSel,  setMachSel]  = useState(()=>loadLS('naido_mach'));
+  const [machChoisie,setMachChoisie]=useState(()=>loadLS('naido_mach_choisie'));   // machine choisie par l'operateur quand l'OF n'en a pas
+  const [machinesListe,setMachinesListe]=useState([]);
   const [etape,    setEtape]    = useState(()=>loadLS('naido_session')?'production':'config');
 
   const [shifts,    setShifts]    = useState([]);
@@ -308,6 +310,19 @@ export default function Operateur() {
 
   // Type de poste de l'opérateur (détermine ce qu'il voit)
   const typePoste = getTypePoste(user, machSel || ofSel);
+  // Machine du poste : soudure/decoupe = SO01..SO05 choisie par l'operateur (jamais la machine d'extrusion de l'OF) ;
+  // autres postes = machine de l'OF, ou celle choisie ici si l'OF n'en a pas
+  const machSD=(machSel&&machSel.id>=10&&machSel.id<=14)?machSel:null;
+  const machChoisieValide=(machChoisie&&ofSel&&machChoisie.of_id===ofSel.id)?machChoisie:null;
+  const machineId=typePoste==='soudure_decoupe'?(machSD?.id||null):(ofSel?.machine_id||machChoisieValide?.id||null);
+  const machineTicket=typePoste==='soudure_decoupe'?machSD:(ofSel?.machine_id?machSel:machChoisieValide);
+  useEffect(()=>{
+    if(!ofSel||ofSel.machine_id||typePoste==='soudure_decoupe')return;
+    axios.get(`${API}/machines`).then(r=>{
+      const l=Array.isArray(r.data)?r.data:[]; const pre={extrusion:'EX',impression:'IM'}[typePoste];
+      const f=pre?l.filter(m=>String(m.code||'').toUpperCase().startsWith(pre)):l; setMachinesListe(f.length?f:l);
+    }).catch(()=>{});
+  },[ofSel,typePoste]);
   const destinations = DESTINATIONS_PAR_POSTE[typePoste] || DESTINATIONS_PAR_POSTE.extrusion;
 
   const [form,setForm]=useState({
@@ -373,7 +388,7 @@ export default function Operateur() {
   const demarrer=async()=>{
     if(!ofSel||!shiftSel){toast.error('Sélectionnez un OF et un shift');return;}
     try{
-      const{data}=await axios.post(`${API}/sessions`,{of_id:ofSel.id,machine_id:ofSel.machine_id||null,shift_id:shiftSel.id});
+      const{data}=await axios.post(`${API}/sessions`,{of_id:ofSel.id,machine_id:machineId,shift_id:shiftSel.id});
       setSession(data);saveLS('naido_session',data);
       if(ofSel.poids_mandrin_kg)setForm(p=>({...p,poids_mandrin:ofSel.poids_mandrin_kg.toString()}));
       setEtape('production');toast.success('Production démarrée !');
@@ -381,13 +396,13 @@ export default function Operateur() {
   };
 
   const validerTicket=async()=>{
-    if(typePoste==='soudure_decoupe'){if(!form.qte_pieces)return toast.error('Saisissez le nombre de pieces');if(!machSel?.id)return toast.error('Selectionnez la machine soudeuse');}else if(!form.poids_brut)return toast.error('Saisissez le poids brut');
+    if(typePoste==='soudure_decoupe'){if(!form.qte_pieces)return toast.error('Saisissez le nombre de pieces');if(!machSD?.id)return toast.error('Selectionnez la machine soudeuse');}else if(!machineId)return toast.error('Choisissez la machine (elle n\'est pas assignee a cet OF)');else if(!form.poids_brut)return toast.error('Saisissez le poids brut');
     setSubmitting(true);
     try{
       const isSD=typePoste==='soudure_decoupe';
       const payload={
         session_id:session.id,of_id:ofSel.id,
-        machine_id:isSD?(machSel?.id||null):(ofSel.machine_id||null),
+        machine_id:machineId,
         article_id:ofSel.article_id||null,
         poids_brut_kg:parseFloat(form.poids_brut||0),poids_mandrin_kg:parseFloat(form.poids_mandrin||0),
         poids_dechets_kg:parseFloat(form.poids_dechets||0),poids_rebuts_kg:parseFloat(form.rebuts||0),
@@ -411,7 +426,7 @@ export default function Operateur() {
   const declarerArret=async()=>{
     if(!causeArret)return toast.error('Choisissez une cause');
     try{
-      const{data}=await axios.post(`${API}/arrets`,{session_id:session.id,machine_id:ofSel?.machine_id||null,cause:causeArret,details:detailsArr});
+      const{data}=await axios.post(`${API}/arrets`,{session_id:session.id,machine_id:machineId,cause:causeArret,details:detailsArr});
       setArretActif(data);setCauseArret('');setDetailsArr('');setEtape('production');toast.success('Arrêt déclaré');
     }catch(e){toast.error(e.response?.data?.error||'Erreur arrêt');}
   };
@@ -428,7 +443,7 @@ export default function Operateur() {
       const poidsTotal=tickets.reduce((s,t)=>s+parseFloat(t.poids_net_kg||0),0);
       const poidsDechet=tickets.reduce((s,t)=>s+parseFloat(t.poids_dechets_kg||0),0);
       const dureeMin=session.created_at?Math.round((Date.now()-new Date(session.created_at).getTime())/60000):null;
-      setRecap({numero_of:ofSel?.numero_of||'—',article:ofSel?.article_nom||'—',machine:machSel?.code||machSel?.nom||'NC',shift:shiftSel?.nom||'—',operateur:`${user?.prenom||''} ${user?.nom||''}`.trim(),nb_bobines:tickets.length,poids_total:poidsTotal.toFixed(3),poids_dechets:poidsDechet.toFixed(3),duree_min:dureeMin,date:new Date().toLocaleDateString('fr-FR')});
+      setRecap({numero_of:ofSel?.numero_of||'—',article:ofSel?.article_nom||'—',machine:machineTicket?.code||machineTicket?.nom||'NC',shift:shiftSel?.nom||'—',operateur:`${user?.prenom||''} ${user?.nom||''}`.trim(),nb_bobines:tickets.length,poids_total:poidsTotal.toFixed(3),poids_dechets:poidsDechet.toFixed(3),duree_min:dureeMin,date:new Date().toLocaleDateString('fr-FR')});
     }catch{toast.error('Erreur clôture');}
     finally{setCloturant(false);}
   };
@@ -501,7 +516,7 @@ export default function Operateur() {
                 :ofs.map(of=>(
                   <div key={of.id} onClick={()=>{
                     setOfSel(of);saveLS('naido_of',of);
-                    if(of.machine_id){const m={id:of.machine_id,code:of.machine_code||'',nom:of.machine_nom||'',type:of.machine_type||'extrudeuse'};setMachSel(m);saveLS('naido_mach',m);}
+                    if(of.machine_id&&typePoste!=='soudure_decoupe'){const m={id:of.machine_id,code:of.machine_code||'',nom:of.machine_nom||'',type:of.machine_type||'extrudeuse'};setMachSel(m);saveLS('naido_mach',m);}
                   }}
                     style={{padding:'14px',borderRadius:10,border:'2px solid',cursor:'pointer',marginBottom:10,
                       borderColor:ofSel?.id===of.id?'#f59e0b':'#e5e7eb',background:ofSel?.id===of.id?'#fffbeb':'#fff'}}>
@@ -600,6 +615,15 @@ export default function Operateur() {
 
                 {typePoste !== 'soudure_decoupe' && (
                 <>
+                {!ofSel?.machine_id&&(
+                <div style={{marginBottom:10}}>
+                  <label style={{fontSize:11,fontWeight:600,color:'#374151',display:'block',marginBottom:3}}>Machine * <span style={{fontWeight:400,color:'#9ca3af'}}>(non assignee a cet OF)</span></label>
+                  <select value={machChoisieValide?.id||''} onChange={e=>{const m=machinesListe.find(x=>String(x.id)===e.target.value);const v=m?{id:m.id,code:m.code,nom:m.nom,type:m.type,of_id:ofSel.id}:null;setMachChoisie(v);saveLS('naido_mach_choisie',v);}}
+                    style={{width:'100%',padding:'10px',borderRadius:8,border:'2px solid #f59e0b',fontSize:13}}>
+                    <option value=''>-- Choisir la machine --</option>
+                    {machinesListe.map(m=><option key={m.id} value={m.id}>{m.code}{m.nom?` — ${m.nom}`:''}</option>)}
+                  </select>
+                </div>)}
                 {/* Pesée */}
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
                   <div>
@@ -641,7 +665,7 @@ export default function Operateur() {
                 <>
                 <div style={{marginBottom:10}}>
                   <label style={{fontSize:11,fontWeight:600,color:'#374151',display:'block',marginBottom:3}}>Machine (Soudeuse) *</label>
-                  <select value={machSel?.id||''} onChange={e=>{const opts=[{id:10,code:'SO01'},{id:11,code:'SO02'},{id:12,code:'SO03'},{id:13,code:'SO04'},{id:14,code:'SO05'}];const m=opts.find(x=>x.id===parseInt(e.target.value));setMachSel(m||null);saveLS('naido_mach',m||null);}}
+                  <select value={machSD?.id||''} onChange={e=>{const opts=[{id:10,code:'SO01'},{id:11,code:'SO02'},{id:12,code:'SO03'},{id:13,code:'SO04'},{id:14,code:'SO05'}];const m=opts.find(x=>x.id===parseInt(e.target.value));setMachSel(m||null);saveLS('naido_mach',m||null);}}
                     style={{width:'100%',padding:'10px',borderRadius:8,border:'2px solid #be123c',fontSize:13}}>
                     <option value=''>-- Choisir machine --</option>
                     <option value='10'>SO01</option>
@@ -803,7 +827,7 @@ export default function Operateur() {
       </main>
 
       {recap&&<RecapShift recap={recap} onNouveau={resetSession}/>}
-      {ticketAff&&<TicketBobine ticket={ticketAff} of={ofSel} machine={machSel} shift={shiftSel} user={user} onClose={()=>setTicketAff(null)}/>}
+      {ticketAff&&<TicketBobine ticket={ticketAff} of={ofSel} machine={machineTicket} shift={shiftSel} user={user} onClose={()=>setTicketAff(null)}/>}
     </div>
   );
 }

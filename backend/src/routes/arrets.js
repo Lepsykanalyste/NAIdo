@@ -3,10 +3,14 @@ const router = express.Router();
 const db = require('../config/db');
 const { auth } = require('../middleware/auth');
 
+// Causes proposees a l'operateur (alignees sur la contrainte de la base)
+const CAUSES = ['panne_mecanique', 'panne_electrique', 'changement_matiere', 'reglage', 'coupure_electricite', 'manque_personnel', 'fin_shift', 'autre'];
+
 // POST /api/arrets — Déclarer un arrêt
 router.post('/', auth, async (req, res) => {
   try {
     const { session_id, machine_id, cause, details } = req.body;
+    if (!CAUSES.includes(cause)) return res.status(400).json({ error: "Cause d'arret invalide" });
     const { rows } = await db.query(`
       INSERT INTO arrêts_machine (session_id, machine_id, operateur_id, cause, details)
       VALUES ($1, $2, $3, $4, $5) RETURNING *
