@@ -59,7 +59,7 @@ ${resultats[p.key+'_obs']?`<div style="font-size:8px;color:#555;padding-left:8px
 }).join('')}
 ${ctrl.observations?`<hr/><div style="font-size:9px"><b>Observations:</b> ${ctrl.observations}</div>`:''}
 <hr/>
-<div style="text-align:center;font-weight:900;font-size:13px">${nbOK===POINTS_CESSION.length?'✓ CESSION AUTORISÉE':'⚠ CESSION EN ATTENTE'}</div>
+<div style="text-align:center;font-weight:900;font-size:13px">${POINTS_CESSION.filter(p=>p.requis).every(p=>resultats[p.key]==='OK')?'✓ CESSION AUTORISÉE':'⚠ CESSION EN ATTENTE'}</div>
 <div style="text-align:center;margin:4px 0">${qr?`<img src="${qr}" width="90" height="90"/>`:''}
 </div><hr/>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:3mm">
@@ -69,8 +69,7 @@ ${ctrl.observations?`<hr/><div style="font-size:9px"><b>Observations:</b> ${ctrl
 <div class="foot">NAIdo — NAI · ${fmtDate(ctrl.created_at)}</div>
 </body></html>`;
 
-  const nbOKDisp = Object.values(resultats).filter(v=>v==='OK').length;
-  const autorise = nbOKDisp >= POINTS_CESSION.filter(p=>p.requis).length;
+  const autorise = POINTS_CESSION.filter(p=>p.requis).every(p=>resultats[p.key]==='OK');
 
   return(
     <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
@@ -269,7 +268,7 @@ export default function ControleAvantCession() {
             ):historique.map(c=>{
               const res=typeof c.resultats==='string'?JSON.parse(c.resultats||'{}'):(c.resultats||{});
               const nbOK=POINTS_CESSION.filter(p=>res[p.key]==='OK').length;
-              const auto=nbOK>=totalRequis;
+              const auto=typeof c.autorise==='boolean'?c.autorise:POINTS_CESSION.filter(p=>p.requis).every(p=>res[p.key]==='OK');
               return(
                 <div key={c.id} style={{...S.card,borderLeft:`4px solid ${auto?'#10b981':'#f59e0b'}`}}>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',flexWrap:'wrap',gap:8,marginBottom:8}}>

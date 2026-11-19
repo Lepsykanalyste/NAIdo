@@ -6,12 +6,16 @@ const { auth } = require('../middleware/auth');
 router.post('/', auth, async (req, res) => {
   try {
     const { of_id, machine_id, heure_debut, heure_fin, resultats, actions } = req.body;
+    if (!of_id) return res.status(400).json({ error: 'OF obligatoire' });
     const { rows } = await db.query(`
       INSERT INTO rondes_chef_quart (of_id, machine_id, chef_id, heure_debut, heure_fin, resultats, actions)
       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *
     `, [of_id, machine_id||null, req.user.id, heure_debut, heure_fin, resultats||'{}', actions]);
     res.status(201).json(rows[0]);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    if (['23503', '22P02', '22032'].includes(err.code)) return res.status(400).json({ error: 'OF, machine ou resultats invalides' });
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.get('/', auth, async (req, res) => {
