@@ -1,6 +1,10 @@
 import { useState, useEffect, createContext, useContext } from 'react';
 import axios from 'axios';
 
+// Configuration synchrone du token AVANT le premier rendu des composants
+const _initialToken = localStorage.getItem('naido_token');
+if (_initialToken) axios.defaults.headers.common['Authorization'] = `Bearer ${_initialToken}`;
+
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {

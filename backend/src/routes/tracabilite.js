@@ -52,7 +52,7 @@ router.get('/lots', auth, async (req, res) => {
 });
 
 // POST /api/tracabilite/lots — Réception matière
-router.post('/lots', auth, role('chef_atelier', 'regleur'), async (req, res) => {
+router.post('/lots', auth, role('chef_atelier', 'regleur', 'technicien_regleur'), async (req, res) => {
   try {
     const { matiere_id, numero_lot, fournisseur, quantite_recue_kg, date_reception } = req.body;
     const { rows } = await db.query(`

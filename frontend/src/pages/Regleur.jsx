@@ -64,16 +64,7 @@ const TOTAL_CHAMPS = SECTIONS.reduce((a, s) =>
 function TicketImprimable({ record, onClose }) {
   const [qrDataUrl, setQrDataUrl] = useState('');
   useEffect(() => {
-    const qrStr = [
-      'REGLAGE',
-      record.numero_of,
-      `ART:${record.article || ''}`,
-      `MACH:${record.machine_code || record.machine_nom || ''}`,
-      `T1:${record.temperature || ''}°C`,
-      `P:${record.pression || ''}bar`,
-      `L:${(() => { try { return JSON.parse(record.notes||'{}').params_complets?.largeur_mm||''; } catch { return ''; } })()}mm`,
-      record.valide_at ? new Date(record.valide_at).toLocaleDateString('fr-FR') : '',
-    ].join('|');
+    const qrStr = window.location.origin + '/api/regleur/ticket/' + encodeURIComponent(record.numero_ticket_reglage || '') + '/view';
     import('qrcode').then(QRCode => {
       QRCode.default.toDataURL(qrStr, {
         width: 140, margin: 1,
@@ -478,6 +469,7 @@ function EcranListe({ user, onValider, onGmao, onHistorique }) {
                   regleur_nom: v.regleur_nom, valide_at: v.regleur_validation_at,
                   temperature: v.regleur_temperature, pression: v.regleur_pression, vitesse: v.regleur_vitesse,
                   notes: v.regleur_notes,
+                  numero_ticket_reglage: v.numero_ticket_reglage, largeur_mm: v.largeur_mm,
                 };
                 return (
                   <div key={i} style={{ ...S.card, borderLeft:'5px solid #10b981' }}>

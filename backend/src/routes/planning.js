@@ -31,7 +31,7 @@ router.get('/semaine', auth, async (req, res) => {
 });
 
 // ── POST /api/planning ────────────────────────────────────────
-router.post('/', auth, role('chef_atelier', 'regleur'), async (req, res) => {
+router.post('/', auth, role('chef_atelier', 'regleur', 'technicien_regleur'), async (req, res) => {
   try {
     const { of_id, machine_id, shift_id, date_planifiee,
             heure_debut_prevue, duree_prevue_min, ordre_priorite, notes } = req.body;
@@ -60,7 +60,7 @@ router.post('/', auth, role('chef_atelier', 'regleur'), async (req, res) => {
 });
 
 // ── PUT /api/planning/:id ─────────────────────────────────────
-router.put('/:id', auth, role('chef_atelier', 'regleur'), async (req, res) => {
+router.put('/:id', auth, role('chef_atelier', 'regleur', 'technicien_regleur'), async (req, res) => {
   try {
     const { statut, ordre_priorite, date_planifiee, heure_debut_prevue, notes } = req.body;
     const { rows } = await db.query(`

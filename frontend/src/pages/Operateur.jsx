@@ -16,19 +16,20 @@ function clearLS(...keys){keys.forEach(k=>{try{localStorage.removeItem(k);}catch
 // Détermine le type de poste depuis le login ou la machine
 function getTypePoste(user, mach) {
   const login = user?.login || '';
-  if (login.startsWith('op_ext') || mach?.type==='extrudeuse') return 'extrusion';
-  if (login.startsWith('op_sou') || mach?.type==='soudeuse')   return 'soudure';
-  if (login.startsWith('op_imp') || mach?.type==='impression') return 'impression';
-  if (login.startsWith('op_dec') || mach?.type==='decoupe')    return 'emballage';
+  if (login.startsWith('op_ext')) return 'extrusion';
+  if (login.startsWith('op_imp')) return 'impression';
+  if (login.startsWith('op_sou') || login.startsWith('op_dec')) return 'soudure_decoupe';
+  if (mach?.type==='extrudeuse') return 'extrusion';
+  if (mach?.type==='impression') return 'impression';
+  if (mach?.type==='soudeuse' || mach?.type==='decoupe') return 'soudure_decoupe';
   return 'extrusion'; // défaut
 }
 
 // Destinations selon le flux AT3
 const DESTINATIONS_PAR_POSTE = {
-  extrusion:  [{ v:'AT3-QUAR', l:'→ Zone Quarantaine AT3' }],
-  soudure:    [{ v:'AT3-QUAR', l:'→ Zone Quarantaine AT3' }],
-  impression: [{ v:'AT3-QUAR', l:'→ Zone Quarantaine AT3' }, { v:'AT3-DEC', l:'→ Découpe/Emballage' }],
-  emballage:  [{ v:'MAG',      l:'→ Stock Atelier'        }, { v:'AT3-EXP', l:'→ Expédition'       }],
+  extrusion:        [{ v:'AT3-QUAR', l:'→ Zone Quarantaine AT3' }],
+  impression:       [{ v:'AT3-QUAR', l:'→ Zone Quarantaine AT3' }, { v:'AT3-SOUD', l:'→ Soudure/Découpe' }],
+  soudure_decoupe:  [{ v:'AT3-FOND', l:'→ Fond carré' }, { v:'AT3-STOCK-PF', l:'→ Zone de stockage PF' }],
 };
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -37,13 +38,25 @@ const DESTINATIONS_PAR_POSTE = {
 function TicketBobine({ ticket, of, machine, shift, user, onClose }) {
   const [qr, setQr] = useState('');
   useEffect(()=>{
-    const str=['BOB',ticket.numero_ticket||'','OF:'+(of?.numero_of||''),'ART:'+(of?.article_nom||of?.article||'').substring(0,10),'MACH:'+(machine?.code||'NC'),'KG:'+ticket.poids_net_kg,fmtDate(ticket.created_at)].join('|');
+    const str=window.location.origin+'/api/tickets/'+ticket.id+'/view';
     import('qrcode').then(Q=>Q.default.toDataURL(str,{width:130,margin:1,color:{dark:'#1c1917',light:'#fff'}})).then(setQr).catch(()=>{});
   },[ticket]);
 
   let reglageP={};try{reglageP=JSON.parse(of?.regleur_notes||'{}').params_complets||{};}catch{}
 
-  const rows=[
+  const isSD=ticket.type_ticket==='soudure_decoupe';
+  const rows=isSD?[
+    {l:'N° TICKET',v:ticket.numero_ticket||'—',bold:true},null,
+    {l:'OF',v:of?.numero_of||'—'},{l:'ARTICLE',v:of?.article_nom||of?.article||'—'},
+    {l:'CLIENT',v:of?.client_nom||'—'},{l:'MACHINE',v:machine?.code||machine?.nom||'—'},{l:'SHIFT',v:shift?.nom||'—'},null,
+    {l:'QTE PIECES ★',v:`${fmt(ticket.qte_pieces,0)}`,bold:true,big:true},
+    ...(ticket.numero_colis?[{l:'N° COLIS',v:ticket.numero_colis}]:[]),
+    ...(parseFloat(ticket.poids_carton_kg)>0?[{l:'POIDS COLIS',v:`${fmt(ticket.poids_carton_kg)} kg`}]:[]),
+    ...(parseFloat(ticket.poids_rebuts_kg)>0?[{l:'REBUTS',v:`${fmt(ticket.poids_rebuts_kg)} kg`}]:[]),
+    ...(ticket.etape_dest?[null,{l:'DESTINATION',v:ticket.etape_dest,bold:true}]:[]),null,
+    {l:'OPÉRATEUR',v:`${user?.prenom||''} ${user?.nom||''}`.trim()},
+    {l:'DATE',v:fmtDate(ticket.created_at)},{l:'HEURE',v:fmtTime(ticket.created_at)},
+  ].filter(x=>x!==undefined):[
     {l:'N° BOBINE',v:ticket.numero_ticket||'—',bold:true},null,
     {l:'OF',v:of?.numero_of||'—'},{l:'ARTICLE',v:of?.article_nom||of?.article||'—'},
     {l:'CLIENT',v:of?.client_nom||'—'},{l:'MACHINE',v:machine?.code||machine?.nom||'—'},{l:'SHIFT',v:shift?.nom||'—'},null,
@@ -69,15 +82,14 @@ hr{border:none;border-top:1px dashed #000;margin:4px 0}.s{border:none;border-top
 @media print{@page{size:72mm auto;margin:0}}</style></head>
 <body onload="window.print()">
 <div style="text-align:center;font-size:15px;font-weight:900">NAI</div>
-<div style="text-align:center;font-size:9px;color:#555">AT3 — EXTRUSION</div>
-<div class="s"></div><div style="text-align:center;font-weight:800;font-size:12px">TICKET BOBINE</div>
+<div style="text-align:center;font-size:9px;color:#555">AT3 — ${isSD?'SOUDURE/DECOUPE':'EXTRUSION'}</div>
+<div class="s"></div><div style="text-align:center;font-weight:800;font-size:12px">${isSD?'TICKET SOUDURE/DECOUPE':'TICKET BOBINE'}</div>
 <div style="text-align:center;font-size:8px">ENR.ALP1-005</div><hr/>
 ${rows.map(r=>r===null?'<hr/>':
   `<div class="r${r.bold?' bold':''}"><span class="lbl">${r.l}</span><span class="val${r.big?' big':''}">${r.v}</span></div>`
 ).join('')}
 <div class="qr">${qr?`<img src="${qr}" width="120" height="120"/>`:''}
 <div style="font-size:8px;color:#666">${ticket.numero_ticket}</div></div><hr/>
-${qrRecap?`<div style="text-align:center;margin:4px 0"><img src="${qrRecap}" width="100" height="100"/><div style="font-size:8px;color:#666;margin-top:2px">${r.numero_of} · ${r.shift}</div></div><hr/>`:''}
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:3mm">
 <div class="sig"><div style="font-size:8px;font-weight:bold">OPÉRATEUR</div>${user?.prenom||''} ${user?.nom||''}<br/><br/>Signature:</div>
 <div class="sig"><div style="font-size:8px;font-weight:bold">CHEF DE QUART</div><br/><br/>Signature:</div>
@@ -90,7 +102,7 @@ ${qrRecap?`<div style="text-align:center;margin:4px 0"><img src="${qrRecap}" wid
     <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
       <div style={{background:'#fff',borderRadius:16,width:300,maxHeight:'90vh',overflow:'auto',boxShadow:'0 20px 60px rgba(0,0,0,0.4)',fontFamily:"'Courier New',monospace"}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 14px',borderBottom:'1px solid #e5e7eb',position:'sticky',top:0,background:'#fff'}}>
-          <div style={{fontWeight:800,fontSize:13}}>🖨️ Ticket bobine</div>
+          <div style={{fontWeight:800,fontSize:13}}>🖨️ {isSD?'Ticket soudure/decoupe':'Ticket bobine'}</div>
           <div style={{display:'flex',gap:8}}>
             <button onClick={imprimer} style={{background:'#14532d',color:'#fff',border:'none',padding:'7px 12px',borderRadius:8,cursor:'pointer',fontWeight:700,fontSize:12}}>🖨️ Imprimer</button>
             <button onClick={onClose} style={{background:'#f3f4f6',border:'none',padding:'7px 10px',borderRadius:8,cursor:'pointer',fontSize:12}}>✕</button>
@@ -98,9 +110,9 @@ ${qrRecap?`<div style="text-align:center;margin:4px 0"><img src="${qrRecap}" wid
         </div>
         <div style={{padding:'12px 14px',fontSize:11,color:'#000'}}>
           <div style={{textAlign:'center',fontWeight:900,fontSize:15}}>NAI</div>
-          <div style={{textAlign:'center',fontSize:9,color:'#555'}}>AT3 — EXTRUSION</div>
+          <div style={{textAlign:'center',fontSize:9,color:'#555'}}>AT3 — {isSD?'SOUDURE/DECOUPE':'EXTRUSION'}</div>
           <div style={{borderTop:'2px solid #000',margin:'5px 0'}}/>
-          <div style={{textAlign:'center',fontWeight:800,fontSize:12}}>TICKET BOBINE</div>
+          <div style={{textAlign:'center',fontWeight:800,fontSize:12}}>{isSD?'TICKET SOUDURE/DECOUPE':'TICKET BOBINE'}</div>
           <div style={{textAlign:'center',fontSize:8,color:'#666'}}>ENR.ALP1-005</div>
           <div style={{borderTop:'1px dashed #000',margin:'5px 0'}}/>
           {rows.map((r,i)=>r===null?<div key={i} style={{borderTop:'1px dashed #ccc',margin:'4px 0'}}/>
@@ -285,6 +297,7 @@ export default function Operateur() {
   const [alertes,   setAlertes]   = useState([]);
   const [tickets,   setTickets]   = useState([]);
   const [lotsDispo, setLotsDispo] = useState([]);
+  const [bobinesDispo, setBobinesDispo] = useState([]);
   const [arretActif,setArretActif]= useState(null);
   const [ticketAff, setTicketAff] = useState(null);
   const [recap,     setRecap]     = useState(null);
@@ -331,15 +344,20 @@ export default function Operateur() {
     try{const{data}=await axios.get(`${API}/tickets/session/${session.id}`);setTickets(Array.isArray(data)?data:[]);}catch{}
   },[session]);
 
+  const chargerBobines=useCallback(()=>{
+    if(typePoste==='soudure_decoupe'&&ofSel?.id){axios.get(`${API}/tickets/disponibles`,{params:{of_id:ofSel.id,zone:'AT3-SOUD'}}).then(r=>setBobinesDispo(Array.isArray(r.data)?r.data:[])).catch(()=>{});}
+  },[typePoste,ofSel]);
+
   useEffect(()=>{chargerDonnees();},[chargerDonnees]);
   useEffect(()=>{
     if(session){
       chargerTickets();
       axios.get(`${API}/lots-prod/of/${ofSel?.id}`).then(r=>setLotsDispo(Array.isArray(r.data)?r.data:[])).catch(()=>{});
-      const iv=setInterval(()=>{chargerTickets();chargerDonnees();},15000);
+      chargerBobines();
+      const iv=setInterval(()=>{chargerTickets();chargerDonnees();chargerBobines();},15000);
       return()=>clearInterval(iv);
     }
-  },[session,chargerTickets,chargerDonnees,ofSel]);
+  },[session,chargerTickets,chargerDonnees,chargerBobines,ofSel]);
 
   // Reset destination quand le type de poste change
   useEffect(()=>{
@@ -363,23 +381,29 @@ export default function Operateur() {
   };
 
   const validerTicket=async()=>{
-    if(!form.poids_brut)return toast.error('Saisissez le poids brut');
+    if(typePoste==='soudure_decoupe'){if(!form.qte_pieces)return toast.error('Saisissez le nombre de pieces');if(!machSel?.id)return toast.error('Selectionnez la machine soudeuse');}else if(!form.poids_brut)return toast.error('Saisissez le poids brut');
     setSubmitting(true);
     try{
+      const isSD=typePoste==='soudure_decoupe';
       const payload={
-        session_id:session.id,of_id:ofSel.id,machine_id:ofSel.machine_id||null,article_id:ofSel.article_id||null,
+        session_id:session.id,of_id:ofSel.id,
+        machine_id:isSD?(machSel?.id||null):(ofSel.machine_id||null),
+        article_id:ofSel.article_id||null,
         poids_brut_kg:parseFloat(form.poids_brut||0),poids_mandrin_kg:parseFloat(form.poids_mandrin||0),
         poids_dechets_kg:parseFloat(form.poids_dechets||0),poids_rebuts_kg:parseFloat(form.rebuts||0),
         motif_dechet:form.motif_dechet||null,motif_rebut:form.motif_rebut||null,
-        type_ticket:typePoste,etape_source:typePoste,etape_dest:form.destination||null,
+        type_ticket:typePoste,etape_source:isSD?'AT3-SOUD':typePoste,etape_dest:form.destination||null,
+        zone_actuelle:isSD?'AT3-SOUD':undefined,
+        ticket_parent_id:isSD?(form.bobine_parent_id||null):undefined,
         lot_id:form.lot_id||null,nom_matiere:form.nom_matiere||null,
         qte_pieces:parseInt(form.qte_pieces||0),numero_sequence:tickets.length+1,
+        numero_colis:form.numero_colis||null,poids_carton_kg:parseFloat(form.poids_carton||0),
       };
       const{data}=await axios.post(`${API}/tickets`,payload);
       toast.success(`Bobine ${data.numero_ticket} enregistrée !`);
       setTicketAff({...data,etape_dest:form.destination});
-      setForm(p=>({...p,poids_brut:'',poids_mandrin:'',poids_dechets:'',motif_dechet:'',rebuts:'',motif_rebut:'',lot_id:'',nom_matiere:''}));
-      chargerTickets();
+      setForm(p=>({...p,poids_brut:'',poids_mandrin:'',poids_dechets:'',motif_dechet:'',rebuts:'',motif_rebut:'',lot_id:'',nom_matiere:'',qte_pieces:'',numero_colis:'',poids_carton:'',bobine_parent_id:'',bobine_manuelle:''}));
+      chargerTickets();chargerBobines();
     }catch(e){toast.error(e.response?.data?.error||e.message||'Erreur enregistrement');}
     finally{setSubmitting(false);}
   };
@@ -413,7 +437,7 @@ export default function Operateur() {
   const inp={width:'100%',borderRadius:10,padding:'14px',fontSize:20,fontWeight:700,boxSizing:'border-box',textAlign:'center',border:'2px solid #e5e7eb',outline:'none',fontFamily:'inherit'};
 
   // Labels du type de poste
-  const POSTE_LABELS = {extrusion:{icon:'🏭',label:'Extrusion',color:'#0369a1'},soudure:{icon:'⚡',label:'Soudure',color:'#d97706'},impression:{icon:'🖨',label:'Impression',color:'#0891b2'},emballage:{icon:'📦',label:'Emballage',color:'#7c3aed'}};
+  const POSTE_LABELS = {extrusion:{icon:'🏭',label:'Extrusion',color:'#0369a1'},impression:{icon:'🖨',label:'Impression',color:'#0891b2'},soudure_decoupe:{icon:'🧵',label:'Soudure/Découpe',color:'#be123c'}};
   const posteInfo = POSTE_LABELS[typePoste] || POSTE_LABELS.extrusion;
 
   return(
@@ -527,7 +551,7 @@ export default function Operateur() {
                 </div>
               </div>
               {/* Décompte */}
-              {cibleKg>0&&(
+              {cibleKg>0&&typePoste!=='soudure_decoupe'&&(
                 <div style={{marginTop:10,paddingTop:8,borderTop:'1px solid #292524'}}>
                   <div style={{display:'flex',justifyContent:'space-between',fontSize:11,marginBottom:4}}>
                     <span style={{color:'#a8a29e'}}>Production</span>
@@ -574,6 +598,8 @@ export default function Operateur() {
                   <span style={{fontSize:11,color:'#9ca3af',marginLeft:'auto'}}>Poste assigné</span>
                 </div>
 
+                {typePoste !== 'soudure_decoupe' && (
+                <>
                 {/* Pesée */}
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
                   <div>
@@ -609,6 +635,65 @@ export default function Operateur() {
                       style={{...inp,fontSize:16,border:'1px solid #fca5a5'}} placeholder="0.000"/>
                   </div>
                 </div>
+                </>
+                )}
+                {typePoste === 'soudure_decoupe' && (
+                <>
+                <div style={{marginBottom:10}}>
+                  <label style={{fontSize:11,fontWeight:600,color:'#374151',display:'block',marginBottom:3}}>Machine (Soudeuse) *</label>
+                  <select value={machSel?.id||''} onChange={e=>{const opts=[{id:10,code:'SO01'},{id:11,code:'SO02'},{id:12,code:'SO03'},{id:13,code:'SO04'},{id:14,code:'SO05'}];const m=opts.find(x=>x.id===parseInt(e.target.value));setMachSel(m||null);saveLS('naido_mach',m||null);}}
+                    style={{width:'100%',padding:'10px',borderRadius:8,border:'2px solid #be123c',fontSize:13}}>
+                    <option value=''>-- Choisir machine --</option>
+                    <option value='10'>SO01</option>
+                    <option value='11'>SO02</option>
+                    <option value='12'>SO03</option>
+                    <option value='13'>SO04</option>
+                    <option value='14'>SO05</option>
+                  </select>
+                </div>
+                <div style={{marginBottom:10}}>
+                  <label style={{fontSize:11,fontWeight:600,color:'#374151',display:'block',marginBottom:3}}>Bobine source</label>
+                  <select value={form.bobine_parent_id||''} onChange={e=>setForm(p=>({...p,bobine_parent_id:e.target.value}))}
+                    style={{width:'100%',padding:'10px',borderRadius:8,border:'1px solid #e5e7eb',fontSize:13}}>
+                    <option value=''>-- Saisir manuellement --</option>
+                    {bobinesDispo.map(b=><option key={b.id} value={b.id}>{b.numero_ticket} — {parseFloat(b.poids_restant_kg!==undefined?b.poids_restant_kg:b.poids_net_kg).toFixed(3)} kg restant</option>)}
+                  </select>
+                  {!form.bobine_parent_id && (
+                    <input type='text' placeholder='Ou saisir le numero de bobine manuellement' value={form.bobine_manuelle||''}
+                      onChange={e=>setForm(p=>({...p,bobine_manuelle:e.target.value}))}
+                      style={{...inp,marginTop:6}}/>
+                  )}
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+                  <div>
+                    <label style={{fontSize:11,fontWeight:600,color:'#374151',display:'block',marginBottom:3}}>Nombre de pieces *</label>
+                    <input type="number" step="1" value={form.qte_pieces} inputMode="numeric"
+                      onChange={e=>setForm(p=>({...p,qte_pieces:e.target.value}))}
+                      style={{...inp,border:'2px solid #be123c'}} placeholder="0"/>
+                  </div>
+                  <div>
+                    <label style={{fontSize:11,fontWeight:600,color:'#374151',display:'block',marginBottom:3}}>Nombre de colis</label>
+                    <input type="number" step="1" value={form.numero_colis} inputMode="numeric"
+                      onChange={e=>setForm(p=>({...p,numero_colis:e.target.value}))}
+                      style={{...inp,color:'#6b7280'}} placeholder="0"/>
+                  </div>
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+                  <div>
+                    <label style={{fontSize:11,fontWeight:600,color:'#374151',display:'block',marginBottom:3}}>Poids colis (kg)</label>
+                    <input type="number" step="0.001" value={form.poids_carton} inputMode="decimal"
+                      onChange={e=>setForm(p=>({...p,poids_carton:e.target.value}))}
+                      style={{...inp,color:'#6b7280'}} placeholder="0.000"/>
+                  </div>
+                  <div>
+                    <label style={{fontSize:11,fontWeight:600,color:'#374151',display:'block',marginBottom:3}}>Rebuts (kg)</label>
+                    <input type="number" step="0.001" value={form.rebuts} inputMode="decimal"
+                      onChange={e=>setForm(p=>({...p,rebuts:e.target.value}))}
+                      style={{...inp,fontSize:16,border:'1px solid #fca5a5'}} placeholder="0.000"/>
+                  </div>
+                </div>
+                </>
+                )}
                 {/* Lots MP */}
                 {lotsDispo.length>0&&(
                   <div style={{marginBottom:10}}>
@@ -641,7 +726,7 @@ export default function Operateur() {
                   }
                 </div>
                 <button onClick={validerTicket}
-                  disabled={submitting||depasse||!form.poids_brut}
+                  disabled={submitting||depasse||(typePoste==='soudure_decoupe'?!form.qte_pieces:!form.poids_brut)}
                   style={{background:depasse?'#dc2626':submitting?'#d1d5db':'#1c1917',color:submitting?'#9ca3af':'#f59e0b',border:'none',padding:'16px',borderRadius:12,width:'100%',cursor:submitting||depasse?'not-allowed':'pointer',fontWeight:700,fontSize:16}}>
                   {depasse?'⛔ OF terminé (+2%)':submitting?'Enregistrement...':'🖨️ Valider & Imprimer ticket bobine'}
                 </button>

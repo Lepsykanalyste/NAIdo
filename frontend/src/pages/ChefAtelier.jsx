@@ -113,6 +113,7 @@ const MENU = [
   { id:'bc',          label:'Bons de Commande',        icon:'clipboard', color:'#0369a1' },
   { id:'df',          label:'Demandes de Fabrication', icon:'clipboard', color:'#7c3aed' },
   { id:'of',          label:'Ordres de Fabrication', icon:'clipboard', color:'#0369a1' },
+  { id:'quarantaine',  label:'Quarantaine',    icon:'clipboard',  color:'#d97706' },
   { id:'production',  label:'Suivi Production',    icon:'production',  color:'#1d4ed8' },
   { id:'planning',    label:'Planning Machines',   icon:'planning',    color:'#0369a1' },
   { id:'rapportjour', label:'Rapports Journaliers',icon:'rapport',     color:'#0f766e' },
@@ -157,7 +158,7 @@ const MENU = [
 const MENU_PAR_ROLE = {
   super_admin:   null, // tout
   directeur:     null, // tout
-  chef_atelier:  ['dashboard','separator1','at3flux','of','production','planning','separator2','dbm','stock_at3','cession','demandes_achat','separator3','ronde','nc','cession_ctrl','gmao','alertes'],
+  chef_atelier:  ['dashboard','separator1','at3flux','of','quarantaine','production','planning','separator2','dbm','stock_at3','cession','demandes_achat','separator3','ronde','nc','cession_ctrl','gmao','alertes'],
   regleur:       ['dashboard','separator1','of','production','planning','alertes'],
   commercial:    ['dashboard','separator1','devis','bc','df','ol','separator2b','clients','vente','alertes'],
   operateur:     ['dashboard','separator1','of','production','alertes'],
@@ -1842,6 +1843,114 @@ function DetailOF({ detail, machines, onClose, onRefresh, onStatut, setOngletAct
 // ══════════════════════════════════════════════════════════════
 // MODULE ORDRES DE FABRICATION
 // ══════════════════════════════════════════════════════════════
+function QuarantaineAT3() {
+  const [tickets, setTickets] = useState([]);
+  const [selected, setSelected] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const charger = () => {
+    axios.get(`${API}/at3/quarantaine-tickets`)
+      .then(r => setTickets(Array.isArray(r.data) ? r.data : []))
+      .catch(() => setTickets([]))
+      .finally(() => setLoading(false));
+  };
+  useEffect(() => { charger(); const t = setInterval(charger, 20000); return () => clearInterval(t); }, []);
+
+  const toggleSel = (id) => setSelected(p => ({ ...p, [id]: !p[id] }));
+  const selectAllForOf = (ofTickets, checked) => {
+    setSelected(p => {
+      const next = { ...p };
+      ofTickets.forEach(t => { next[t.id] = checked; });
+      return next;
+    });
+  };
+
+  const parOf = {};
+  tickets.forEach(t => {
+    if (!parOf[t.numero_of]) parOf[t.numero_of] = [];
+    parOf[t.numero_of].push(t);
+  });
+
+  const valider = async (destination) => {
+    const ids = Object.keys(selected).filter(id => selected[id]);
+    if (!ids.length) { toast.error("Aucune bobine selectionnee"); return; }
+    setSubmitting(true);
+    try {
+      const { data } = await axios.post(`${API}/at3/quarantaine-tickets/valider`, { ticket_ids: ids, destination });
+      toast.success(data.message || "Valide");
+      setSelected({});
+      charger();
+    } catch (err) {
+      toast.error(err.response?.data?.error || "Erreur validation");
+    } finally { setSubmitting(false); }
+  };
+
+  const nbSel = Object.values(selected).filter(Boolean).length;
+
+  if (loading) return <div style={{ padding: 40, textAlign: "center", color: "#9ca3af" }}>Chargement...</div>;
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 800, color: "#1f2937" }}>Zone Quarantaine AT3</h2>
+        <div style={{ fontSize: 13, color: "#6b7280" }}>{tickets.length} bobine(s) en attente</div>
+      </div>
+
+      {nbSel > 0 && (
+        <div style={{ position: "sticky", top: 0, zIndex: 10, background: "#1c1917", borderRadius: 12, padding: "12px 16px", marginBottom: 16, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+          <span style={{ color: "#fff", fontWeight: 700, fontSize: 13 }}>{nbSel} selectionnee(s)</span>
+          <button onClick={() => valider("AT3-IMP")} disabled={submitting}
+            style={{ background: "#7c3aed", color: "#fff", border: "none", padding: "8px 14px", borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
+            Vers Impression
+          </button>
+          <button onClick={() => valider("AT3-SOUD")} disabled={submitting}
+            style={{ background: "#be123c", color: "#fff", border: "none", padding: "8px 14px", borderRadius: 8, fontWeight: 700, fontSize: 12, cursor: "pointer" }}>
+            Vers Soudure/Decoupe
+          </button>
+          <button onClick={() => setSelected({})}
+            style={{ background: "transparent", color: "#9ca3af", border: "1px solid #4b5563", padding: "8px 14px", borderRadius: 8, fontSize: 12, cursor: "pointer" }}>
+            Annuler
+          </button>
+        </div>
+      )}
+
+      {Object.keys(parOf).length === 0 && (
+        <div style={{ padding: 40, textAlign: "center", color: "#9ca3af", background: "#fff", borderRadius: 12, border: "1px solid #e5e7eb" }}>
+          Aucune bobine en attente de validation
+        </div>
+      )}
+
+      {Object.entries(parOf).map(([numeroOf, list]) => {
+        const allChecked = list.every(t => selected[t.id]);
+        const poidsTotal = list.reduce((s, t) => s + parseFloat(t.poids_net_kg || 0), 0);
+        return (
+          <div key={numeroOf} style={{ background: "#fff", borderRadius: 12, border: "1px solid #e5e7eb", marginBottom: 14, overflow: "hidden" }}>
+            <div style={{ background: "#f9fafb", padding: "10px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #e5e7eb" }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontWeight: 700, fontSize: 13 }}>
+                <input type="checkbox" checked={allChecked} onChange={e => selectAllForOf(list, e.target.checked)} />
+                {numeroOf}
+              </label>
+              <span style={{ fontSize: 12, color: "#6b7280" }}>{list.length} bobine(s) - {poidsTotal.toFixed(1)} kg</span>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(160px,1fr))", gap: 8, padding: 12 }}>
+              {list.map(t => (
+                <label key={t.id} style={{ display: "flex", alignItems: "flex-start", gap: 6, background: selected[t.id] ? "#fef3c7" : "#f9fafb", border: `1px solid ${selected[t.id] ? "#fcd34d" : "#e5e7eb"}`, borderRadius: 8, padding: "8px 10px", cursor: "pointer" }}>
+                  <input type="checkbox" checked={!!selected[t.id]} onChange={() => toggleSel(t.id)} style={{ marginTop: 2 }} />
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 11, fontFamily: "monospace", color: "#92400e" }}>{t.numero_ticket}</div>
+                    <div style={{ fontSize: 11, color: "#6b7280" }}>{t.machine_code}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#15803d" }}>{parseFloat(t.poids_net_kg).toFixed(3)} kg</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function OrdresFabrication({ setOngletActif }) {
   const { user } = useAuth();
   const [ofs, setOfs] = useState([]);
@@ -7564,6 +7673,7 @@ function OrdresLivraison() {
       case 'df': return <DemandesFabrication />;
       case 'ol': return <OrdresLivraison />;
       case 'of': return <OrdresFabrication setOngletActif={setOngletActif} />;
+      case 'quarantaine': return <QuarantaineAT3 />;
       case 'dashboard': return (() => { if (user?.role === 'achat') return <DashboardAchat />; if (user?.role === 'chef_atelier') return <DashboardAT3 />; if (user?.role === 'magasinier_mp') return <DashboardMagasinMP />; return <Dashboard />; })();
       case 'production': return <SuiviProduction />;
       case 'planning': return <PlanningMachines />;

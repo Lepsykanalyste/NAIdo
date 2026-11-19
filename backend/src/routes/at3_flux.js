@@ -812,4 +812,37 @@ router.get('/ticket/palette/:id', auth, async (req, res) => {
   } catch(e) { erreur(res, e, 'Erreur ticket palette'); }
 });
 
+
+// GET /api/at3/quarantaine-tickets — Bobines (tickets) en attente de validation quarantaine
+router.get('/quarantaine-tickets', auth, async (req, res) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT tp.id, tp.numero_ticket, tp.of_id, tp.poids_net_kg, tp.created_at,
+             tp.zone_actuelle, tp.etape_dest, o.numero_of, m.code AS machine_code
+      FROM tickets_production tp
+      LEFT JOIN ordres_fabrication o ON o.id = tp.of_id
+      LEFT JOIN machines m ON m.id = tp.machine_id
+      WHERE tp.valide_par IS NULL AND tp.zone_actuelle = 'AT3-EXT'
+      ORDER BY tp.created_at ASC
+    `);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/at3/quarantaine-tickets/valider — Chef valide et choisit la destination
+router.post('/quarantaine-tickets/valider', auth, async (req, res) => {
+  try {
+    const { ticket_ids, destination } = req.body;
+    if (!ticket_ids?.length) return res.status(400).json({ error: 'Aucun ticket selectionne' });
+    if (!['AT3-IMP', 'AT3-SOUD'].includes(destination)) return res.status(400).json({ error: 'Destination invalide' });
+    const { rows } = await db.query(`
+      UPDATE tickets_production
+      SET zone_actuelle = $1, valide_par = $2, valide_at = NOW()
+      WHERE id = ANY($3::uuid[])
+      RETURNING id, numero_ticket
+    `, [destination, req.user.id, ticket_ids]);
+    res.json({ message: `${rows.length} bobine(s) validee(s) vers ${destination}`, tickets: rows });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 module.exports = router;

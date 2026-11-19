@@ -14,7 +14,7 @@ import ChefAtelier from './pages/ChefAtelier';
 const ROLES_OPERATEUR = ['operateur','operateur_ext','operateur_sou','operateur_imp','operateur_dec'];
 const ROLES_CHEF = ['chef_atelier','super_admin','directeur','commercial','magasinier',
                     'magasinier_at3','magasinier_central','achat','vente','qhse','technicien',
-                    'rh','responsable_qhse','responsable_rh','technicien_regleur',
+                    'rh','responsable_qhse','responsable_rh',
                     'controleur_qualite','comptable','responsable_stock','technicien_gmao','emballeur','magasinier_mp'];
 
 class ErrorBoundary extends React.Component {
@@ -44,7 +44,7 @@ function RedirectParRole() {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
   if (ROLES_OPERATEUR.includes(user.role)) return <Navigate to="/operateur" replace />;
-  if (user.role === 'regleur') return <Navigate to="/regleur" replace />;
+  if (user.role === 'regleur' || user.role === 'technicien_regleur') return <Navigate to="/regleur" replace />;
   if (user.role === 'qualite') return <Navigate to="/qualite" replace />;
   return <Navigate to="/chef" replace />;
 }
@@ -61,7 +61,7 @@ export default function App() {
           </PrivateRoute>
         }/>
         <Route path="/regleur/*" element={
-          <PrivateRoute roles={['regleur']}>
+          <PrivateRoute roles={['regleur','technicien_regleur']}>
             <Regleur />
           </PrivateRoute>
         }/>

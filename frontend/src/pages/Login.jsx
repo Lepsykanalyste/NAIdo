@@ -22,7 +22,7 @@ export default function Login() {
       magasinier_mp:'/chef', magasinier_central:'/chef',
       directeur:'/chef', rh:'/chef', qhse:'/chef',
       technicien:'/chef', super_admin:'/chef',
-      technicien_regleur:'/chef',
+      technicien_regleur:'/regleur',
     };
     return map[role] || '/chef';
   };
