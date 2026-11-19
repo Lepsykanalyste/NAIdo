@@ -2655,7 +2655,7 @@ async def df_pdf(df_id: str, user=Depends(get_current_user)):
         import qrcode as _qr, base64 as _b64, urllib.parse as _up
         from io import BytesIO as _BIO
         _q = _qr.QRCode(version=1, box_size=3, border=2, error_correction=_qr.constants.ERROR_CORRECT_M)
-        _q.add_data(pdf_url); _q.make(fit=True)
+        _q.add_data(qr_text); _q.make(fit=True)   # texte d'identification (le PDF exige une connexion)
         _img = _q.make_image(fill_color="black", back_color="white")
         _buf = _BIO(); _img.save(_buf, format="PNG"); _buf.seek(0)
         qr_url = "data:image/png;base64," + _b64.b64encode(_buf.getvalue()).decode()
@@ -3079,7 +3079,7 @@ async def ticket_prod_pdf(ticket_id: str, user=Depends(get_current_user)):
         }
         type_label, couleur = type_labels.get(t.get('type_ticket','extrusion'), ('🏭 PRODUCTION', '#0369a1'))
 
-        pdf_url = f"{os.environ.get('APP_BASE_URL', 'http://localhost:8095')}/api/ticket-prod/{ticket_id}/pdf"
+        pdf_url = f"{os.environ.get('APP_BASE_URL', 'http://localhost:8095')}/api/tickets/{ticket_id}/view"   # page publique de suivi (le PDF exige une connexion)
         import qrcode as _qr, base64 as _b64
         from io import BytesIO as _BIO
         _q = _qr.make(pdf_url)
