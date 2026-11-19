@@ -6,7 +6,7 @@ import os
 
 import jwt
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import JSONResponse
+from starlette.responses import HTMLResponse, JSONResponse
 
 _FICHIER = os.environ.get("RBAC_FILE") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "permissions.json")
 with open(_FICHIER, encoding="utf-8") as _f:
@@ -65,12 +65,22 @@ def decider(role_brut, methode, chemin):
     return ok, (cible if ok else f"role '{role or '?'}' non autorise sur {cible} ({'lecture' if lect else 'ecriture'})")
 
 
+# Ouverture d'un PDF protege depuis la barre d'adresse d'un navigateur (sans jeton) : page qui relit le jeton et redemande le PDF
+PAGE_PDF = "<!DOCTYPE html><html lang=\"fr\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>NAIdo - ouverture du document</title></head><body style=\"font-family:sans-serif;text-align:center;padding:40px;color:#374151\"><p id=\"m\">Ouverture du document...</p><script>\n(function () {\n  var m = document.getElementById('m');\n  function echec(texte) {\n    m.textContent = texte + ' ';\n    var a = document.createElement('a'); a.href = '/'; a.textContent = 'Ouvrir NAIdo';\n    m.appendChild(a);\n  }\n  var t = null;\n  try { t = localStorage.getItem('naido_token'); } catch (e) {}\n  if (!t) { echec('Connectez-vous d abord a NAIdo, puis rouvrez ce lien.'); return; }\n  fetch(location.pathname + location.search, { headers: { 'Authorization': 'Bearer ' + t, 'Accept': 'application/pdf' } })\n    .then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.blob(); })\n    .then(function (b) { location.replace(URL.createObjectURL(b)); })\n    .catch(function (e) { echec('Impossible d ouvrir le document (' + (e && e.message ? e.message : 'erreur') + '). Votre session a peut-etre expire : reconnectez-vous, puis rouvrez ce lien.'); });\n})();\n</script></body></html>"
+
+
+def ouverture_navigateur_pdf(methode, chemin, accept):
+    return methode == "GET" and chemin.endswith("/pdf") and "text/html" in (accept or "").lower()
+
+
 class RbacMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
         chemin = request.url.path
         if est_publique(request.method, chemin):
             return await call_next(request)
         h = request.headers.get("authorization", "")
+        if not h and ouverture_navigateur_pdf(request.method, chemin, request.headers.get("accept", "")):
+            return HTMLResponse(PAGE_PDF, headers={"Cache-Control": "no-store"})
         if not h.lower().startswith("bearer "):
             return await call_next(request)                   # sans jeton : la route repond 401
         try:

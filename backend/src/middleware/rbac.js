@@ -37,10 +37,17 @@ function decider(roleBrut, methode, chemin) {
   return { autorise: ok, raison: ok ? (meilleure ? meilleure.motif : 'defaut') : `role '${role || '?'}' non autorise sur ${meilleure ? meilleure.motif : 'defaut'} (${lect ? 'lecture' : 'ecriture'})` };
 }
 
+// Ouverture d'un PDF protege depuis la barre d'adresse d'un navigateur (sans jeton) : page qui relit le jeton et redemande le PDF
+const PAGE_PDF = "<!DOCTYPE html><html lang=\"fr\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>NAIdo - ouverture du document</title></head><body style=\"font-family:sans-serif;text-align:center;padding:40px;color:#374151\"><p id=\"m\">Ouverture du document...</p><script>\n(function () {\n  var m = document.getElementById('m');\n  function echec(texte) {\n    m.textContent = texte + ' ';\n    var a = document.createElement('a'); a.href = '/'; a.textContent = 'Ouvrir NAIdo';\n    m.appendChild(a);\n  }\n  var t = null;\n  try { t = localStorage.getItem('naido_token'); } catch (e) {}\n  if (!t) { echec('Connectez-vous d abord a NAIdo, puis rouvrez ce lien.'); return; }\n  fetch(location.pathname + location.search, { headers: { 'Authorization': 'Bearer ' + t, 'Accept': 'application/pdf' } })\n    .then(function (r) { if (!r.ok) throw new Error(String(r.status)); return r.blob(); })\n    .then(function (b) { location.replace(URL.createObjectURL(b)); })\n    .catch(function (e) { echec('Impossible d ouvrir le document (' + (e && e.message ? e.message : 'erreur') + '). Votre session a peut-etre expire : reconnectez-vous, puis rouvrez ce lien.'); });\n})();\n</script></body></html>";
+function estOuvertureNavigateurPdf(methode, chemin, accept) {
+  return methode === 'GET' && chemin.endsWith('/pdf') && /text\/html/i.test(accept || '');
+}
+
 function middleware(req, res, next) {
   const chemin = req.originalUrl.split('?')[0];
   if (estPublique(req.method, chemin)) return next();
   const h = req.headers.authorization;
+  if (!h && estOuvertureNavigateurPdf(req.method, chemin, req.headers.accept)) return res.set('Cache-Control', 'no-store').type('html').send(PAGE_PDF);
   if (!h || !h.startsWith('Bearer ')) return next();   // sans jeton : la route repond 401
   let payload;
   try { payload = jwt.verify(h.split(' ')[1], process.env.JWT_SECRET); } catch { return next(); }
