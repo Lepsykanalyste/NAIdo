@@ -11,6 +11,27 @@ const { auth } = require('../middleware/auth');
 const ok  = (res, data)     => res.json(data);
 const err = (res, e, msg='')=> { console.error('[DBM]', msg, e?.message||e); res.status(500).json({ error: msg||e?.message }); };
 
+// Stock des matieres premieres : le detail est dans lots_stock, le total dans stock_articles. Aucun declencheur ne les relie :
+// chaque route met a jour les deux. delta > 0 : ajout sur la ligne existante la plus garnie (ou creation d'une ligne sans emplacement) ;
+// delta < 0 : retrait, emplacement le plus garni d'abord (la quantite n'est jamais retiree plusieurs fois).
+async function ajusterStockArticle(client, articleId, delta) {
+  if (!articleId || !delta) return;
+  if (delta > 0) {
+    const r = await client.query('SELECT id FROM stock_articles WHERE article_id=$1 ORDER BY qte_disponible DESC, id LIMIT 1 FOR UPDATE', [articleId]);
+    if (r.rows.length) await client.query('UPDATE stock_articles SET qte_disponible = qte_disponible + $1::numeric, derniere_entree = NOW() WHERE id=$2', [delta, r.rows[0].id]);
+    else await client.query('INSERT INTO stock_articles (article_id, qte_disponible, derniere_entree) VALUES ($1, $2::numeric, NOW())', [articleId, delta]);
+    return;
+  }
+  let reste = -delta;
+  const lignes = await client.query('SELECT id, qte_disponible FROM stock_articles WHERE article_id=$1 AND qte_disponible > 0 ORDER BY qte_disponible DESC, id FOR UPDATE', [articleId]);
+  for (const e of lignes.rows) {
+    if (reste <= 0.0005) break;
+    const prise = Math.min(reste, parseFloat(e.qte_disponible));
+    await client.query('UPDATE stock_articles SET qte_disponible = qte_disponible - $1::numeric WHERE id=$2', [prise, e.id]);
+    reste -= prise;
+  }
+}
+
 // ══════════════════════════════════════════════════════════════
 // 1. DBM — DEMANDES DE BESOIN EN MATIÈRES
 // ══════════════════════════════════════════════════════════════
@@ -315,15 +336,22 @@ router.put('/:id/annuler', auth, async (req, res) => {
     if (!dbmRes.rows.length) throw new Error('DBM introuvable');
     const dbm = dbmRes.rows[0];
     if (['livre','annule'].includes(dbm.statut)) throw new Error('DBM non annulable dans ce statut');
-    // Remettre le stock en_transit dans stock_articles
+    // Restituer ce qui est en transit : lots (un par bon non receptionne) puis stock_articles, UNE seule fois
+    const liv = await client.query(`SELECT id, ligne_id, article_id, numero_lot, qte_livree FROM dbm_livraisons WHERE dbm_id=$1 AND COALESCE(receptionne,false)=false FOR UPDATE`, [req.params.id]);
+    const couvert = {};
+    for (const v of liv.rows) {
+      const q = parseFloat(v.qte_livree || 0);
+      if (v.numero_lot) await client.query(`UPDATE lots_stock SET qte_disponible = qte_disponible + $1 WHERE article_id=$2 AND numero_lot=$3`, [q, v.article_id, v.numero_lot]);
+      await ajusterStockArticle(client, v.article_id, q);
+      await client.query(`UPDATE dbm_livraisons SET receptionne=true, qte_recue=0, observation_reception='Annulée avec la DBM', date_reception=NOW() WHERE id=$1`, [v.id]);
+      couvert[v.ligne_id] = (couvert[v.ligne_id] || 0) + q;
+    }
+    // anciennes livraisons sans bon : on remet seulement le reste en transit dans stock_articles
     const lignes = await client.query('SELECT * FROM dbm_lignes WHERE dbm_id=$1', [req.params.id]);
     for (const l of lignes.rows) {
-      if (parseFloat(l.qte_en_transit||0) > 0) {
-        await client.query(`
-          UPDATE stock_articles SET qte_disponible=qte_disponible+$1 WHERE article_id=$2
-        `, [l.qte_en_transit, l.article_id]);
-        await client.query(`UPDATE dbm_lignes SET qte_en_transit=0 WHERE id=$1`, [l.id]);
-      }
+      const reste = parseFloat(l.qte_en_transit || 0) - (couvert[l.id] || 0);
+      if (reste > 0.0005) await ajusterStockArticle(client, l.article_id, reste);
+      if (parseFloat(l.qte_en_transit || 0) > 0) await client.query(`UPDATE dbm_lignes SET qte_en_transit=0 WHERE id=$1`, [l.id]);
     }
     await client.query(`
       UPDATE dbm SET statut='annule', notes_magasin=COALESCE(notes_magasin||' | ','') || 'ANNULÉ: ' || $1 WHERE id=$2
@@ -385,6 +413,7 @@ router.put('/stock-mp/entree/:lot_id', auth, async (req, res) => {
       prix_unitaire=$4, fournisseur_nom=$5, date_reception=$6, date_dluo=$7 WHERE id=$8
     `, [numero_lot||lot.numero_lot, qteNum, diff, prix_unitaire||0, fournisseur_nom||'',
         date_reception||lot.date_reception, date_dluo||null, req.params.lot_id]);
+    await ajusterStockArticle(client, lot.article_id, diff);
     await client.query(`
       INSERT INTO journal_stock (article_id, type, qte, numero_lot, cree_par, notes)
       VALUES ($1,'correction',$2,$3,$4,$5)
@@ -425,7 +454,8 @@ router.post('/stock-mp/entree', auth, async (req, res) => {
       ON CONFLICT (numero_lot, article_id) DO UPDATE SET qte_disponible=lots_stock.qte_disponible+$3
     `, [article_id, numero_lot, qteNum, prix_unitaire||0, fournisseur_nom||'', date_reception||new Date().toISOString().split('T')[0], date_dluo||null]);
 
-    // stock_articles mis a jour par trigger
+    // stock_articles suit les lots (aucun declencheur)
+    await ajusterStockArticle(client, article_id, qteNum);
     // Mouvement journal
     await client.query(`
       INSERT INTO journal_stock (article_id, type, qte, numero_lot, cree_par, notes)
@@ -502,15 +532,22 @@ router.put('/:id/annuler', auth, async (req, res) => {
     if (!dbmRes.rows.length) throw new Error('DBM introuvable');
     const dbm = dbmRes.rows[0];
     if (['livre','annule'].includes(dbm.statut)) throw new Error('DBM non annulable dans ce statut');
-    // Remettre le stock en_transit dans stock_articles
+    // Restituer ce qui est en transit : lots (un par bon non receptionne) puis stock_articles, UNE seule fois
+    const liv = await client.query(`SELECT id, ligne_id, article_id, numero_lot, qte_livree FROM dbm_livraisons WHERE dbm_id=$1 AND COALESCE(receptionne,false)=false FOR UPDATE`, [req.params.id]);
+    const couvert = {};
+    for (const v of liv.rows) {
+      const q = parseFloat(v.qte_livree || 0);
+      if (v.numero_lot) await client.query(`UPDATE lots_stock SET qte_disponible = qte_disponible + $1 WHERE article_id=$2 AND numero_lot=$3`, [q, v.article_id, v.numero_lot]);
+      await ajusterStockArticle(client, v.article_id, q);
+      await client.query(`UPDATE dbm_livraisons SET receptionne=true, qte_recue=0, observation_reception='Annulée avec la DBM', date_reception=NOW() WHERE id=$1`, [v.id]);
+      couvert[v.ligne_id] = (couvert[v.ligne_id] || 0) + q;
+    }
+    // anciennes livraisons sans bon : on remet seulement le reste en transit dans stock_articles
     const lignes = await client.query('SELECT * FROM dbm_lignes WHERE dbm_id=$1', [req.params.id]);
     for (const l of lignes.rows) {
-      if (parseFloat(l.qte_en_transit||0) > 0) {
-        await client.query(`
-          UPDATE stock_articles SET qte_disponible=qte_disponible+$1 WHERE article_id=$2
-        `, [l.qte_en_transit, l.article_id]);
-        await client.query(`UPDATE dbm_lignes SET qte_en_transit=0 WHERE id=$1`, [l.id]);
-      }
+      const reste = parseFloat(l.qte_en_transit || 0) - (couvert[l.id] || 0);
+      if (reste > 0.0005) await ajusterStockArticle(client, l.article_id, reste);
+      if (parseFloat(l.qte_en_transit || 0) > 0) await client.query(`UPDATE dbm_lignes SET qte_en_transit=0 WHERE id=$1`, [l.id]);
     }
     await client.query(`
       UPDATE dbm SET statut='annule', notes_magasin=COALESCE(notes_magasin||' | ','') || 'ANNULÉ: ' || $1 WHERE id=$2
@@ -564,15 +601,22 @@ router.put('/:id/annuler', auth, async (req, res) => {
     if (!dbmRes.rows.length) throw new Error('DBM introuvable');
     const dbm = dbmRes.rows[0];
     if (['livre','annule'].includes(dbm.statut)) throw new Error('DBM non annulable dans ce statut');
-    // Remettre le stock en_transit dans stock_articles
+    // Restituer ce qui est en transit : lots (un par bon non receptionne) puis stock_articles, UNE seule fois
+    const liv = await client.query(`SELECT id, ligne_id, article_id, numero_lot, qte_livree FROM dbm_livraisons WHERE dbm_id=$1 AND COALESCE(receptionne,false)=false FOR UPDATE`, [req.params.id]);
+    const couvert = {};
+    for (const v of liv.rows) {
+      const q = parseFloat(v.qte_livree || 0);
+      if (v.numero_lot) await client.query(`UPDATE lots_stock SET qte_disponible = qte_disponible + $1 WHERE article_id=$2 AND numero_lot=$3`, [q, v.article_id, v.numero_lot]);
+      await ajusterStockArticle(client, v.article_id, q);
+      await client.query(`UPDATE dbm_livraisons SET receptionne=true, qte_recue=0, observation_reception='Annulée avec la DBM', date_reception=NOW() WHERE id=$1`, [v.id]);
+      couvert[v.ligne_id] = (couvert[v.ligne_id] || 0) + q;
+    }
+    // anciennes livraisons sans bon : on remet seulement le reste en transit dans stock_articles
     const lignes = await client.query('SELECT * FROM dbm_lignes WHERE dbm_id=$1', [req.params.id]);
     for (const l of lignes.rows) {
-      if (parseFloat(l.qte_en_transit||0) > 0) {
-        await client.query(`
-          UPDATE stock_articles SET qte_disponible=qte_disponible+$1 WHERE article_id=$2
-        `, [l.qte_en_transit, l.article_id]);
-        await client.query(`UPDATE dbm_lignes SET qte_en_transit=0 WHERE id=$1`, [l.id]);
-      }
+      const reste = parseFloat(l.qte_en_transit || 0) - (couvert[l.id] || 0);
+      if (reste > 0.0005) await ajusterStockArticle(client, l.article_id, reste);
+      if (parseFloat(l.qte_en_transit || 0) > 0) await client.query(`UPDATE dbm_lignes SET qte_en_transit=0 WHERE id=$1`, [l.id]);
     }
     await client.query(`
       UPDATE dbm SET statut='annule', notes_magasin=COALESCE(notes_magasin||' | ','') || 'ANNULÉ: ' || $1 WHERE id=$2
