@@ -37,26 +37,26 @@ router.post('/sage', auth, role('chef_atelier'), upload.single('fichier'), async
       try {
         // Upsert client
         await db.query(`
-          INSERT INTO clients (code_sage, nom) VALUES ($1,$2)
-          ON CONFLICT (code_sage) DO UPDATE SET nom=EXCLUDED.nom
-        `, [client_code?.toString(), client_nom?.toString()]);
+          INSERT INTO clients_complet (code, raison_sociale) VALUES ($1,$2)
+          ON CONFLICT (code) DO UPDATE SET raison_sociale=EXCLUDED.raison_sociale
+        `, [client_code?.toString(), (client_nom ?? client_code)?.toString()]);
 
         const clientRes = await db.query(
-          'SELECT id FROM clients WHERE code_sage=$1', [client_code?.toString()]
+          'SELECT id FROM clients_complet WHERE code=$1', [client_code?.toString()]
         );
 
         // Upsert article
         await db.query(`
-          INSERT INTO articles (reference, designation, cadence_heure, temps_reglage_min)
+          INSERT INTO articles (code, designation, cadence_heure, temps_reglage_min)
           VALUES ($1,$2,$3,$4)
-          ON CONFLICT (reference) DO UPDATE SET
+          ON CONFLICT (code) DO UPDATE SET
             designation=EXCLUDED.designation,
             cadence_heure=EXCLUDED.cadence_heure,
             temps_reglage_min=EXCLUDED.temps_reglage_min
         `, [art_ref?.toString(), art_nom?.toString(), parseFloat(cadence)||0, parseInt(tps_reglage)||30]);
 
         const artRes = await db.query(
-          'SELECT id FROM articles WHERE reference=$1', [art_ref?.toString()]
+          'SELECT id FROM articles WHERE code=$1', [art_ref?.toString()]
         );
 
         // Calcul temps prévu

@@ -262,11 +262,16 @@ async def create_audit(pool, data: dict, user_id: str):
     async with pool.acquire() as conn:
         row = await conn.fetchrow("""
             INSERT INTO audits (
+                numero_audit, date_audit, type,
                 titre, type_audit, norme_auditee,
                 processus_audites, ateliers_audites,
                 auditeur_chef_id, auditeurs,
                 date_planifiee, duree_jours
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+            ) VALUES (
+                'AUD-' || TO_CHAR(NOW(), 'YYYYMMDD') || '-' || LPAD(nextval('seq_numero_audit')::text, 4, '0'),
+                COALESCE($8, CURRENT_DATE), $10,
+                $1,$2,$3,$4,$5,$6,$7,$8,$9
+            )
             RETURNING *
         """,
             data["titre"], data.get("type_audit","interne"),
@@ -275,8 +280,9 @@ async def create_audit(pool, data: dict, user_id: str):
             json.dumps(safe_json(data.get("ateliers_audites"),[])),
             data.get("auditeur_chef_id") or user_id,
             json.dumps(safe_json(data.get("auditeurs"),[])),
-            data.get("date_planifiee") or None,
-            float(data.get("duree_jours",1) or 1)
+            date.fromisoformat(data["date_planifiee"]) if data.get("date_planifiee") else None,
+            float(data.get("duree_jours",1) or 1),
+            data.get("type_audit") if data.get("type_audit") in ("interne", "externe", "certification", "surveillance") else "interne"
         )
         return dict(row)
 

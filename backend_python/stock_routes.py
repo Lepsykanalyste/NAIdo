@@ -123,11 +123,11 @@ async def mouvement_handler(pool, payload: dict, type_mouvement: str, user_id: s
                 # Mettre à jour stock_articles
                 await conn.execute("""
                     INSERT INTO stock_articles (article_id, emplacement_id, qte_disponible, valeur_stock, derniere_entree)
-                    VALUES ($1, $2, $3, $3 * $4, NOW())
+                    VALUES ($1, $2, $3, $3::numeric * $4::numeric, NOW())
                     ON CONFLICT (article_id, emplacement_id)
                     DO UPDATE SET
                         qte_disponible = stock_articles.qte_disponible + $3,
-                        valeur_stock   = stock_articles.valeur_stock + ($3 * $4),
+                        valeur_stock   = stock_articles.valeur_stock + ($3::numeric * $4::numeric),
                         derniere_entree = NOW()
                 """, article_id, emplacement_id, qte, prix)
 

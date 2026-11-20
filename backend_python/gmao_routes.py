@@ -280,12 +280,12 @@ async def create_plan(pool, data: dict, user_id: str):
 
         row = await conn.fetchrow("""
             INSERT INTO plans_maintenance (
-                equipement_id, titre, description, type_maintenance,
+                equipement_id, titre, designation, description, type_maintenance,
                 periodicite_type, periodicite_valeur,
                 duree_estimee_h, technicien_id, nb_techniciens,
                 pieces_necessaires, checklist, cout_estime,
                 derniere_realisation, prochaine_echeance, actif
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,true)
+            ) VALUES ($1,$2,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,true)
             RETURNING *
         """,
             data["equipement_id"], data["titre"],
@@ -298,7 +298,7 @@ async def create_plan(pool, data: dict, user_id: str):
             json.dumps(safe_json(data.get("pieces_necessaires"),[])),
             json.dumps(safe_json(data.get("checklist"),[])),
             float(data.get("cout_estime",0) or 0),
-            derniere or None, prochaine.isoformat()
+            date.fromisoformat(derniere) if derniere else None, prochaine
         )
         return dict(row)
 

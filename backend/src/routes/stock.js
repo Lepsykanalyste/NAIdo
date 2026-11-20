@@ -92,7 +92,7 @@ router.post('/lots', auth, async (req, res) => {
         ON CONFLICT (article_id,emplacement_id)
         DO UPDATE SET
           qte_disponible=stock_articles.qte_disponible+$3,
-          valeur_stock=stock_articles.valeur_stock+($3*$4),
+          valeur_stock=stock_articles.valeur_stock+($3::numeric*$4::numeric),
           derniere_entree=NOW()
       `,[d.article_id, emplId, parseFloat(d.qte_initiale), parseFloat(d.prix_unitaire)||0]);
     }
@@ -154,7 +154,7 @@ router.post('/entree', auth, async (req, res) => {
         ON CONFLICT (article_id,emplacement_id)
         DO UPDATE SET
           qte_disponible=stock_articles.qte_disponible+$3,
-          valeur_stock=stock_articles.valeur_stock+($3*$4),
+          valeur_stock=stock_articles.valeur_stock+($3::numeric*$4::numeric),
           derniere_entree=NOW()
       `,[article_id,emplacement_id,qteParsed,prix]);
     } else {
