@@ -51,6 +51,7 @@ export function ModuleDBM() {
   const [mps, setMps]             = useState([]);          // matieres premieres (articles) avec stock magasin
   const [ajoutArt, setAjoutArt]   = useState('');
   const [ajoutQte, setAjoutQte]   = useState('');
+  const [recherche, setRecherche] = useState('');         // barre de recherche des matieres
   const [msgBesoins, setMsgBesoins] = useState('');        // '' | 'composition' | 'suffisant' | 'erreur'
   const [showForm, setShowForm]   = useState(false);
   const [urgence, setUrgence]     = useState(false);
@@ -134,8 +135,15 @@ export function ModuleDBM() {
     setLignes(prev => [...prev, { article_id: a.id, groupe_id: null, famille_id: null, code: a.code, designation: a.designation,
       famille_libelle: a.famille_libelle, qte_necessaire: null, qte_dispo_at3: 0, qte_dispo_mag: parseFloat(a.qte_disponible || 0),
       qte_demandee: q, unite: 'kg', manuel: true }]);
-    setAjoutArt(''); setAjoutQte('');
+    setAjoutArt(''); setAjoutQte(''); setRecherche('');
   };
+
+  // Recherche : insensible aux accents et a la casse ; tous les mots saisis doivent se retrouver (code, designation ou famille)
+  const ACCENTS = new RegExp('[' + String.fromCharCode(0x300) + '-' + String.fromCharCode(0x36f) + ']', 'g');
+  const normaliser = (t) => String(t || '').normalize('NFD').replace(ACCENTS, '').toLowerCase();
+  const correspond = (a, r) => { const txt = normaliser(`${a.code} ${a.designation} ${a.famille_libelle}`); return normaliser(r).split(' ').filter(Boolean).every(m => txt.includes(m)); };
+  const mpsDispo = mps.filter(a => a.qte_disponible > 0);
+  const mpsFiltrees = mpsDispo.filter(a => correspond(a, recherche));
 
   const creerDbm = async () => {
     if (!ofSel) return toast.error('Sélectionnez un OF');
@@ -267,14 +275,24 @@ export function ModuleDBM() {
           {ofSel && (
             <div style={{ background:'#f9fafb', border:'1px dashed #fcd34d', borderRadius:10, padding:12, marginBottom:16 }}>
               <div style={{ fontWeight:700, fontSize:12, color:'#92400e', marginBottom:8 }}>➕ Ajouter une matière (article) à la demande</div>
-              {mps.filter(a => a.qte_disponible > 0).length === 0 && <div style={{ fontSize:11, color:'#dc2626', marginBottom:6 }}>Aucune matière première disponible au magasin.</div>}
+              {mpsDispo.length === 0 && <div style={{ fontSize:11, color:'#dc2626', marginBottom:6 }}>Aucune matière première disponible au magasin.</div>}
+              <div style={{ marginBottom:8 }}>
+                <input type="text" value={recherche} placeholder="🔍 Rechercher une matière (code, désignation, famille)…"
+                  onChange={e => { const r = e.target.value; setRecherche(r); const f = mpsDispo.filter(a => correspond(a, r)); setAjoutArt(f.length === 1 ? String(f[0].id) : (f.some(a => String(a.id) === String(ajoutArt)) ? ajoutArt : '')); }}
+                  style={{ width:'100%', border:'2px solid #fcd34d', borderRadius:8, padding:'8px', fontSize:13, boxSizing:'border-box' }} />
+                {recherche && (
+                  <div style={{ fontSize:11, color: mpsFiltrees.length ? '#6b7280' : '#dc2626', marginTop:3 }}>
+                    {mpsFiltrees.length ? `${mpsFiltrees.length} matière(s) trouvée(s)` : 'Aucune matière ne correspond à cette recherche'}
+                  </div>
+                )}
+              </div>
               <div style={{ display:'grid', gridTemplateColumns:'3fr 1fr auto', gap:8, alignItems:'flex-end' }}>
                 <div>
                   <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Article</label>
                   <select value={ajoutArt} onChange={e => setAjoutArt(e.target.value)}
                     style={{ width:'100%', border:'2px solid #fcd34d', borderRadius:8, padding:'8px', fontSize:13 }}>
                     <option value="">-- Choisir l'article --</option>
-                    {Object.entries(mps.filter(a => a.qte_disponible > 0).reduce((acc, a) => { const f = a.famille_libelle || 'Autres'; (acc[f] = acc[f] || []).push(a); return acc; }, {})).map(([fam, arts]) => (
+                    {Object.entries(mpsFiltrees.reduce((acc, a) => { const f = a.famille_libelle || 'Autres'; (acc[f] = acc[f] || []).push(a); return acc; }, {})).map(([fam, arts]) => (
                       <optgroup key={fam} label={fam}>
                         {arts.map(a => (
                           <option key={a.id} value={a.id}>{a.code} — {a.designation}</option>
