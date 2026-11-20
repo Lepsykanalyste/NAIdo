@@ -778,6 +778,7 @@ export function ModuleReceptionDBM() {
                   <div style={{ fontWeight:800, fontFamily:'monospace', color:'#0369a1' }}>{b.numero_livraison}</div>
                   <div style={{ fontSize:12, color:'#374151' }}>DBM : {b.numero_dbm} | OF : {b.numero_of}</div>
                   <div style={{ fontSize:11, color:'#9ca3af' }}>{new Date(b.date_livraison).toLocaleString('fr-FR', { dateStyle:'short', timeStyle:'short' })} — {b.livre_par_nom}</div>
+                  <DetailBon numero={b.numero_livraison} />
                 </div>
                 <div style={{ textAlign:'right', display:'flex', flexDirection:'column', gap:4, alignItems:'flex-end' }}>
                   <div style={{ fontWeight:700, color:'#15803d' }}>Livré : {parseFloat(b.poids_livre||0).toFixed(1)} kg | Reçu : {parseFloat(b.poids_recu||0).toFixed(1)} kg</div>
@@ -798,6 +799,56 @@ export function ModuleReceptionDBM() {
 // ══════════════════════════════════════════════════════════════
 // MODULE STOCK AT3 — Inventaire interne
 // ══════════════════════════════════════════════════════════════
+function DetailBon({ numero }) {
+  const [ouvert, setOuvert] = useState(false);
+  const [lignes, setLignes] = useState(null);
+  const basculer = async () => {
+    const v = !ouvert;
+    setOuvert(v);
+    if (v && lignes === null) {
+      try {
+        const { data } = await axios.get(`${API}/dbm/livraisons/${encodeURIComponent(numero)}`);
+        setLignes(Array.isArray(data) ? data : []);
+      } catch { setLignes([]); }
+    }
+  };
+  return (
+    <div style={{ marginTop:6 }}>
+      <button onClick={basculer}
+        style={{ background:'none', border:'none', color:'#0369a1', cursor:'pointer', fontSize:11, fontWeight:700, padding:0 }}>
+        {ouvert ? '▲ Masquer le détail' : '▼ Voir le détail'}
+      </button>
+      {ouvert && (
+        <table style={{ width:'100%', borderCollapse:'collapse', marginTop:6, fontSize:12 }}>
+          <thead>
+            <tr style={{ background:'#f3f4f6' }}>
+              {['MP','Lot','Envoyé','Reçu','Observation'].map(h => (
+                <th key={h} style={{ padding:'4px 8px', textAlign:'left', fontSize:10, color:'#6b7280' }}>{h}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {(lignes || []).map(l => (
+              <tr key={l.id} style={{ borderBottom:'1px solid #e5e7eb' }}>
+                <td style={{ padding:'4px 8px', fontWeight:600 }}>{l.designation || l.code}</td>
+                <td style={{ padding:'4px 8px', fontFamily:'monospace' }}>{l.numero_lot || '—'}</td>
+                <td style={{ padding:'4px 8px' }}>{parseFloat(l.qte_livree||0).toFixed(3)} kg</td>
+                <td style={{ padding:'4px 8px', fontWeight:700, color: l.receptionne ? '#15803d' : '#b45309' }}>
+                  {l.receptionne ? parseFloat(l.qte_recue ?? l.qte_livree).toFixed(3) + ' kg' : 'En transit'}
+                </td>
+                <td style={{ padding:'4px 8px', color:'#b45309' }}>{l.observation_reception || ''}</td>
+              </tr>
+            ))}
+            {lignes !== null && lignes.length === 0 && (
+              <tr><td colSpan={5} style={{ padding:8, color:'#9ca3af' }}>Aucune ligne</td></tr>
+            )}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
 export function ModuleStockAT3() {
   const [stock, setStock]   = useState([]);
   const [resume, setResume] = useState([]);
@@ -972,13 +1023,15 @@ export function ModuleReceptionAT3() {
       setDetail(data);
       const src = (data.livraisons && data.livraisons.length > 0)
         ? data.livraisons.filter(lv => parseFloat(lv.qte_livree||0) > 0 && lv.receptionne === false).map(lv => ({
+            livraison_id: lv.id,
+            numero_livraison: lv.numero_livraison,
             ligne_id:   lv.ligne_id,
             article_id: lv.article_id,
             famille_id: (data.lignes||[]).find(l=>l.id===lv.ligne_id)?.famille_id,
             code:       lv.code,
             designation: lv.designation,
             qte_en_transit: parseFloat(lv.qte_livree||0),
-            qte_recue:  parseFloat(lv.qte_livree||0).toFixed(1),
+            qte_recue:  String(parseFloat(lv.qte_livree||0)),
             numero_lot: lv.numero_lot||'',
             observation: '',
           }))
@@ -1045,6 +1098,7 @@ export function ModuleReceptionAT3() {
                   <div style={{ fontWeight:800, fontFamily:'monospace', color:'#7c3aed' }}>{b.numero_livraison}</div>
                   <div style={{ fontSize:12, color:'#374151' }}>DBM : {b.numero_dbm} | OF : {b.numero_of}</div>
                   <div style={{ fontSize:11, color:'#9ca3af' }}>{new Date(b.date_livraison).toLocaleString('fr-FR', { dateStyle:'short', timeStyle:'short' })}</div>
+                  <DetailBon numero={b.numero_livraison} />
                 </div>
                 <div style={{ textAlign:'right', display:'flex', flexDirection:'column', gap:4, alignItems:'flex-end' }}>
                   <div style={{ fontSize:12, color:'#7c3aed' }}>Livré : {parseFloat(b.poids_livre||0).toFixed(1)} kg</div>
@@ -1087,7 +1141,7 @@ export function ModuleReceptionAT3() {
                     <div style={{ fontWeight:700 }}>{r.code}</div>
                     <div style={{ fontSize:10, color:'#6b7280' }}>{r.designation}</div>
                   </td>
-                  <td style={{ padding:'7px 10px', fontFamily:'monospace', fontSize:12, color:'#6b7280' }}>{r.numero_lot || '—'}</td>
+                  <td style={{ padding:'7px 10px', fontFamily:'monospace', fontSize:12, color:'#6b7280' }}>{r.numero_lot || '—'}{r.numero_livraison && <div style={{ fontSize:9, color:'#7c3aed' }}>{r.numero_livraison.split('-').pop()}</div>}</td>
                   <td style={{ padding:'7px 10px', fontWeight:600, color:'#7c3aed' }}>{r.qte_en_transit} kg</td>
                   <td style={{ padding:'7px 10px', width:130 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:4 }}>

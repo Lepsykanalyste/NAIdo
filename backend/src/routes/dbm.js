@@ -176,6 +176,10 @@ router.put('/:id/livrer', auth, async (req, res) => {
         [req.params.id, l.ligne_id, l.article_id, l.numero_lot||'', parseFloat(l.qte_livree), mag_id, numeroLivraison]);
       await client.query(`UPDATE dbm_lignes SET qte_en_transit=LEAST(qte_en_transit+$1, qte_restante) WHERE id=$2`,
         [parseFloat(l.qte_livree), l.ligne_id]);
+      if (!l.numero_lot) throw new Error('Choisissez un lot pour chaque ligne livrée');
+      const lotUp = await client.query(`UPDATE lots_stock SET qte_disponible=qte_disponible-$1::numeric WHERE article_id=$2 AND numero_lot=$3 AND qte_disponible>=$1::numeric`,
+        [parseFloat(l.qte_livree), l.article_id, l.numero_lot]);
+      if (!lotUp.rowCount) throw new Error('Stock insuffisant dans le lot ' + l.numero_lot);
       const saRes = await client.query('SELECT id FROM stock_articles WHERE article_id=$1 LIMIT 1', [l.article_id]);
       if (saRes.rows.length) {
         await client.query(`
@@ -664,6 +668,18 @@ router.get('/stock-mp/entree/:lot_id/pdf', auth, async (req, res) => {
   } catch(e) { err(res, e, 'Erreur fiche réception'); }
 });
 
+// GET /api/dbm/livraisons/:numero — detail d'un bon
+router.get('/livraisons/:numero', auth, async (req, res) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT dv.id, dv.numero_lot, dv.qte_livree, dv.qte_recue, dv.receptionne, dv.observation_reception,
+             a.code, a.designation
+      FROM dbm_livraisons dv LEFT JOIN articles a ON a.id=dv.article_id
+      WHERE dv.numero_livraison=$1 ORDER BY a.code, dv.date_livraison`, [req.params.numero]);
+    ok(res, rows);
+  } catch(e) { err(res, e, 'Erreur détail bon'); }
+});
+
 // GET /api/dbm/livraisons — liste des bons de livraison
 router.get('/livraisons', auth, async (req, res) => {
   try {
@@ -671,7 +687,8 @@ router.get('/livraisons', auth, async (req, res) => {
       SELECT dv.numero_livraison, dv.dbm_id, d.numero_dbm, o.numero_of,
              MIN(dv.date_livraison) AS date_livraison,
              SUM(CASE WHEN dv.receptionne THEN COALESCE(dv.qte_recue,dv.qte_livree) ELSE 0 END) AS poids_total,
-             SUM(dv.qte_livree) AS poids_envoye,
+             SUM(dv.qte_livree) AS poids_livre,
+             SUM(CASE WHEN dv.receptionne THEN COALESCE(dv.qte_recue,dv.qte_livree) ELSE 0 END) AS poids_recu,
              u.prenom||' '||u.nom AS livre_par_nom
       FROM dbm_livraisons dv
       JOIN dbm d ON d.id=dv.dbm_id
