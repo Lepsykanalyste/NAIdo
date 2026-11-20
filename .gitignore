@@ -40,3 +40,7 @@ redis_data/
 
 # Package lock (optionnel mais recommandé)
 # package-lock.json
+
+.env
+.env.*
+*.bak_*

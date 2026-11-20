@@ -167,11 +167,15 @@ router.put('/:id/livrer', auth, async (req, res) => {
     const mag_id = req.user?.id;
     const dbmRes = await client.query('SELECT * FROM dbm WHERE id=$1', [req.params.id]);
     if (!dbmRes.rows.length) throw new Error('DBM introuvable');
+    const numRes = await client.query("SELECT COUNT(DISTINCT numero_livraison) AS n FROM dbm_livraisons WHERE dbm_id=$1", [req.params.id]);
+    const numeroLivraison = dbmRes.rows[0].numero_dbm + '-L' + String(parseInt(numRes.rows[0].n) + 1).padStart(3, '0');
     for (const l of livraisons) {
       if (!l.qte_livree || parseFloat(l.qte_livree) <= 0) continue;
-      await client.query(`
-        UPDATE dbm_lignes SET qte_en_transit=$1, numero_lot=$2 WHERE id=$3
-      `, [parseFloat(l.qte_livree), l.numero_lot||'', l.ligne_id]);
+      await client.query(`INSERT INTO dbm_livraisons (dbm_id,ligne_id,article_id,numero_lot,qte_livree,livre_par,numero_livraison)
+        VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [req.params.id, l.ligne_id, l.article_id, l.numero_lot||'', parseFloat(l.qte_livree), mag_id, numeroLivraison]);
+      await client.query(`UPDATE dbm_lignes SET qte_en_transit=LEAST(qte_en_transit+$1, qte_restante) WHERE id=$2`,
+        [parseFloat(l.qte_livree), l.ligne_id]);
       const saRes = await client.query('SELECT id FROM stock_articles WHERE article_id=$1 LIMIT 1', [l.article_id]);
       if (saRes.rows.length) {
         await client.query(`
@@ -204,12 +208,16 @@ router.put('/:id/receptionner', auth, async (req, res) => {
       const qte = parseFloat(r.qte_recue);
       const ligneRes = await client.query('SELECT * FROM dbm_lignes WHERE id=$1', [r.ligne_id]);
       const ligne = ligneRes.rows[0];
-      await client.query(`
-        UPDATE dbm_lignes SET qte_livree=qte_livree+$1, qte_en_transit=GREATEST(0,qte_en_transit-$1) WHERE id=$2
-      `, [qte, r.ligne_id]);
+      let lv = null;
+      if (r.livraison_id) lv = (await client.query("SELECT * FROM dbm_livraisons WHERE id=$1 AND receptionne=false", [r.livraison_id])).rows[0];
+      if (!lv) lv = (await client.query("SELECT * FROM dbm_livraisons WHERE ligne_id=$1 AND COALESCE(numero_lot,'')=$2 AND receptionne=false ORDER BY date_livraison LIMIT 1", [r.ligne_id, r.numero_lot||''])).rows[0];
+      const envoye = lv ? parseFloat(lv.qte_livree) : qte;
+      if (Math.abs(qte - envoye) > 0.0005 && !String(r.observation||'').trim()) throw new Error('Observation obligatoire si quantité différente de celle livrée');
+      if (lv) await client.query("UPDATE dbm_livraisons SET receptionne=true, qte_recue=$1, observation_reception=$2, date_reception=NOW() WHERE id=$3", [qte, r.observation||null, lv.id]);
+      await client.query(`UPDATE dbm_lignes SET qte_livree=qte_livree+$1, qte_en_transit=GREATEST(0,qte_en_transit-$2) WHERE id=$3`, [qte, envoye, r.ligne_id]);
       const ligneUpd = await client.query('SELECT qte_demandee,qte_livree FROM dbm_lignes WHERE id=$1', [r.ligne_id]);
       if (parseFloat(ligneUpd.rows[0].qte_livree) < parseFloat(ligneUpd.rows[0].qte_demandee)) toutRecu = false;
-      const lotNum = ligne?.numero_lot||'';
+      const lotNum = (lv && lv.numero_lot) || ligne?.numero_lot || '';
       const stockRes = await client.query('SELECT id FROM stock_at3 WHERE article_id=$1 AND numero_lot=$2 LIMIT 1', [r.article_id, lotNum]);
       if (stockRes.rows.length) {
         await client.query(`UPDATE stock_at3 SET qte_disponible=qte_disponible+$1,updated_at=NOW() WHERE id=$2`, [qte, stockRes.rows[0].id]);
@@ -655,6 +663,69 @@ router.get('/stock-mp/entree/:lot_id/pdf', auth, async (req, res) => {
     res.send(html);
   } catch(e) { err(res, e, 'Erreur fiche réception'); }
 });
+
+// GET /api/dbm/livraisons — liste des bons de livraison
+router.get('/livraisons', auth, async (req, res) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT dv.numero_livraison, dv.dbm_id, d.numero_dbm, o.numero_of,
+             MIN(dv.date_livraison) AS date_livraison,
+             SUM(CASE WHEN dv.receptionne THEN COALESCE(dv.qte_recue,dv.qte_livree) ELSE 0 END) AS poids_total,
+             SUM(dv.qte_livree) AS poids_envoye,
+             u.prenom||' '||u.nom AS livre_par_nom
+      FROM dbm_livraisons dv
+      JOIN dbm d ON d.id=dv.dbm_id
+      LEFT JOIN ordres_fabrication o ON o.id=d.of_id
+      LEFT JOIN utilisateurs u ON u.id=dv.livre_par
+      WHERE dv.numero_livraison IS NOT NULL
+      GROUP BY dv.numero_livraison, dv.dbm_id, d.numero_dbm, o.numero_of, u.prenom, u.nom
+      ORDER BY MIN(dv.date_livraison) DESC`);
+    ok(res, rows);
+  } catch(e) { err(res, e, 'Erreur liste livraisons'); }
+});
+
+// GET /api/dbm/livraisons/:numero/pdf — PDF d'un bon de livraison
+router.get('/livraisons/:numero/pdf', auth, async (req, res) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT dv.*, a.code AS article_code, a.designation AS article_nom,
+             d.numero_dbm, o.numero_of,
+             u.prenom||' '||u.nom AS livre_par_nom,
+             dem.prenom||' '||dem.nom AS demandeur_nom
+      FROM dbm_livraisons dv
+      JOIN dbm d ON d.id=dv.dbm_id
+      LEFT JOIN ordres_fabrication o ON o.id=d.of_id
+      LEFT JOIN articles a ON a.id=dv.article_id
+      LEFT JOIN utilisateurs u ON u.id=dv.livre_par
+      LEFT JOIN utilisateurs dem ON dem.id=d.demandeur_id
+      WHERE dv.numero_livraison=$1 ORDER BY dv.date_livraison`, [req.params.numero]);
+    if (!rows.length) return res.status(404).json({ error: 'Bon introuvable' });
+    const d = rows[0];
+    let qr = '';
+    try { qr = await require('qrcode').toDataURL('NAI-LIV|'+d.numero_livraison+'|'+d.numero_dbm, { width:100, margin:1 }); } catch(e) {}
+    const td = 'padding:4px 6px;border-bottom:1px solid #e5e7eb';
+    const lignes = rows.map(l => {
+      const recu = l.receptionne && l.qte_recue != null;
+      const qte = parseFloat(recu ? l.qte_recue : l.qte_livree).toFixed(3);
+      const obs = l.observation_reception ? '<div style="font-size:7pt;color:#b45309">Obs : '+l.observation_reception+'</div>' : '';
+      return '<tr><td style="'+td+'">'+(l.article_code||'—')+'</td><td style="'+td+'">'+(l.article_nom||'—')+'</td><td style="'+td+';text-align:center;font-weight:700">'+qte+'</td><td style="'+td+'">'+(l.numero_lot||'—')+obs+'</td></tr>';
+    }).join('');
+    const statut = rows.every(l => l.receptionne) ? 'Réceptionné par l\'Atelier 3' : 'En transit — non réceptionné';
+    const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><style>*{box-sizing:border-box;margin:0;padding:0}@page{size:A4;margin:15mm}body{font-family:Arial,sans-serif;font-size:9pt;color:#1f2937}.header{border-bottom:3px solid #0369a1;padding-bottom:8px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:flex-start}.company{font-size:16pt;font-weight:900;color:#0369a1}.banner{background:#0369a1;color:#fff;text-align:center;padding:8px;border-radius:4px;margin-bottom:12px;font-size:11pt;font-weight:700;text-transform:uppercase}.num{font-size:18pt;font-weight:900;color:#0369a1;text-align:center;margin:6px 0}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}.sec{border:1px solid #e5e7eb;border-radius:4px}.sec-h{background:#f3f4f6;padding:4px 8px;font-size:7pt;font-weight:700;text-transform:uppercase}.sec-b{padding:8px}.row{display:flex;justify-content:space-between;margin-bottom:3px}.lbl{color:#6b7280;font-size:7.5pt}.val{font-weight:700;font-size:8pt}table{width:100%;border-collapse:collapse;margin-bottom:12px}th{background:#0369a1;color:#fff;padding:5px 6px;text-align:left;font-size:7.5pt}.sigs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:12px}.sig{border:1px solid #d1d5db;border-radius:4px;padding:10px;min-height:60px;font-size:7pt;font-weight:700;text-transform:uppercase}.footer{border-top:1px solid #e5e7eb;padding-top:4px;text-align:center;font-size:6pt;color:#9ca3af;margin-top:8px}</style></head><body>
+<div class="header"><div><div class="company">NAI</div><div style="font-size:7pt;color:#6b7280">Magasin MP → Atelier 3</div></div><div style="text-align:center">${qr?'<img src="'+qr+'" width="80" height="80"/>':''}</div><div style="text-align:right;font-size:7pt;color:#6b7280">Date : ${new Date(d.date_livraison).toLocaleDateString('fr-FR')}<br>${statut}</div></div>
+<div class="banner">Bon de Livraison Matières</div><div class="num">${d.numero_livraison}</div>
+<div class="grid"><div class="sec"><div class="sec-h">Informations</div><div class="sec-b"><div class="row"><span class="lbl">DBM liée</span><span class="val">${d.numero_dbm}</span></div><div class="row"><span class="lbl">OF lié</span><span class="val">${d.numero_of||'—'}</span></div><div class="row"><span class="lbl">Demandeur</span><span class="val">${d.demandeur_nom||'—'}</span></div></div></div>
+<div class="sec"><div class="sec-h">Livraison</div><div class="sec-b"><div class="row"><span class="lbl">Livré par</span><span class="val">${d.livre_par_nom||'—'}</span></div><div class="row"><span class="lbl">Date</span><span class="val">${new Date(d.date_livraison).toLocaleDateString('fr-FR')}</span></div></div></div></div>
+<table><thead><tr><th>Code</th><th>Désignation</th><th style="text-align:center">Qté (kg)</th><th>N° Lot</th></tr></thead><tbody>${lignes}</tbody></table>
+<div class="sigs"><div class="sig">Demandeur<br><br>${d.demandeur_nom||''}</div><div class="sig">Magasinier MP<br><br>${d.livre_par_nom||''}</div><div class="sig">Chef Atelier</div></div>
+<div class="footer">Généré le ${new Date().toLocaleString('fr-FR')} · NAIdo v3 — SOPHOPSY pour NAI</div>
+<script>window.onload=()=>setTimeout(()=>window.print(),800);</script></body></html>`;
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(html);
+  } catch(e) { console.error('PDF livraison:', e); res.status(500).json({ error: 'Erreur PDF livraison' }); }
+});
+
 router.get('/:id', auth, async (req, res) => {
   try {
     const [dbmRes, lignesRes] = await Promise.all([
@@ -669,7 +740,11 @@ router.get('/:id', auth, async (req, res) => {
       `, [req.params.id])
     ]);
     if (!dbmRes.rows.length) return res.status(404).json({ error: 'DBM introuvable' });
-    ok(res, { ...dbmRes.rows[0], lignes: lignesRes.rows });
+    const { rows: livraisons } = await db.query(`
+      SELECT dv.*, a.code, a.designation FROM dbm_livraisons dv
+      LEFT JOIN articles a ON a.id=dv.article_id
+      WHERE dv.dbm_id=$1 AND dv.receptionne=false ORDER BY dv.date_livraison`, [req.params.id]);
+    ok(res, { ...dbmRes.rows[0], lignes: lignesRes.rows, livraisons });
   } catch(e) { err(res, e, 'Erreur détail DBM'); }
 });
 module.exports = router;
