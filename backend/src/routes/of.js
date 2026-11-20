@@ -31,6 +31,11 @@ router.get('/', auth, async (req, res) => {
     if (machine_id) { params.push(parseInt(machine_id)); query += ` AND o.machine_id = $${params.length}`; }
     if (atelier_id) { params.push(atelier_id); query += ` AND o.atelier_id = $${params.length}`; }
     if (article_id) { params.push(article_id); query += ` AND o.article_id = $${params.length}`; }
+    // Régleur et opérateurs : seulement les OF lancés par le chef AT3 (composition validée).
+    const roleU = String(req.user?.role || '');
+    if (['regleur', 'technicien_regleur'].includes(roleU) || roleU.startsWith('operateur')) {
+      query += ` AND NOT (COALESCE(o.at3_composition_validee, false) = false AND o.statut IN ('planifie','lance','en_attente_regleur'))`;
+    }
     query += ' ORDER BY o.priorite DESC, o.date_livraison_prevue ASC';
     const { rows } = await db.query(query, params);
     res.json(rows);
