@@ -159,7 +159,7 @@ async def get_articles(
                 a.temperature_fusion, a.temperature_traitement,
                 a.conditions_stockage, a.risques_securite, a.epi_requis,
                 a.composition, a.notes, a.atelier_production_id,
-                a.famille_id, a.unite_mesure_id, a.created_at,
+                a.famille_id, a.sous_famille_id, a.unite_mesure_id, a.created_at,
                 f.libelle AS famille_libelle, f.code AS famille_code,
                 um.code AS unite_code, um.libelle AS unite_libelle,
                 COALESCE(SUM(sa.qte_disponible),0) AS stock_total
@@ -219,10 +219,10 @@ async def create_article(payload: dict, user=Depends(get_current_user)):
                     prix_achat,prix_vente,prix_cession_interne,
                     stock_mini,dlc_jours,allergenes,points_ccp,
                     normes_iso,atelier_production_id,
-                    composition,notes,actif,stock_maxi,fournisseur,reference_fournisseur
+                    composition,notes,actif,stock_maxi,fournisseur,reference_fournisseur,sous_famille_id
                 ) VALUES (
                     $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,
-                    $15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,true,$28,$29,$30
+                    $15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,true,$28,$29,$30,$31
                 ) RETURNING id,code,designation,type_article
             """,
                 d["code"].upper().strip(),
@@ -255,6 +255,7 @@ async def create_article(payload: dict, user=Depends(get_current_user)):
                 num(d.get("stock_maxi")),
                 d.get("fournisseur") or None,
                 d.get("reference_fournisseur") or None,
+                int_or_none(d.get("sous_famille_id")),
             )
             return dict(row)
         except asyncpg.UniqueViolationError:
@@ -286,6 +287,7 @@ async def update_article(article_id: str, payload: dict, user=Depends(get_curren
         if "stock_mini" in d: add("stock_mini", num(d["stock_mini"], 0))
         if "stock_maxi" in d: add("stock_maxi", num(d["stock_maxi"]))
         if "reference_fournisseur" in d: add("reference_fournisseur", d["reference_fournisseur"] or None)
+        if "sous_famille_id" in d: add("sous_famille_id", int_or_none(d["sous_famille_id"]))
         if "normes_iso" in d: add("normes_iso", d["normes_iso"] or None)
         if "notes" in d: add("notes", d["notes"] or None)
         if "points_ccp" in d: add("points_ccp", bool(d["points_ccp"]))

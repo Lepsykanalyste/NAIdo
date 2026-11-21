@@ -2976,7 +2976,7 @@ function Articles() {
     cadence_theorique_kg_h:'', temps_reglage_min:'30',
     prix_achat:'0', prix_vente:'0', prix_cession_interne:'0',
     stock_mini:'0', dlc_jours:'', allergenes:'', normes_iso:'',
-    points_ccp: false, atelier_production_id:'',
+    points_ccp: false, atelier_production_id:'', sous_famille_id:'',
   });
 
   const chargerRefs = async () => {
@@ -3061,6 +3061,7 @@ function Articles() {
       normes_iso: a.normes_iso || '',
       points_ccp: a.points_ccp || false,
       atelier_production_id: a.atelier_production_id ? String(a.atelier_production_id) : '',
+      sous_famille_id: a.sous_famille_id ? String(a.sous_famille_id) : '',
     });
     setShowForm(true);
     setTimeout(() => window.scrollTo(0, 0), 100);
@@ -3073,7 +3074,7 @@ function Articles() {
     setEditArtId(null);
     setComposition([]);
     setNewComp({ groupe_id:'', pct:'' });
-    setForm({ code:'', designation:'', famille_id:'', unite_mesure_id:'', type_article:'produit_fini', tracabilite_type:'lot', format_lot:'LOT-YYYYMMDD-001', matieres_principales:[], couleur:'', longueur_mm:'', largeur_mm:'', hauteur_mm:'', poids_theorique_kg:'', poids_reel_kg:'', poids_mandrin_kg:'', cadence_theorique_kg_h:'', temps_reglage_min:'30', prix_achat:'0', prix_vente:'0', prix_cession_interne:'0', stock_mini:'0', dlc_jours:'', allergenes:'', normes_iso:'', points_ccp:false, atelier_production_id:'' });
+    setForm({ code:'', designation:'', famille_id:'', unite_mesure_id:'', type_article:'produit_fini', tracabilite_type:'lot', format_lot:'LOT-YYYYMMDD-001', matieres_principales:[], couleur:'', longueur_mm:'', largeur_mm:'', hauteur_mm:'', poids_theorique_kg:'', poids_reel_kg:'', poids_mandrin_kg:'', cadence_theorique_kg_h:'', temps_reglage_min:'30', prix_achat:'0', prix_vente:'0', prix_cession_interne:'0', stock_mini:'0', dlc_jours:'', allergenes:'', normes_iso:'', points_ccp:false, atelier_production_id:'', sous_famille_id:'' });
     setShowForm(true);
     setTimeout(() => document.getElementById('art-code')?.focus(), 100);
   };
@@ -3110,7 +3111,7 @@ function Articles() {
         else if (payload[k] !== null && payload[k] !== undefined) payload[k] = parseFloat(payload[k]) || 0;
       });
       // IDs en null si vide
-      ['famille_id','unite_mesure_id','atelier_production_id'].forEach(k => {
+      ['famille_id','unite_mesure_id','atelier_production_id','sous_famille_id'].forEach(k => {
         if (payload[k] === '') payload[k] = null;
       });
 
@@ -3195,6 +3196,10 @@ function Articles() {
                     { v:'consommable', l:'Consommable' },
                     { v:'piece_detachee', l:'Pièce détachée' },
                   ]}/>
+              {form.type_article === 'matiere_premiere' && (
+                <SelectField label="Groupe de matière (pour les DBM)" value={form.sous_famille_id||''} onChange={e => setForm({...form, sous_famille_id:e.target.value})}
+                  options={groupesMp.map(g => ({ v:String(g.id), l:`${g.famille_libelle} → ${g.libelle}` }))}/>
+              )}
                 <SelectField label="Unité de mesure *" value={form.unite_mesure_id} onChange={e => setForm({...form,unite_mesure_id:e.target.value})} required={true}
                   options={unites.length ? unites.map(u => ({ v:String(u.id), l:`${u.code} — ${u.libelle}` })) : [{v:'',l:'⚠ Activez des unités dans Référentiels'}]}/>
                 <SelectField label="Atelier de production" value={form.atelier_production_id} onChange={e => setForm({...form,atelier_production_id:e.target.value})}
