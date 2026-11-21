@@ -72,7 +72,7 @@ router.get('/rebus', auth, async (req, res) => {
   try {
     const { rows } = await db.query(`
       SELECT m.code AS machine, m.nom AS machine_nom,
-             a.reference AS article, a.designation AS article_nom,
+             a.code AS article, a.designation AS article_nom,
              sh.nom AS shift,
              ROUND(SUM(tp.poids_dechets_kg) / NULLIF(SUM(tp.poids_net_kg),0)*100,2) AS taux_rebus_pct,
              SUM(tp.poids_dechets_kg) AS total_dechets_kg,
@@ -84,7 +84,7 @@ router.get('/rebus', auth, async (req, res) => {
       JOIN sessions_production sp ON sp.id = tp.session_id
       JOIN shifts sh ON sh.id = sp.shift_id
       WHERE DATE(tp.created_at) >= CURRENT_DATE - INTERVAL '7 days'
-      GROUP BY m.code, m.nom, a.reference, a.designation, sh.nom
+      GROUP BY m.code, m.nom, a.code, a.designation, sh.nom
       ORDER BY taux_rebus_pct DESC
     `);
     res.json(rows);

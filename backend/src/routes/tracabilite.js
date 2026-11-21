@@ -120,9 +120,9 @@ router.get('/ticket/:numero', auth, async (req, res) => {
     const { rows } = await db.query(`
       SELECT tp.*,
         o.numero_of, o.quantite_cible, o.date_livraison_prevue,
-        a.designation AS article, a.reference AS article_ref,
+        a.designation AS article, a.code AS article_ref,
         a.dimensions, a.couleur,
-        c.nom AS client,
+        c.raison_sociale AS client,
         m.code AS machine_code, m.nom AS machine_nom,
         u.nom || ' ' || u.prenom AS operateur,
         sp.heure_debut AS session_debut,
@@ -132,7 +132,7 @@ router.get('/ticket/:numero', auth, async (req, res) => {
       FROM tickets_production tp
       JOIN ordres_fabrication o ON o.id = tp.of_id
       JOIN articles a ON a.id = o.article_id
-      JOIN clients c ON c.id = o.client_id
+      LEFT JOIN clients_complet c ON c.id = o.client_id
       JOIN machines m ON m.id = tp.machine_id
       JOIN utilisateurs u ON u.id = tp.operateur_id
       JOIN sessions_production sp ON sp.id = tp.session_id

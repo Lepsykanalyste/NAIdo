@@ -33,14 +33,14 @@ router.get('/of', auth, async (req, res) => {
              a.poids_theorique_kg, a.cadence_theorique_kg_h,
              a.composition, a.composition_familles, a.couleur, a.longueur_mm, a.largeur_mm,
              o.at3_composition_familles,
-             c.nom AS client_nom,
+             c.raison_sociale AS client_nom,
              m.code AS machine_code,
              (SELECT COUNT(*) FROM bobines_production b WHERE b.of_id = o.id) AS nb_bobines,
              (SELECT COALESCE(SUM(poids_net_kg),0) FROM bobines_production b WHERE b.of_id = o.id) AS poids_produit_kg,
              (SELECT COUNT(*) FROM palettes_emballage p WHERE p.of_id = o.id) AS nb_palettes
       FROM ordres_fabrication o
       LEFT JOIN articles a ON a.id = o.article_id
-      LEFT JOIN clients c  ON c.id = o.client_id
+      LEFT JOIN clients_complet c  ON c.id = o.client_id
       LEFT JOIN machines m ON m.id = o.at3_machine_assignee_id
       WHERE o.statut NOT IN ('annule','archive','brouillon')
     `;
@@ -67,11 +67,11 @@ router.get('/of/:id', auth, async (req, res) => {
              o.at3_composition_familles,
              a.longueur_mm, a.largeur_mm, a.hauteur_mm,
              a.tracabilite_type, a.format_lot,
-             c.nom AS client_nom, c.telephone AS client_tel,
-             m.code AS machine_code, m.libelle AS machine_libelle
+             c.raison_sociale AS client_nom, c.telephone AS client_tel,
+             m.code AS machine_code, m.nom AS machine_libelle
       FROM ordres_fabrication o
       LEFT JOIN articles a ON a.id = o.article_id
-      LEFT JOIN clients c  ON c.id = o.client_id
+      LEFT JOIN clients_complet c  ON c.id = o.client_id
       LEFT JOIN machines m ON m.id = o.at3_machine_assignee_id
       WHERE o.id = $1
     `, [req.params.id]);
@@ -772,13 +772,13 @@ router.get('/ticket/bobine/:id', auth, async (req, res) => {
              o.numero_of, o.quantite_cible AS qte_of,
              a.code AS article_code, a.designation AS article_nom,
              a.couleur, a.longueur_mm, a.largeur_mm,
-             c.nom AS client_nom,
+             c.raison_sociale AS client_nom,
              m.code AS machine_code,
              u.nom || ' ' || u.prenom AS operateur_nom
       FROM bobines_production b
       LEFT JOIN ordres_fabrication o ON o.id = b.of_id
       LEFT JOIN articles a           ON a.id = b.article_id
-      LEFT JOIN clients c            ON c.id = o.client_id
+      LEFT JOIN clients_complet c            ON c.id = o.client_id
       LEFT JOIN machines m           ON m.id = b.machine_id
       LEFT JOIN utilisateurs u       ON u.id = b.operateur_id
       WHERE b.id = $1
@@ -798,12 +798,12 @@ router.get('/ticket/palette/:id', auth, async (req, res) => {
              o.numero_of,
              a.code AS article_code, a.designation AS article_nom,
              a.longueur_mm, a.largeur_mm, a.couleur,
-             c.nom AS client_nom,
+             c.raison_sociale AS client_nom,
              u.nom || ' ' || u.prenom AS emballeur_nom
       FROM palettes_emballage p
       LEFT JOIN ordres_fabrication o ON o.id = p.of_id
       LEFT JOIN articles a           ON a.id = p.article_id
-      LEFT JOIN clients c            ON c.id = o.client_id
+      LEFT JOIN clients_complet c            ON c.id = o.client_id
       LEFT JOIN utilisateurs u       ON u.id = p.emballeur_id
       WHERE p.id = $1
     `, [req.params.id]);
