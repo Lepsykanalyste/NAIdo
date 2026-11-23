@@ -8534,6 +8534,7 @@ function Fournisseurs() {
 // MODULE VENTE — inspiré de Leinad Sale
 // ══════════════════════════════════════════════════════════════
 function Vente() {
+  const { user } = useAuth();
   const [onglet, setOnglet] = useState('liste');
   const [ventes, setVentes] = useState([]);
   const [clients, setClients] = useState([]);
