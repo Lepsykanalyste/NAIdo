@@ -14,6 +14,46 @@ with open(_FICHIER, encoding="utf-8") as _f:
 
 _log = logging.getLogger("rbac")
 
+# Politique lue dans la base (table politique_acces), rechargee au plus toutes les 60 secondes.
+# Si la base est absente ou la politique invalide, la precedente reste active.
+_POOL = None
+_DERNIER_CHARGEMENT = 0.0
+_CLES = ("regles", "publiques", "super_admin_seulement", "tous_connectes")
+
+def definir_pool(pool):
+    global _POOL
+    _POOL = pool
+
+def _politique_valide(p):
+    return isinstance(p, dict) and all(isinstance(p.get(k), list) for k in _CLES) \
+        and isinstance(p.get("defaut"), dict) and isinstance(p["defaut"].get("lecture"), list) and isinstance(p["defaut"].get("ecriture"), list)
+
+async def recharger_politique():
+    global POLITIQUE
+    if _POOL is None:
+        return False
+    try:
+        async with _POOL.acquire() as conn:
+            contenu = await conn.fetchval("SELECT contenu FROM politique_acces WHERE id = 1")
+        if contenu is None:
+            return False
+        p = json.loads(contenu) if isinstance(contenu, str) else contenu
+        if not _politique_valide(p):
+            raise ValueError("politique invalide : la precedente reste active")
+        POLITIQUE = p
+        return True
+    except Exception as e:
+        _log.warning("[RBAC] politique non rechargee : %s", e)
+        return False
+
+async def rafraichir_si_besoin():
+    global _DERNIER_CHARGEMENT
+    import time
+    if _POOL is None or time.time() - _DERNIER_CHARGEMENT < 60:
+        return
+    _DERNIER_CHARGEMENT = time.time()
+    await recharger_politique()
+
 
 def _segs(p):
     return [s for s in str(p).split("?")[0].split("/") if s]
@@ -75,6 +115,7 @@ def ouverture_navigateur_pdf(methode, chemin, accept):
 
 class RbacMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
+        await rafraichir_si_besoin()
         chemin = request.url.path
         if est_publique(request.method, chemin):
             return await call_next(request)

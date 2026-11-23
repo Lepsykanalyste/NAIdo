@@ -24,6 +24,8 @@ pool = None
 async def lifespan(app: FastAPI):
     global pool
     pool = await asyncpg.create_pool(DB_URL, min_size=3, max_size=10)
+    import rbac as _rbac
+    _rbac.definir_pool(pool)
     print("NAIdo Python API démarré OK")
     yield
     await pool.close()

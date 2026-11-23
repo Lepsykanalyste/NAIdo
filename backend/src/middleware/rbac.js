@@ -6,7 +6,27 @@ const path = require('path');
 const jwt = require('jsonwebtoken');
 
 const FICHIER = process.env.RBAC_FILE || path.join(__dirname, '../config/permissions.json');
-const POLITIQUE = JSON.parse(fs.readFileSync(FICHIER, 'utf-8'));
+let POLITIQUE = JSON.parse(fs.readFileSync(FICHIER, 'utf-8'));
+const db = require('../config/db');
+
+// Politique lue dans la base (table politique_acces) ; si elle est absente ou invalide, la precedente reste active.
+const politiqueValide = (p) => p && ['regles', 'publiques', 'super_admin_seulement', 'tous_connectes'].every((k) => Array.isArray(p[k]))
+  && p.defaut && Array.isArray(p.defaut.lecture) && Array.isArray(p.defaut.ecriture);
+async function chargerPolitiqueBase() {
+  try {
+    const { rows } = await db.query('SELECT contenu FROM politique_acces WHERE id = 1');
+    if (!rows.length) return false;
+    const p = typeof rows[0].contenu === 'string' ? JSON.parse(rows[0].contenu) : rows[0].contenu;
+    if (!politiqueValide(p)) throw new Error('politique invalide : la precedente reste active');
+    POLITIQUE = p;
+    return true;
+  } catch (e) {
+    console.warn('[RBAC] politique non rechargee :', e.message);
+    return false;
+  }
+}
+chargerPolitiqueBase();
+setInterval(chargerPolitiqueBase, 60 * 1000).unref();
 
 const segs = (p) => String(p).split('?')[0].split('/').filter(Boolean);
 const correspond = (motif, chemin) => {              // motif = debut du chemin, '*' = n'importe quel segment
@@ -61,4 +81,5 @@ function middleware(req, res, next) {
 module.exports = middleware;
 module.exports.decider = decider;
 module.exports.estPublique = estPublique;
-module.exports.POLITIQUE = POLITIQUE;
+Object.defineProperty(module.exports, 'POLITIQUE', { get: () => POLITIQUE });
+module.exports.chargerPolitiqueBase = chargerPolitiqueBase;
