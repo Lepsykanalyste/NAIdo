@@ -9384,6 +9384,30 @@ function GMAO() {
     } catch(e) { toast.error(e.response?.data?.detail||e.response?.data?.error||'Erreur'); }
   };
 
+  // Maintenance rattachee a l'OF : rattacher une intervention, demander une piece
+  const rattacherOT = async (ot) => {
+    try {
+      const { data: ofs } = await axios.get(`${API}/achat/ofs-ouverts`);
+      const saisie = window.prompt("Numéro de l'OF auquel rattacher cette intervention (ex. OF-2026-1006) :");
+      if (!saisie || !saisie.trim()) return;
+      const of = (Array.isArray(ofs) ? ofs : []).find(o => o.numero_of === saisie.trim());
+      if (!of) return window.alert('OF introuvable parmi les OF ouverts');
+      await axios.put(`${API}/couts-of/ordres-travail/${ot.id}/rattacher`, { of_id: of.id });
+      window.alert(`Intervention rattachée à ${of.numero_of}`);
+      window.location.reload();
+    } catch (e) { window.alert(e.response?.data?.error || 'Erreur de rattachement'); }
+  };
+  const demanderPieceOT = async (ot) => {
+    const designation = window.prompt('Pièce ou prestation à demander :');
+    if (!designation || !designation.trim()) return;
+    const quantite = window.prompt('Quantité :', '1');
+    if (!quantite || !(parseFloat(quantite) > 0)) return;
+    try {
+      await axios.post(`${API}/couts-of/ordres-travail/${ot.id}/demande-achat`, { lignes: [{ designation: designation.trim(), quantite_demandee: parseFloat(quantite) }] });
+      window.alert("Demande d'achat créée : elle est au service achat, rattachée à l'OF ou aux frais de maintenance.");
+    } catch (e) { window.alert(e.response?.data?.error || 'Erreur de demande'); }
+  };
+
   const changerStatutOT = async (ot, newStatut) => {
     try {
       await axios.put(`${API}/gmao/ots/${ot.id}`, {...ot, statut:newStatut});
@@ -9641,6 +9665,10 @@ function GMAO() {
                         <div style={{display:'flex',gap:4}}>
                           <button onClick={()=>ouvrir('ot',{...ot})}
                             style={{background:'#fef3c7',color:'#92400e',border:'none',padding:'3px 7px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>✏</button>
+                          <button onClick={()=>rattacherOT(ot)} title="Rattacher cette intervention à un OF"
+                            style={{background:'#e0f2fe',color:'#0369a1',border:'none',padding:'3px 7px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>🔗</button>
+                          <button onClick={()=>demanderPieceOT(ot)} title="Demander une pièce pour cette intervention"
+                            style={{background:'#ede9fe',color:'#6d28d9',border:'none',padding:'3px 7px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>🧾</button>
                           {ot.statut==='ouvert'&&<button onClick={()=>changerStatutOT(ot,'en_cours')}
                             style={{background:'#dcfce7',color:'#15803d',border:'none',padding:'3px 7px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:600}}>▶</button>}
                           {ot.statut==='en_cours'&&<button onClick={()=>ouvrir('ot',{...ot,statut:'termine'})}
