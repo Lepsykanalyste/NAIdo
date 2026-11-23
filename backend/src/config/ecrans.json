@@ -1,0 +1,146 @@
+[
+ {
+  "id": "dashboard",
+  "label": "Tableau de bord"
+ },
+ {
+  "id": "devis",
+  "label": "Devis"
+ },
+ {
+  "id": "bc",
+  "label": "Bons de Commande"
+ },
+ {
+  "id": "df",
+  "label": "Demandes de Fabrication"
+ },
+ {
+  "id": "of",
+  "label": "Ordres de Fabrication"
+ },
+ {
+  "id": "quarantaine",
+  "label": "Quarantaine"
+ },
+ {
+  "id": "production",
+  "label": "Suivi Production"
+ },
+ {
+  "id": "planning",
+  "label": "Planning Machines"
+ },
+ {
+  "id": "rapportjour",
+  "label": "Rapports Journaliers"
+ },
+ {
+  "id": "articles",
+  "label": "Articles (Produits)"
+ },
+ {
+  "id": "matieres",
+  "label": "Matières Premières"
+ },
+ {
+  "id": "articles_divers",
+  "label": "Articles Divers"
+ },
+ {
+  "id": "stock",
+  "label": "Stock"
+ },
+ {
+  "id": "dbm",
+  "label": "DBM — Matières"
+ },
+ {
+  "id": "stock_at3",
+  "label": "Stock AT3"
+ },
+ {
+  "id": "stock_mp",
+  "label": "Stock MP"
+ },
+ {
+  "id": "cession",
+  "label": "Bons de Cession"
+ },
+ {
+  "id": "ol",
+  "label": "Ordres de Livraison"
+ },
+ {
+  "id": "clients",
+  "label": "Clients"
+ },
+ {
+  "id": "vente",
+  "label": "Ventes"
+ },
+ {
+  "id": "fournisseurs",
+  "label": "Fournisseurs"
+ },
+ {
+  "id": "achat",
+  "label": "Commandes Achat"
+ },
+ {
+  "id": "ronde",
+  "label": "Ronde Chef de Quart"
+ },
+ {
+  "id": "nc",
+  "label": "Non-Conformités"
+ },
+ {
+  "id": "cession_ctrl",
+  "label": "Contrôle Avant Cession"
+ },
+ {
+  "id": "qhse",
+  "label": "QHSE"
+ },
+ {
+  "id": "gmao",
+  "label": "GMAO / Maintenance"
+ },
+ {
+  "id": "rh",
+  "label": "RH — Employés & Paie"
+ },
+ {
+  "id": "kpi",
+  "label": "KPI & Rapports"
+ },
+ {
+  "id": "ia",
+  "label": "Assistant IA"
+ },
+ {
+  "id": "users",
+  "label": "Utilisateurs"
+ },
+ {
+  "id": "alertes",
+  "label": "Alertes"
+ },
+ {
+  "id": "parametres",
+  "label": "⚙ Paramètres"
+ },
+ {
+  "id": "referentiels",
+  "label": "Référentiels"
+ },
+ {
+  "id": "at3flux",
+  "label": "Flux Atelier 3"
+ },
+ {
+  "id": "demandes_achat",
+  "label": "Demandes d'achat"
+ }
+]

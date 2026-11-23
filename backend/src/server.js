@@ -97,6 +97,7 @@ app.use('/api/lots-prod',          require('./routes/lots_prod'));
 app.use('/api/direction', require('./routes/direction'));
 app.use('/api/couts-of', require('./routes/cout_of'));
 app.use('/api/poste', require('./routes/poste'));
+app.use('/api/droits', require('./routes/droits_ecrans'));
 app.use('/api', require('./routes/compat_routes'));
 app.use('/api/qualite',        require('./routes/qualite'));
 // Traçabilité
