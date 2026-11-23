@@ -76,6 +76,9 @@ router.post('/commandes', auth, async (req, res) => {
 
     let totalHT = 0, totalTVA = 0;
     for (const l of lignes) {
+      if (num(l.prix_unitaire_ht) < 0) throw userError('Prix unitaire négatif refusé', 400);
+      const tauxSaisi = l.taux_tva === undefined || l.taux_tva === '' ? 19 : num(l.taux_tva);
+      if (tauxSaisi < 0 || tauxSaisi > 100) throw userError('Taux de TVA hors limites (0 à 100 %)', 400);
       const ht  = num(l.quantite_commandee) * num(l.prix_unitaire_ht);
       const tva = ht * (l.taux_tva === undefined || l.taux_tva === '' ? 19 : num(l.taux_tva)) / 100;
       l._ht = ht; l._tva = tva; totalHT += ht; totalTVA += tva;
@@ -168,7 +171,9 @@ router.put('/commandes/:id/receptionner', auth, async (req, res, next) => {
       const q = Math.min(demande, restant);
       if (q <= EPS) continue;
       if (demande > restant + EPS) plafonnees.push(l.designation);
-      aRecevoir.push({ l, q, prix: inp.prix_unitaire_ht === undefined || inp.prix_unitaire_ht === '' ? num(l.prix_unitaire_ht) : num(inp.prix_unitaire_ht) });
+      const prix = inp.prix_unitaire_ht === undefined || inp.prix_unitaire_ht === '' ? num(l.prix_unitaire_ht) : num(inp.prix_unitaire_ht);
+      if (prix < 0) throw userError('Prix unitaire négatif refusé', 400);
+      aRecevoir.push({ l, q, prix });
     }
     if (!aRecevoir.length) throw userError('Aucune quantite a receptionner (tout est deja recu, ou quantites nulles)', 400);
 
@@ -178,8 +183,11 @@ router.put('/commandes/:id/receptionner', auth, async (req, res, next) => {
       [cmd.id, date_reception || new Date().toISOString().slice(0, 10), reference_bl || null, notes || null, req.user?.id || null]);
     const recId = rec.rows[0].id;
 
-    const empl = await client.query(`SELECT id FROM emplacements_stock WHERE actif=true ORDER BY (type='reception') DESC LIMIT 1`);
-    const emplId = empl.rows[0]?.id;
+    // Le stock reçu doit aller dans l'emplacement de réception : sans lui, on refuse plutôt que de ranger au hasard
+    const empl = await client.query(`SELECT id, type FROM emplacements_stock WHERE actif=true ORDER BY (type='reception') DESC LIMIT 1`);
+    if (!empl.rows[0] || empl.rows[0].type !== 'reception')
+      throw userError('Aucun emplacement de réception actif : créez-en un (type réception) avant de recevoir', 400);
+    const emplId = empl.rows[0].id;
     const sansStock = [];
     let rang = 0;
     const fourn = await client.query('SELECT raison_sociale FROM fournisseurs WHERE id=$1', [cmd.fournisseur_id]);
