@@ -2072,6 +2072,7 @@ async def create_utilisateur(payload: dict, user=Depends(get_current_user)):
             )
             user_id = str(row["id"])
             
+            await conn.execute("INSERT INTO utilisateur_postes (utilisateur_id, role_id) SELECT $1, id FROM roles WHERE nom=$2 ON CONFLICT DO NOTHING", row["id"], d.get("role"))
             # Lier à l'employé si fourni
             if d.get("employe_id"):
                 await conn.execute(
@@ -2121,6 +2122,8 @@ async def update_utilisateur(user_id: str, payload: dict, user=Depends(get_curre
             f"UPDATE utilisateurs SET {','.join(sets)} WHERE id=${len(vals)} RETURNING id, login, nom, prenom, email, role, actif, atelier_id, created_at",
             *vals
         )
+        if d.get("role"):
+            await conn.execute("INSERT INTO utilisateur_postes (utilisateur_id, role_id) SELECT $1, id FROM roles WHERE nom=$2 ON CONFLICT DO NOTHING", user_id, d["role"])
         return dict(row)
 
 @app.post("/api/utilisateurs/{user_id}/reset-password")
@@ -2144,7 +2147,110 @@ async def reset_password(user_id: str, payload: dict, user=Depends(get_current_u
 
 @app.get("/api/utilisateurs/roles")
 async def get_roles(user=Depends(get_current_user)):
-    return [{"code": k, **v} for k,v in ROLES_PERMISSIONS.items()]
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("SELECT nom, COALESCE(libelle, nom) AS libelle FROM roles ORDER BY libelle")
+    out = []
+    for r in rows:
+        acces = ROLES_PERMISSIONS.get(r["nom"], {}).get("acces", [])
+        out.append({"code": r["nom"], "label": r["libelle"], "acces": acces})
+    return out
+
+def _code_poste(txt):
+    import unicodedata, re as _re
+    t = unicodedata.normalize("NFKD", str(txt or "")).encode("ascii", "ignore").decode().lower().strip()
+    return _re.sub(r"[^a-z0-9]+", "_", t).strip("_")
+
+POSTES_PROTEGES = {"super_admin", "directeur"}
+
+def _peut_gerer_postes(user):
+    return str((user or {}).get("role") or "") in ("super_admin", "directeur")
+
+@app.get("/api/utilisateurs/postes")
+async def liste_postes(user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT r.nom AS code, COALESCE(r.libelle, r.nom) AS libelle,
+                   (SELECT count(*) FROM utilisateur_postes up WHERE up.role_id = r.id) AS nb_comptes
+            FROM roles r ORDER BY libelle""")
+    return [dict(x) for x in rows]
+
+@app.post("/api/utilisateurs/postes")
+async def creer_poste(payload: dict, user=Depends(get_current_user)):
+    if not _peut_gerer_postes(user):
+        raise HTTPException(403, "Seule la direction peut créer un poste")
+    libelle = str(payload.get("libelle") or "").strip()
+    code = _code_poste(payload.get("code") or libelle)
+    if not libelle or not code:
+        raise HTTPException(400, "Le libellé du poste est obligatoire")
+    async with pool.acquire() as conn:
+        if await conn.fetchval("SELECT 1 FROM roles WHERE nom=$1", code):
+            raise HTTPException(400, f"Le poste '{code}' existe déjà")
+        await conn.execute("INSERT INTO roles (nom, libelle) VALUES ($1, $2)", code, libelle)
+    return {"code": code, "libelle": libelle}
+
+@app.put("/api/utilisateurs/postes/{code}")
+async def modifier_poste(code: str, payload: dict, user=Depends(get_current_user)):
+    if not _peut_gerer_postes(user):
+        raise HTTPException(403, "Seule la direction peut modifier un poste")
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            actuel = await conn.fetchrow("SELECT id, nom FROM roles WHERE nom=$1", code)
+            if not actuel:
+                raise HTTPException(404, "Poste introuvable")
+            libelle = str(payload.get("libelle") or "").strip()
+            nouveau = _code_poste(payload.get("code") or actuel["nom"])
+            if not nouveau:
+                raise HTTPException(400, "Le code du poste ne peut pas être vide")
+            if nouveau != actuel["nom"]:
+                if actuel["nom"] in POSTES_PROTEGES:
+                    raise HTTPException(400, "Ce poste système ne peut pas être renommé (seul son libellé peut changer)")
+                if await conn.fetchval("SELECT 1 FROM roles WHERE nom=$1", nouveau):
+                    raise HTTPException(400, f"Le code '{nouveau}' est déjà utilisé par un autre poste")
+                await conn.execute("UPDATE roles SET nom=$1 WHERE id=$2", nouveau, actuel["id"])
+                await conn.execute("UPDATE utilisateurs SET role=$1 WHERE role=$2", nouveau, actuel["nom"])
+            if libelle:
+                await conn.execute("UPDATE roles SET libelle=$1 WHERE id=$2", libelle, actuel["id"])
+    return {"code": nouveau, "libelle": libelle or nouveau}
+
+@app.delete("/api/utilisateurs/postes/{code}")
+async def supprimer_poste(code: str, user=Depends(get_current_user)):
+    if not _peut_gerer_postes(user):
+        raise HTTPException(403, "Seule la direction peut supprimer un poste")
+    if code in POSTES_PROTEGES:
+        raise HTTPException(400, "Ce poste système ne peut pas être supprimé")
+    async with pool.acquire() as conn:
+        rid = await conn.fetchval("SELECT id FROM roles WHERE nom=$1", code)
+        if not rid:
+            raise HTTPException(404, "Poste introuvable")
+        nb = await conn.fetchval("SELECT count(*) FROM utilisateur_postes WHERE role_id=$1", rid)
+        if nb:
+            raise HTTPException(409, f"Ce poste est attribué à {nb} personne(s) : retirez-le d'abord de leurs postes")
+        await conn.execute("DELETE FROM roles WHERE id=$1", rid)
+    return {"success": True}
+
+@app.put("/api/utilisateurs/{user_id}/postes")
+async def postes_de_la_personne(user_id: str, payload: dict, user=Depends(get_current_user)):
+    if not _peut_gerer_postes(user):
+        raise HTTPException(403, "Seule la direction peut attribuer des postes")
+    codes = [_code_poste(c) for c in (payload.get("postes") or []) if _code_poste(c)]
+    if not codes:
+        raise HTTPException(400, "Au moins un poste est obligatoire")
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            inconnus = [c for c in codes if not await conn.fetchval("SELECT 1 FROM roles WHERE nom=$1", c)]
+            if inconnus:
+                raise HTTPException(400, f"Poste(s) inconnu(s) : {', '.join(inconnus)}")
+            if not await conn.fetchval("SELECT 1 FROM utilisateurs WHERE id=$1", user_id):
+                raise HTTPException(404, "Utilisateur introuvable")
+            principal = payload.get("principal") if payload.get("principal") in codes else codes[0]
+            await conn.execute("DELETE FROM utilisateur_postes WHERE utilisateur_id=$1", user_id)
+            await conn.execute(
+                "INSERT INTO utilisateur_postes (utilisateur_id, role_id) SELECT $1, id FROM roles WHERE nom = ANY($2::text[])",
+                user_id, codes)
+            await conn.execute(
+                "UPDATE utilisateurs SET role=$2::varchar, role_id=(SELECT id FROM roles WHERE nom=$2::varchar) WHERE id=$1",
+                user_id, principal)
+    return {"success": True, "postes": codes, "principal": principal}
 
 @app.get("/api/utilisateurs/{user_id}/acces")
 async def get_acces_utilisateur(user_id: str, user=Depends(get_current_user)):
