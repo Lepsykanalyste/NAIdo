@@ -5616,6 +5616,9 @@ function Utilisateurs() {
   const [showPostes, setShowPostes] = useState(false);
   const [postesAdmin, setPostesAdmin] = useState([]);
   const [nouveauPoste, setNouveauPoste] = useState('');
+  const [showDroits, setShowDroits] = useState(false);
+  const [droits, setDroits] = useState(null);
+  const [droitsSaisie, setDroitsSaisie] = useState({});
 
   const charger = async () => {
     try {
@@ -5660,6 +5663,22 @@ function Utilisateurs() {
   const supprimerPoste = async (p) => {
     if (!window.confirm(`Supprimer le poste « ${p.libelle} » ?`)) return;
     try { await axios.delete(`${API}/utilisateurs/postes/${p.code}`); toast.success('Poste supprimé ✓'); chargerPostesAdmin(); charger(); }
+    catch(e) { toast.error(messageErreur(e)); }
+  };
+
+  // Droits : matrice poste x domaine (lecture et modification)
+  const chargerDroits = async () => {
+    try { const { data } = await axios.get(`${API}/utilisateurs/droits/matrice`); setDroits(data); setDroitsSaisie(data.matrice); }
+    catch(e) { toast.error(messageErreur(e)); }
+  };
+  useEffect(() => { if (showDroits) chargerDroits(); }, [showDroits]);
+  const enregistrerDroits = async () => {
+    try { await axios.put(`${API}/utilisateurs/droits/matrice`, { matrice: droitsSaisie }); toast.success('Droits enregistrés ✓ (effectifs dans la minute)'); chargerDroits(); }
+    catch(e) { toast.error(messageErreur(e)); }
+  };
+  const revenirDroits = async () => {
+    if (!window.confirm('Revenir à la politique précédente ?')) return;
+    try { await axios.post(`${API}/utilisateurs/droits/annuler`); toast.success('Droits restaurés ✓'); chargerDroits(); }
     catch(e) { toast.error(messageErreur(e)); }
   };
 
@@ -5764,6 +5783,10 @@ function Utilisateurs() {
           style={{background:'#fff',color:'#1d4ed8',border:'1px solid #1d4ed8',padding:'9px 16px',borderRadius:8,cursor:'pointer',fontWeight:700}}>
           ⚙ Postes
         </button>
+        <button onClick={()=>setShowDroits(true)}
+          style={{background:'#fff',color:'#7c3aed',border:'1px solid #7c3aed',padding:'9px 16px',borderRadius:8,cursor:'pointer',fontWeight:700}}>
+          🔐 Droits
+        </button>
       </div>
 
       {/* Stats par rôle */}
@@ -5839,6 +5862,68 @@ function Utilisateurs() {
           </div>
         )}
       </div>
+
+      {/* Droits : matrice */}
+      {showDroits && (
+        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:30}}>
+          <div style={{background:'#fff',borderRadius:14,width:'96%',maxWidth:1100,padding:24,maxHeight:'88vh',overflow:'auto'}}>
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:12}}>
+              <h3 style={{margin:0,color:'#7c3aed',fontSize:16,fontWeight:800}}>Droits par poste</h3>
+              <button onClick={()=>setShowDroits(false)} style={{background:'none',border:'none',fontSize:20,cursor:'pointer'}}>✕</button>
+            </div>
+            {!droits ? <div style={{color:'#6b7280'}}>Chargement…</div> : (
+              <>
+                <div style={{fontSize:12,color:'#6b7280',marginBottom:10}}>
+                  Pour chaque poste et chaque domaine : <b>aucun</b>, <b>voir</b> ou <b>modifier</b> (modifier inclut voir).
+                  La direction et le super administrateur gardent toujours un accès complet.
+                  Dernière modification : {droits.modifie_le ? new Date(droits.modifie_le).toLocaleString('fr-FR') : '—'} par {droits.modifie_par || '—'}.
+                </div>
+                <div style={{overflowX:'auto'}}>
+                  <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+                    <thead>
+                      <tr style={{background:'#f5f3ff'}}>
+                        <th style={{textAlign:'left',padding:8,border:'1px solid #e5e7eb'}}>Poste</th>
+                        {droits.domaines.map(d=>(
+                          <th key={d.nom} style={{padding:8,border:'1px solid #e5e7eb',fontSize:11}}>{d.nom}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {droits.postes.map(p=>(
+                        <tr key={p.code}>
+                          <td style={{padding:8,border:'1px solid #e5e7eb',fontWeight:600,whiteSpace:'nowrap'}}>{p.libelle}</td>
+                          {droits.domaines.map(d=>(
+                            <td key={d.nom} style={{padding:4,border:'1px solid #e5e7eb',textAlign:'center'}}>
+                              <select value={(droitsSaisie[p.code]||{})[d.nom] || ''}
+                                onChange={e=>setDroitsSaisie({...droitsSaisie, [p.code]: {...(droitsSaisie[p.code]||{}), [d.nom]: e.target.value}})}
+                                style={{border:'1px solid #d1d5db',borderRadius:6,padding:'4px',fontSize:11,background:
+                                  ((droitsSaisie[p.code]||{})[d.nom]==='modifier')?'#dcfce7':((droitsSaisie[p.code]||{})[d.nom]==='voir')?'#dbeafe':'#fff'}}>
+                                <option value="">aucun</option>
+                                <option value="voir">voir</option>
+                                <option value="modifier">modifier</option>
+                              </select>
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div style={{display:'flex',justifyContent:'space-between',marginTop:16,gap:8}}>
+                  <button onClick={revenirDroits} disabled={!droits.revenir_possible}
+                    style={{border:'1px solid #d1d5db',background:'#fff',borderRadius:8,padding:'9px 16px',cursor:droits.revenir_possible?'pointer':'not-allowed',opacity:droits.revenir_possible?1:0.5}}>
+                    ↶ Revenir à l'état précédent
+                  </button>
+                  <button onClick={enregistrerDroits}
+                    style={{background:'#7c3aed',color:'#fff',border:'none',padding:'9px 22px',borderRadius:8,cursor:'pointer',fontWeight:700}}>
+                    ✓ Enregistrer les droits
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Gestion des postes */}
       {showPostes && (

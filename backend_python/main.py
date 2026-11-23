@@ -2261,6 +2261,113 @@ async def get_postes_de_la_personne(user_id: str, user=Depends(get_current_user)
         principal = await conn.fetchval("SELECT role FROM utilisateurs WHERE id=$1", user_id)
     return {"postes": [x["nom"] for x in rows], "principal": principal}
 
+# ---------- Lot 2 : ecran Droits (matrice poste x domaine) ----------
+# Chaque domaine regroupe des motifs de la politique ; les motifs absents de la politique ou non listes ici ne sont pas modifies.
+DOMAINES_DROITS = [
+    ("Achats", ["/api/achat", "/api/fournisseurs", "/api/articles", "/api/referentiels"]),
+    ("Ventes", ["/api/vente", "/api/bc", "/api/devis", "/api/ol"]),
+    ("Stock", ["/api/stock", "/api/mouvements", "/api/emplacements", "/api/dbm"]),
+    ("Production", ["/api/of", "/api/lots-prod", "/api/sessions", "/api/ticket-prod", "/api/tickets", "/api/composition", "/api/shifts", "/api/regleur", "/api/planning"]),
+    ("Atelier 3", ["/api/at3", "/api/cessions", "/api/rondes", "/api/ateliers"]),
+    ("Qualité", ["/api/non-conformites", "/api/qualite", "/api/processus", "/api/qhse", "/api/tracabilite"]),
+    ("Maintenance", ["/api/arrets", "/api/equipements", "/api/machines", "/api/gmao", "/api/incidents", "/api/ot"]),
+    ("Ressources humaines", ["/api/rh"]),
+    ("Administration", ["/api/utilisateurs", "/api/users", "/api/parametres", "/api/permissions", "/api/kpi", "/api/logs", "/api/rapports", "/api/rapports-journaliers", "/api/import"]),
+]
+POSTES_TOUJOURS_COMPLETS = {"super_admin", "directeur"}
+
+async def _lire_politique(conn):
+    contenu = await conn.fetchval("SELECT contenu FROM politique_acces WHERE id = 1 FOR UPDATE")
+    if contenu is None:
+        raise HTTPException(500, "Politique des droits introuvable en base")
+    return json.loads(contenu) if isinstance(contenu, str) else contenu
+
+def _regles_du_domaine(politique, motifs):
+    return [r for r in politique["regles"] if r["motif"] in motifs]
+
+@app.get("/api/utilisateurs/droits/matrice")
+async def get_matrice_droits(user=Depends(get_current_user)):
+    if not _peut_gerer_postes(user):
+        raise HTTPException(403, "Seule la direction peut consulter les droits")
+    async with pool.acquire() as conn:
+        politique = await _lire_politique(conn)
+        postes = await conn.fetch("SELECT nom, COALESCE(libelle, nom) AS libelle FROM roles ORDER BY libelle")
+        modifie = await conn.fetchrow("SELECT modifie_le, modifie_par, precedente IS NOT NULL AS a_precedente FROM politique_acces WHERE id = 1")
+    matrice = {}
+    for p in postes:
+        if p["nom"] in POSTES_TOUJOURS_COMPLETS:
+            continue
+        matrice[p["nom"]] = {}
+        for nom_dom, motifs in DOMAINES_DROITS:
+            regles = _regles_du_domaine(politique, motifs)
+            modifier = any(p["nom"] in r["ecriture"] for r in regles)
+            voir = modifier or any(p["nom"] in r["lecture"] for r in regles)
+            matrice[p["nom"]][nom_dom] = "modifier" if modifier else ("voir" if voir else "")
+    return {
+        "postes": [{"code": p["nom"], "libelle": p["libelle"]} for p in postes if p["nom"] not in POSTES_TOUJOURS_COMPLETS],
+        "domaines": [{"nom": n, "motifs": [m for m in m_ if any(r["motif"] == m for r in politique["regles"])]} for n, m_ in DOMAINES_DROITS],
+        "matrice": matrice,
+        "toujours_complets": sorted(POSTES_TOUJOURS_COMPLETS),
+        "modifie_le": modifie["modifie_le"].isoformat() if modifie else None,
+        "modifie_par": modifie["modifie_par"] if modifie else None,
+        "revenir_possible": bool(modifie and modifie["a_precedente"]),
+    }
+
+@app.put("/api/utilisateurs/droits/matrice")
+async def enregistrer_matrice_droits(payload: dict, user=Depends(get_current_user)):
+    if not _peut_gerer_postes(user):
+        raise HTTPException(403, "Seule la direction peut modifier les droits")
+    saisie = payload.get("matrice") or {}
+    valeurs_ok = {"", "voir", "modifier"}
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            politique = await _lire_politique(conn)
+            postes_geres = {r["nom"] for r in await conn.fetch("SELECT nom FROM roles")} - POSTES_TOUJOURS_COMPLETS
+            for poste, par_domaine in saisie.items():
+                if poste not in postes_geres:
+                    raise HTTPException(400, f"Poste inconnu : {poste}")
+                for nom_dom, val in (par_domaine or {}).items():
+                    if nom_dom not in dict(DOMAINES_DROITS):
+                        raise HTTPException(400, f"Domaine inconnu : {nom_dom}")
+                    if val not in valeurs_ok:
+                        raise HTTPException(400, f"Valeur invalide pour {poste} / {nom_dom} : {val}")
+            # Pour chaque domaine : on repart des regles existantes, on retire les postes geres, puis on remet ceux saisis
+            for nom_dom, motifs in DOMAINES_DROITS:
+                regles = _regles_du_domaine(politique, motifs)
+                if not regles:
+                    continue
+                voir_list = [p for p in postes_geres if saisie.get(p, {}).get(nom_dom) in ("voir", "modifier")]
+                modif_list = [p for p in postes_geres if saisie.get(p, {}).get(nom_dom) == "modifier"]
+                for r in regles:
+                    lect = [x for x in r["lecture"] if x not in postes_geres]
+                    ecr = [x for x in r["ecriture"] if x not in postes_geres]
+                    r["lecture"] = sorted(set(lect + voir_list + modif_list))
+                    r["ecriture"] = sorted(set(ecr + modif_list))
+            await conn.execute(
+                "UPDATE politique_acces SET precedente = contenu, contenu = $1::jsonb, modifie_le = now(), modifie_par = $2 WHERE id = 1",
+                json.dumps(politique), user.get("login") or str(user.get("id")))
+    import rbac as _rbac
+    await _rbac.recharger_politique()
+    return {"success": True}
+
+@app.post("/api/utilisateurs/droits/annuler")
+async def annuler_derniere_modification_droits(user=Depends(get_current_user)):
+    if not _peut_gerer_postes(user):
+        raise HTTPException(403, "Seule la direction peut modifier les droits")
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            row = await conn.fetchrow("SELECT contenu, precedente FROM politique_acces WHERE id = 1 FOR UPDATE")
+            if not row or row["precedente"] is None:
+                raise HTTPException(400, "Aucune modification précédente à restaurer")
+            await conn.execute(
+                "UPDATE politique_acces SET contenu = $1::jsonb, precedente = $2::jsonb, modifie_le = now(), modifie_par = $3 WHERE id = 1",
+                row["precedente"] if isinstance(row["precedente"], str) else json.dumps(row["precedente"]),
+                row["contenu"] if isinstance(row["contenu"], str) else json.dumps(row["contenu"]),
+                user.get("login") or str(user.get("id")))
+    import rbac as _rbac
+    await _rbac.recharger_politique()
+    return {"success": True}
+
 @app.get("/api/utilisateurs/{user_id}/acces")
 async def get_acces_utilisateur(user_id: str, user=Depends(get_current_user)):
     async with pool.acquire() as conn:
