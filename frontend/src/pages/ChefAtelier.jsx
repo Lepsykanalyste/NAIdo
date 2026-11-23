@@ -2493,6 +2493,7 @@ function Dashboard() {
       )}
 
       {vueMode==='general' && (user?.role==='super_admin'||user?.role==='directeur') && <DashboardDirection />}
+      {vueMode==='general' && user?.role!=='super_admin' && user?.role!=='directeur' && <TableauPoste />}
       {/* ══ VUE GÉNÉRALE NAI ══ */}
       {vueMode==='general' && user?.role!=='commercial' && (
         <div>
@@ -7618,6 +7619,30 @@ export function DashboardDirection() {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+export function TableauPoste() {
+  const [t, setT] = useState(null);
+  const [erreur, setErreur] = useState(false);
+  useEffect(() => { axios.get(`${API}/poste/mon-tableau`).then(r => setT(r.data)).catch(() => setErreur(true)); }, []);
+  if (erreur || !t || !t.blocs || t.blocs.length === 0) return null;
+  return (
+    <div style={{ marginBottom: 22 }}>
+      {t.blocs.map(b => (
+        <div key={b.titre} style={{ marginBottom: 14 }}>
+          <div style={{ fontSize:12, fontWeight:800, color:'#1d4ed8', letterSpacing:1, textTransform:'uppercase', marginBottom:8 }}>{b.titre}</div>
+          <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
+            {b.indicateurs.map(i => (
+              <div key={i.label} style={{ background:'#fff', borderRadius:12, border:'1px solid #e5e7eb', padding:12, minWidth:170, flex:'1 1 170px' }}>
+                <div style={{ fontSize:11, color:'#6b7280', fontWeight:700 }}>{i.label}</div>
+                <div style={{ fontSize:24, fontWeight:800, color:i.couleur, marginTop:4 }}>{i.valeur}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
