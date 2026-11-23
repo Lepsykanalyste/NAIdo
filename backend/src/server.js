@@ -95,6 +95,7 @@ app.use('/api/ticket-prod',      require('./routes/ticket_prod'));
 app.use('/api/df',                require('./routes/demandes_fab'));
 app.use('/api/lots-prod',          require('./routes/lots_prod'));
 app.use('/api/direction', require('./routes/direction'));
+app.use('/api/couts-of', require('./routes/cout_of'));
 app.use('/api', require('./routes/compat_routes'));
 app.use('/api/qualite',        require('./routes/qualite'));
 // Traçabilité
