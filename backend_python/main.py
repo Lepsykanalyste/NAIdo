@@ -1977,6 +1977,14 @@ ROLES_PERMISSIONS = {
     "chef_atelier":      {"label": "Chef d'Atelier", "acces": ["dashboard","production","stock","bons_cession","qhse","gmao"]},
     "responsable_qhse":  {"label": "Responsable QHSE", "acces": ["dashboard","qhse","gmao","kpi"]},
     "responsable_rh":    {"label": "Responsable RH", "acces": ["dashboard","rh","utilisateurs"]},
+    "achat":             {"label": "Achats", "acces": ["dashboard","achats","articles","fournisseurs"]},
+    "magasinier_mp":     {"label": "Magasinier matières premières", "acces": ["dashboard","stock","dbm"]},
+    "magasinier":        {"label": "Magasinier", "acces": ["dashboard","stock"]},
+    "qualite":           {"label": "Qualité", "acces": ["dashboard","qhse","non_conformites"]},
+    "regleur":           {"label": "Régleur", "acces": ["dashboard","production"]},
+    "technicien":        {"label": "Technicien de maintenance", "acces": ["dashboard","gmao","interventions"]},
+    "rh":                {"label": "Ressources humaines", "acces": ["dashboard","rh","utilisateurs"]},
+    "vente":             {"label": "Vente", "acces": ["dashboard","vente","devis"]},
     "technicien_regleur":{"label": "Technicien Régleur", "acces": ["dashboard","production","gmao"]},
     "operateur":         {"label": "Opérateur Machine", "acces": ["dashboard","production"]},
     "controleur_qualite":{"label": "Contrôleur Qualité", "acces": ["dashboard","qhse","production"]},
@@ -2020,12 +2028,22 @@ async def get_utilisateurs(search: Optional[str]=None, role: Optional[str]=None,
             result.append(d)
         return result
 
+async def _role_connu(conn, role):
+    """Un role est accepte s'il figure dans la liste de l'ecran ou dans la table roles."""
+    if role is None or role == "":
+        return False
+    if role in ROLES_PERMISSIONS:
+        return True
+    return bool(await conn.fetchval("SELECT 1 FROM roles WHERE nom=$1", role))
+
 @app.post("/api/utilisateurs")
 async def create_utilisateur(payload: dict, user=Depends(get_current_user)):
     async with pool.acquire() as conn:
         d = payload
         if not d.get("login") or not d.get("password"):
             raise HTTPException(400, "Login et mot de passe requis")
+        if not await _role_connu(conn, d.get("role")):
+            raise HTTPException(400, f"Rôle inconnu : '{d.get('role') or ''}'. Choisissez un rôle dans la liste.")
         if str(d.get("role") or "operateur").lower() in ("super_admin", "directeur") and not is_super_admin(user):
             raise HTTPException(403, "Seul le super administrateur peut creer un compte direction")
         
@@ -2039,8 +2057,8 @@ async def create_utilisateur(payload: dict, user=Depends(get_current_user)):
         
         try:
             row = await conn.fetchrow("""
-                INSERT INTO utilisateurs (login, password_hash, nom, prenom, email, role, actif, atelier_id)
-                VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+                INSERT INTO utilisateurs (login, password_hash, nom, prenom, email, role, actif, atelier_id, role_id)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,(SELECT id FROM roles WHERE nom=$6::varchar))
                 RETURNING id, login, nom, prenom, email, role, actif, created_at
             """,
                 d["login"].lower().strip(),
@@ -2069,6 +2087,16 @@ async def create_utilisateur(payload: dict, user=Depends(get_current_user)):
 async def update_utilisateur(user_id: str, payload: dict, user=Depends(get_current_user)):
     async with pool.acquire() as conn:
         d = payload
+        if d.get("role") and not await _role_connu(conn, d.get("role")):
+            raise HTTPException(400, f"Rôle inconnu : '{d.get('role')}'. Choisissez un rôle dans la liste.")
+        if d.get("login") is not None:
+            login_new = str(d["login"]).strip().lower()
+            if not login_new:
+                raise HTTPException(400, "Le login ne peut pas être vide")
+            deja = await conn.fetchval("SELECT id FROM utilisateurs WHERE login=$1 AND id<>$2", login_new, user_id)
+            if deja:
+                raise HTTPException(400, f"Le login '{login_new}' est déjà utilisé par un autre compte")
+            d["login"] = login_new
         cible = await conn.fetchrow("SELECT COALESCE(u.role, r.nom) AS role FROM utilisateurs u LEFT JOIN roles r ON r.id=u.role_id WHERE u.id=$1", user_id)
         if not cible:
             raise HTTPException(404, "Utilisateur introuvable")
@@ -2078,6 +2106,10 @@ async def update_utilisateur(user_id: str, payload: dict, user=Depends(get_curre
             d.get("role"), bool(d.get("actif",True)),
             int(d["atelier_id"]) if d.get("atelier_id") else None
         ]
+        if d.get("login"):
+            vals.append(d["login"]); sets.append(f"login=${len(vals)}")
+        if d.get("role"):
+            vals.append(d["role"]); sets.append(f"role_id=(SELECT id FROM roles WHERE nom=${len(vals)})")
         if d.get("email"):
             vals.append(d["email"]); sets.append(f"email=${len(vals)}")
         if d.get("nom"):
