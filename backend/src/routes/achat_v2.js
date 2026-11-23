@@ -181,9 +181,19 @@ router.put('/commandes/:id/receptionner', auth, async (req, res, next) => {
     const empl = await client.query(`SELECT id FROM emplacements_stock WHERE actif=true ORDER BY (type='reception') DESC LIMIT 1`);
     const emplId = empl.rows[0]?.id;
     const sansStock = [];
+    let rang = 0;
+    const fourn = await client.query('SELECT raison_sociale FROM fournisseurs WHERE id=$1', [cmd.fournisseur_id]);
+    const fournisseurNom = fourn.rows[0]?.raison_sociale || null;
     for (const { l, q, prix } of aRecevoir) {
       await client.query(`INSERT INTO lignes_reception_achat (reception_id,ligne_achat_id,quantite_recue,prix_unitaire_ht) VALUES ($1,$2,$3,$4)`, [recId, l.id, q, prix]);
       await client.query(`UPDATE lignes_achat SET quantite_recue = COALESCE(quantite_recue,0) + $1 WHERE id=$2`, [q, l.id]);
+      if (l.article_id) {
+        // lot de stock : c'est lui que la DBM et le FIFO utilisent (sans lot, le magasin paraît vide)
+        rang += 1;
+        await client.query(`INSERT INTO lots_stock (article_id, emplacement_id, numero_lot, fournisseur_nom, date_reception, qte_initiale, qte_disponible, prix_unitaire, statut)
+          VALUES ($1,$2,$3,$4,COALESCE($5::date, CURRENT_DATE),$6,$6,$7,'disponible')`,
+          [l.article_id, emplId || null, `${cmd.numero_commande}-${recId.slice(0, 8)}-${rang}`, fournisseurNom, date_reception || null, q, prix]);
+      }
       if (l.article_id) {
         if (emplId) {
           await client.query(`
