@@ -577,6 +577,29 @@ export function ModuleReceptionDBM() {
     ]);
   };
 
+  const demanderException = async (i, l, choisi, plusAncien) => {
+    const motif = window.prompt(`Pourquoi sortir le lot ${choisi.numero_lot} avant le lot ${plusAncien.numero_lot} ?`);
+    if (!motif || !motif.trim()) return toast.error('Le motif est obligatoire');
+    const qte = parseFloat(l.qte_livree || 0);
+    if (!(qte > 0)) return toast.error('Indiquez d\'abord la quantité à sortir');
+    try {
+      const { data } = await axios.post(`${API}/dbm/exceptions-fifo`, { article_id: l.article_id, lot_demande: choisi.numero_lot, qte, motif });
+      setLivraisons(prev => prev.map((x, xi) => xi === i ? { ...x, exception_id: data.id, exception_statut: 'en_attente' } : x));
+      toast.success('Exception demandée : la direction doit l\'approuver');
+    } catch (e) { toast.error(e.response?.data?.error || 'Erreur'); }
+  };
+  const verifierException = async (i, l) => {
+    try {
+      const { data } = await axios.get(`${API}/dbm/exceptions-fifo`);
+      const ex = (Array.isArray(data) ? data : []).find(x => x.id === l.exception_id);
+      if (!ex) return toast.error('Exception introuvable');
+      setLivraisons(prev => prev.map((x, xi) => xi === i ? { ...x, exception_statut: ex.statut } : x));
+      if (ex.statut === 'approuvee') toast.success('Exception approuvée : vous pouvez livrer');
+      else if (ex.statut === 'refusee') toast.error(`Exception refusée${ex.motif_refus ? ' : ' + ex.motif_refus : ''}`);
+      else toast('Toujours en attente de la direction');
+    } catch (e) { toast.error('Erreur de vérification'); }
+  };
+
   const livrer = async () => {
     if (!detail) return;
     setLoading(true);
@@ -644,7 +667,7 @@ export function ModuleReceptionDBM() {
                   <td style={{ padding:'7px 10px', width:160 }}>
                     <select value={l.lot_id||''} onChange={e => {
                       const lot = (lots[l.article_id]||[]).find(x=>x.id===e.target.value);
-                      setLivraisons(prev => prev.map((x,xi) => xi===i?{...x,lot_id:e.target.value,numero_lot:lot?.numero_lot||'',qte_livree:Math.min(parseFloat(l.qte_restante||0),parseFloat(lot?.qte_disponible||0)).toFixed(1)}:x));
+                      setLivraisons(prev => prev.map((x,xi) => xi===i?{...x,exception_id:null,exception_statut:null,lot_id:e.target.value,numero_lot:lot?.numero_lot||'',qte_livree:Math.min(parseFloat(l.qte_restante||0),parseFloat(lot?.qte_disponible||0)).toFixed(1)}:x));
                     }} style={{ width:'100%', border:'1px solid #7dd3fc', borderRadius:6, padding:'5px', fontSize:12, boxSizing:'border-box', marginBottom:3 }}>
                       <option value="">-- Choisir lot --</option>
                       {(lots[l.article_id]||[]).map(lot => {
@@ -660,6 +683,26 @@ export function ModuleReceptionDBM() {
                         );
                       })}
                     </select>
+                    {(() => {
+                      const liste = [...(lots[l.article_id]||[])];
+                      const plusAncien = liste[0];
+                      const choisi = liste.find(x => x.id === l.lot_id);
+                      if (!choisi || !plusAncien || choisi.id === plusAncien.id) return null;
+                      return (
+                        <div style={{ fontSize:10, marginBottom:3 }}>
+                          {l.exception_statut === 'approuvee' && <span style={{ color:'#15803d', fontWeight:700 }}>✓ Exception approuvée</span>}
+                          {l.exception_id && l.exception_statut !== 'approuvee' && <span style={{ color:'#b45309' }}>⏳ Exception en attente de la direction </span>}
+                          {l.exception_id && l.exception_statut !== 'approuvee' && (
+                            <button onClick={() => verifierException(i, l)} style={{ fontSize:10, background:'#fef3c7', color:'#92400e', border:'none', borderRadius:4, padding:'2px 6px', cursor:'pointer' }}>↻ vérifier</button>
+                          )}
+                          {!l.exception_id && (
+                            <button onClick={() => demanderException(i, l, choisi, plusAncien)} style={{ fontSize:10, background:'#fef3c7', color:'#92400e', border:'none', borderRadius:4, padding:'2px 6px', cursor:'pointer' }}>
+                              📝 Demander une exception FIFO (lot plus ancien : {plusAncien.numero_lot})
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })()}
                     <div style={{ display:'flex', gap:4, marginTop:2 }}>
                       <button onClick={() => ajouterLigneParLot(i)}
                         style={{ fontSize:10, background:'#e0f2fe', color:'#0369a1', border:'none', borderRadius:4, padding:'2px 8px', cursor:'pointer' }}>
