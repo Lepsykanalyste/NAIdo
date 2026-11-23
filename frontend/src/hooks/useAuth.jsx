@@ -9,7 +9,10 @@ if (_initialToken) axios.defaults.headers.common['Authorization'] = `Bearer ${_i
 export function estSessionExpiree(error) {
   const status = error?.response?.status;
   const url = String(error?.config?.url || '');
-  return status === 401 && !url.includes('/auth/login') && !!localStorage.getItem('naido_token');
+  // seule compte la requete refusee qui utilisait le jeton ACTUEL : un ancien jeton (autre onglet, ancienne session) ne deconnecte pas
+  const envoye = String(error?.config?.headers?.Authorization || error?.config?.headers?.authorization || '');
+  const actuel = localStorage.getItem('naido_token');
+  return status === 401 && !url.includes('/auth/login') && !!actuel && envoye === 'Bearer ' + actuel;
 }
 axios.interceptors.response.use(
   (r) => r,
