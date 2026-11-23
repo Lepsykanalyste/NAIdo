@@ -125,8 +125,17 @@ router.put('/:id/valider', auth, async (req, res) => {
     );
 
     for (const ligne of lignes) {
-      // Sortie de la source
+      // Sortie de la source : refuser si le stock disponible est insuffisant (jamais de stock négatif)
       if (mvt.emplacement_source_id) {
+        const { rows: [st] } = await client.query(
+          'SELECT qte_disponible FROM stock_articles WHERE article_id=$1 AND emplacement_id=$2 FOR UPDATE',
+          [ligne.article_id, mvt.emplacement_source_id]);
+        const dispo = st ? parseFloat(st.qte_disponible) : 0;
+        if (!(dispo >= parseFloat(ligne.qte_prevue))) {
+          const e = new Error('Stock insuffisant à l\'emplacement source pour un article de ce mouvement');
+          e.http = 400;
+          throw e;
+        }
         await client.query(`
           INSERT INTO stock_articles (article_id, emplacement_id, qte_disponible)
           VALUES ($1,$2,$3)
@@ -157,7 +166,9 @@ router.put('/:id/valider', auth, async (req, res) => {
     res.json({ success: true, pdf_path: pdfPath });
   } catch (err) {
     await client.query('ROLLBACK');
-    res.status(500).json({ error: err.message });
+    if (err.http) return res.status(err.http).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur' });
   } finally { client.release(); }
 });
 

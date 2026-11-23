@@ -399,6 +399,8 @@ async def entree_stock_raw(payload: dict, user=Depends(get_current_user)):
 
             if not article_id or qte <= 0:
                 raise HTTPException(400, "Article et quantité requis")
+            if prix < 0:
+                raise HTTPException(400, "Prix unitaire négatif refusé")
 
             if numero_lot:
                 existing = await conn.fetchrow(
@@ -819,6 +821,13 @@ async def update_lot_statut(lot_id: str, payload: dict, user=Depends(get_current
         valid = ['disponible','quarantaine','bloque','perime','epuise']
         if payload.get("statut") not in valid:
             raise HTTPException(400, "Statut invalide")
+        actuel = await conn.fetchrow("SELECT statut FROM lots_stock WHERE id=$1", lot_id)
+        if not actuel:
+            raise HTTPException(404, "Lot introuvable")
+        # Lever une quarantaine ou un blocage : réservé au service qualité et à la direction
+        if actuel["statut"] in ("quarantaine", "bloque") and payload["statut"] == "disponible" \
+                and str((user or {}).get("role") or "").lower() not in ("qualite", "directeur", "super_admin"):
+            raise HTTPException(403, "Seul le service qualité peut libérer un lot en quarantaine ou bloqué")
         row = await conn.fetchrow(
             "UPDATE lots_stock SET statut=$1 WHERE id=$2 RETURNING *",
             payload["statut"], lot_id

@@ -105,6 +105,8 @@ async def mouvement_handler(pool, payload: dict, type_mouvement: str, user_id: s
                 raise ValueError("Article requis")
             
             qte = float(payload.get("qte", 0))
+            if float(payload.get("prix_unitaire", 0) or 0) < 0:
+                raise ValueError("Prix unitaire négatif refusé")
             if qte <= 0:
                 raise ValueError("Quantité invalide")
             
