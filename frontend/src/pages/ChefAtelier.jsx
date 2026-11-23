@@ -6818,6 +6818,9 @@ function KPIRapports() {
 }
 
 function Stock() {
+  const perms = usePerms();
+  const { user } = useAuth();
+  const hasFinance = () => perms.has_finance || perms.is_super_admin || (user && user.role === "super_admin");
   const [onglet, setOnglet] = useState('inventaire');
   const [inventaire, setInventaire] = useState([]);
   const [resume, setResume] = useState({});
