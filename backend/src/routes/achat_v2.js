@@ -80,7 +80,8 @@ router.post('/commandes', auth, async (req, res) => {
       const tva = ht * (l.taux_tva === undefined || l.taux_tva === '' ? 19 : num(l.taux_tva)) / 100;
       l._ht = ht; l._tva = tva; totalHT += ht; totalTVA += tva;
     }
-    const statut = d.statut === 'brouillon' ? 'brouillon' : 'envoye';
+    if (!d.of_id && !d.libelle_frais_id) throw userError('Indiquez un OF ou un libellé de frais', 400);
+    const statut = 'brouillon';
     const { rows: [cmd] } = await client.query(`
       INSERT INTO commandes_achat (statut,fournisseur_id,date_commande,date_livraison_prevue,montant_ht,taux_tva,montant_tva,montant_ttc,reference_fournisseur,notes,cree_par)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
@@ -94,8 +95,10 @@ router.post('/commandes', auth, async (req, res) => {
         [cmd.id, l.article_id || null, l.designation || '', num(l.quantite_commandee), l.unite_id || null,
          num(l.prix_unitaire_ht), l.taux_tva === undefined || l.taux_tva === '' ? 19 : num(l.taux_tva), l._ht, l._ht + l._tva]);
     }
+    await client.query(`UPDATE commandes_achat SET validation='en_attente_direction', of_id=$2, libelle_frais_id=$3 WHERE id=$1`,
+      [cmd.id, d.of_id || null, d.libelle_frais_id || null]);
     await client.query('COMMIT');
-    res.status(201).json(cmd);
+    res.status(201).json({ ...cmd, validation: 'en_attente_direction' });
   } catch (e) { await client.query('ROLLBACK'); err(res, e, 'Erreur creation commande'); }
   finally { client.release(); }
 });
@@ -112,6 +115,8 @@ router.put('/commandes/:id/statut', auth, async (req, res, next) => {
     const r = await client.query('SELECT * FROM commandes_achat WHERE id=$1 FOR UPDATE', [req.params.id]);
     if (!r.rows.length) throw userError('Commande introuvable', 404);
     const cmd = r.rows[0];
+    if (cible === 'envoye' && cmd.validation !== 'validee')
+      throw userError('Bon de commande non validé : la direction doit le valider avant l\'envoi au fournisseur', 400);
     if (['receptionne', 'annule'].includes(cmd.statut)) throw userError(`Commande deja ${cmd.statut === 'annule' ? 'annulee' : 'entierement receptionnee'}`, 400);
 
     let sets = 'statut=$1', params = [cible];
@@ -395,13 +400,18 @@ router.post('/demandes', auth, async (req, res) => {
   const client = await db.connect();
   try {
     await client.query('BEGIN');
-    const { lignes, notes } = req.body || {};
+    const { lignes, notes, of_id, libelle_frais_id } = req.body || {};
+    if (!of_id && !libelle_frais_id) throw userError('Indiquez un OF ou un libellé de frais', 400);
+    if (libelle_frais_id) {
+      const lf = await client.query('SELECT id FROM libelles_frais WHERE id=$1 AND actif=true', [libelle_frais_id]);
+      if (!lf.rows.length) throw userError('Libellé de frais inconnu ou désactivé', 400);
+    }
     const ok = (lignes || []).filter(l => num(l.quantite_demandee) > 0 && (l.article_id || (l.designation || '').trim()));
     if (!ok.length) throw userError('Ajoutez au moins un article avec une quantite', 400);
     const n = await client.query(`SELECT 'DA-' || TO_CHAR(NOW(),'YYYY') || '-' || LPAD(nextval('seq_demande_achat_num')::text,5,'0') AS num`);
     const { rows: [da] } = await client.query(
-      `INSERT INTO demandes_achat (numero_demande, demandeur_id, statut, notes) VALUES ($1,$2,'en_attente',$3) RETURNING *`,
-      [n.rows[0].num, req.user?.id || null, notes || null]);
+      `INSERT INTO demandes_achat (numero_demande, demandeur_id, statut, notes, of_id, libelle_frais_id) VALUES ($1,$2,'en_attente',$3,$4,$5) RETURNING *`,
+      [n.rows[0].num, req.user?.id || null, notes || null, of_id || null, libelle_frais_id || null]);
     for (const l of ok) {
       await client.query(`INSERT INTO lignes_demande_achat (demande_id,article_id,designation,quantite_demandee,notes) VALUES ($1,$2,$3,$4,$5)`,
         [da.id, l.article_id || null, l.designation || '', num(l.quantite_demandee), l.notes || null]);
@@ -441,8 +451,10 @@ router.post('/demandes/:id/transformer', auth, async (req, res, next) => {
     lg.forEach(l => { l._ht = num(l.quantite_commandee) * num(l.prix_unitaire_ht); ht += l._ht; });
     const { rows: [cmd] } = await client.query(`
       INSERT INTO commandes_achat (statut,fournisseur_id,date_commande,date_livraison_prevue,montant_ht,taux_tva,montant_tva,montant_ttc,notes,cree_par)
-      VALUES ('envoye',$1,CURRENT_DATE,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      VALUES ('brouillon',$1,CURRENT_DATE,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
       [fournisseur_id, date_livraison_prevue || null, ht, tva, ht * tva / 100, ht * (1 + tva / 100), `Issu de la demande ${dr.rows[0].numero_demande}`, req.user?.id || null]);
+    await client.query(`UPDATE commandes_achat SET validation='en_attente_direction', of_id=$2, libelle_frais_id=$3 WHERE id=$1`,
+      [cmd.id, dr.rows[0].of_id || null, dr.rows[0].libelle_frais_id || null]);
     for (const l of lg) {
       await client.query(`
         INSERT INTO lignes_achat (commande_id,article_id,designation,quantite_commandee,prix_unitaire_ht,taux_tva,montant_ht,montant_ttc)
@@ -454,6 +466,99 @@ router.post('/demandes/:id/transformer', auth, async (req, res, next) => {
     res.status(201).json(cmd);
   } catch (e) { await client.query('ROLLBACK'); err(res, e, 'Erreur transformation en bon de commande'); }
   finally { client.release(); }
+});
+
+// ---------- Lot 3 : validation par la direction et libelles de frais ----------
+const EST_DIRECTION = (u) => ['directeur', 'super_admin'].includes(String(u?.role || ''));
+
+router.post('/commandes/:id/valider', auth, async (req, res, next) => {
+  if (!UUID.test(req.params.id)) return next();
+  if (!EST_DIRECTION(req.user)) return res.status(403).json({ error: 'Seule la direction valide les bons de commande' });
+  try {
+    const { rows } = await db.query(
+      `UPDATE commandes_achat SET validation='validee', validee_par=$2, validee_at=NOW(), motif_refus=NULL
+       WHERE id=$1 AND validation='en_attente_direction' RETURNING *`, [req.params.id, req.user?.id || null]);
+    if (!rows.length) return res.status(400).json({ error: 'Ce bon n\'est pas en attente de validation' });
+    res.json(rows[0]);
+  } catch (e) { err(res, e, 'Erreur validation'); }
+});
+
+router.post('/commandes/:id/refuser', auth, async (req, res, next) => {
+  if (!UUID.test(req.params.id)) return next();
+  if (!EST_DIRECTION(req.user)) return res.status(403).json({ error: 'Seule la direction refuse les bons de commande' });
+  const motif = String(req.body?.motif || '').trim();
+  if (!motif) return res.status(400).json({ error: 'Le motif du refus est obligatoire' });
+  try {
+    const { rows } = await db.query(
+      `UPDATE commandes_achat SET validation='refusee', motif_refus=$2, validee_par=$3, validee_at=NOW()
+       WHERE id=$1 AND validation='en_attente_direction' RETURNING *`, [req.params.id, motif, req.user?.id || null]);
+    if (!rows.length) return res.status(400).json({ error: 'Ce bon n\'est pas en attente de validation' });
+    res.json(rows[0]);
+  } catch (e) { err(res, e, 'Erreur refus'); }
+});
+
+router.get('/validations-attente', auth, async (req, res) => {
+  if (!EST_DIRECTION(req.user)) return res.status(403).json({ error: 'Réservé à la direction' });
+  try {
+    const { rows } = await db.query(`SELECT c.id, c.numero_commande, c.montant_ttc, c.created_at, f.raison_sociale AS fournisseur,
+        o.numero_of, lf.libelle AS libelle_frais
+      FROM commandes_achat c LEFT JOIN fournisseurs f ON f.id=c.fournisseur_id
+      LEFT JOIN ordres_fabrication o ON o.id=c.of_id LEFT JOIN libelles_frais lf ON lf.id=c.libelle_frais_id
+      WHERE c.validation='en_attente_direction' ORDER BY c.created_at`);
+    res.json(rows);
+  } catch (e) { err(res, e, 'Erreur liste validations'); }
+});
+
+router.get('/libelles-frais', auth, async (req, res) => {
+  try {
+    const tous = EST_DIRECTION(req.user) && req.query.tous === '1';
+    const { rows } = await db.query(`SELECT id, libelle, actif FROM libelles_frais ${tous ? '' : 'WHERE actif=true'} ORDER BY lower(libelle)`);
+    res.json(rows);
+  } catch (e) { err(res, e, 'Erreur libelles'); }
+});
+
+router.post('/libelles-frais', auth, async (req, res) => {
+  if (!EST_DIRECTION(req.user)) return res.status(403).json({ error: 'Seule la direction gère les libellés de frais' });
+  const libelle = String(req.body?.libelle || '').replace(/\s+/g, ' ').trim();
+  if (!libelle) return res.status(400).json({ error: 'Le libellé est obligatoire' });
+  try {
+    const { rows } = await db.query('INSERT INTO libelles_frais (libelle) VALUES ($1) RETURNING id, libelle, actif', [libelle]);
+    res.status(201).json(rows[0]);
+  } catch (e) {
+    if (e.code === '23505') return res.status(400).json({ error: `Le libellé « ${libelle} » existe déjà` });
+    err(res, e, 'Erreur creation libelle');
+  }
+});
+
+router.put('/libelles-frais/:id', auth, async (req, res) => {
+  if (!EST_DIRECTION(req.user)) return res.status(403).json({ error: 'Seule la direction gère les libellés de frais' });
+  const libelle = req.body?.libelle !== undefined ? String(req.body.libelle).replace(/\s+/g, ' ').trim() : null;
+  if (libelle === '') return res.status(400).json({ error: 'Le libellé ne peut pas être vide' });
+  try {
+    const { rows } = await db.query(
+      'UPDATE libelles_frais SET libelle=COALESCE($2, libelle), actif=COALESCE($3, actif) WHERE id=$1 RETURNING id, libelle, actif',
+      [req.params.id, libelle, req.body?.actif === undefined ? null : !!req.body.actif]);
+    if (!rows.length) return res.status(404).json({ error: 'Libellé introuvable' });
+    res.json(rows[0]);
+  } catch (e) {
+    if (e.code === '23505') return res.status(400).json({ error: `Le libellé « ${libelle} » existe déjà` });
+    err(res, e, 'Erreur modification libelle');
+  }
+});
+
+// Supprimer : si le libelle a deja servi, on le desactive (l'historique reste lisible)
+router.delete('/libelles-frais/:id', auth, async (req, res) => {
+  if (!EST_DIRECTION(req.user)) return res.status(403).json({ error: 'Seule la direction gère les libellés de frais' });
+  try {
+    const utilise = await db.query(
+      'SELECT (SELECT count(*) FROM demandes_achat WHERE libelle_frais_id=$1) + (SELECT count(*) FROM commandes_achat WHERE libelle_frais_id=$1) AS n', [req.params.id]);
+    if (Number(utilise.rows[0].n) > 0) {
+      await db.query('UPDATE libelles_frais SET actif=false WHERE id=$1', [req.params.id]);
+      return res.json({ success: true, desactive: true, message: 'Utilisé dans des demandes : libellé désactivé, pas supprimé' });
+    }
+    await db.query('DELETE FROM libelles_frais WHERE id=$1', [req.params.id]);
+    res.json({ success: true, desactive: false });
+  } catch (e) { err(res, e, 'Erreur suppression libelle'); }
 });
 
 module.exports = router;
