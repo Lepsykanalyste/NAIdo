@@ -77,10 +77,10 @@ router.post('/commandes', auth, async (req, res) => {
     let totalHT = 0, totalTVA = 0;
     for (const l of lignes) {
       if (num(l.prix_unitaire_ht) < 0) throw userError('Prix unitaire négatif refusé', 400);
-      const tauxSaisi = l.taux_tva === undefined || l.taux_tva === '' ? 19 : num(l.taux_tva);
+      const tauxSaisi = l.taux_tva === undefined || l.taux_tva === '' ? 18 : num(l.taux_tva);
       if (tauxSaisi < 0 || tauxSaisi > 100) throw userError('Taux de TVA hors limites (0 à 100 %)', 400);
       const ht  = num(l.quantite_commandee) * num(l.prix_unitaire_ht);
-      const tva = ht * (l.taux_tva === undefined || l.taux_tva === '' ? 19 : num(l.taux_tva)) / 100;
+      const tva = ht * (l.taux_tva === undefined || l.taux_tva === '' ? 18 : num(l.taux_tva)) / 100;
       l._ht = ht; l._tva = tva; totalHT += ht; totalTVA += tva;
     }
     if (!d.of_id && !d.libelle_frais_id) throw userError('Indiquez un OF ou un libellé de frais', 400);
@@ -89,14 +89,14 @@ router.post('/commandes', auth, async (req, res) => {
       INSERT INTO commandes_achat (statut,fournisseur_id,date_commande,date_livraison_prevue,montant_ht,taux_tva,montant_tva,montant_ttc,reference_fournisseur,notes,cree_par)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
       [statut, d.fournisseur_id, d.date_commande || new Date().toISOString().slice(0, 10), d.date_livraison_prevue || null,
-       totalHT, d.taux_tva === undefined || d.taux_tva === '' ? 19 : num(d.taux_tva), totalTVA, totalHT + totalTVA,
+       totalHT, d.taux_tva === undefined || d.taux_tva === '' ? 18 : num(d.taux_tva), totalTVA, totalHT + totalTVA,
        d.reference_fournisseur || null, d.notes || null, req.user?.id || null]);
     for (const l of lignes) {
       await client.query(`
         INSERT INTO lignes_achat (commande_id,article_id,designation,quantite_commandee,unite_id,prix_unitaire_ht,taux_tva,montant_ht,montant_ttc)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
         [cmd.id, l.article_id || null, l.designation || '', num(l.quantite_commandee), l.unite_id || null,
-         num(l.prix_unitaire_ht), l.taux_tva === undefined || l.taux_tva === '' ? 19 : num(l.taux_tva), l._ht, l._ht + l._tva]);
+         num(l.prix_unitaire_ht), l.taux_tva === undefined || l.taux_tva === '' ? 18 : num(l.taux_tva), l._ht, l._ht + l._tva]);
     }
     await client.query(`UPDATE commandes_achat SET validation='en_attente_direction', of_id=$2, libelle_frais_id=$3 WHERE id=$1`,
       [cmd.id, d.of_id || null, d.libelle_frais_id || null]);
@@ -464,7 +464,7 @@ router.post('/demandes/:id/transformer', auth, async (req, res, next) => {
     if (!dr.rows.length) throw userError('Demande introuvable', 404);
     if (dr.rows[0].statut !== 'en_attente') throw userError('Cette demande a deja ete traitee', 400);
 
-    const tva = taux_tva === undefined || taux_tva === '' ? 19 : num(taux_tva);
+    const tva = taux_tva === undefined || taux_tva === '' ? 18 : num(taux_tva);
     let ht = 0;
     lg.forEach(l => { l._ht = num(l.quantite_commandee) * num(l.prix_unitaire_ht); ht += l._ht; });
     const { rows: [cmd] } = await client.query(`

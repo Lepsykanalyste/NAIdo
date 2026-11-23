@@ -119,7 +119,7 @@ function useListes() {
 // NOUVELLE COMMANDE
 // ══════════════════════════════════════════════════════════════
 function NouvelleCommande({ fournisseurs, articles, onClose, onCree }) {
-  const [form, setForm] = useState({ fournisseur_id: '', date_commande: aujourdhui(), date_livraison_prevue: '', reference_fournisseur: '', notes: '', taux_tva: '19' });
+  const [form, setForm] = useState({ fournisseur_id: '', date_commande: aujourdhui(), date_livraison_prevue: '', reference_fournisseur: '', notes: '', taux_tva: '18' });
   const [lignes, setLignes] = useState([{ article_id: '', designation: '', quantite_commandee: '1', prix_unitaire_ht: '' }]);
   const [motifType, setMotifType] = useState('of');
   const [ofId, setOfId] = useState('');
@@ -441,7 +441,7 @@ function Transformer({ id, fournisseurs, articles, onClose, onFait }) {
   const [d, setD] = useState(null);
   const [fournisseur, setFournisseur] = useState('');
   const [livraison, setLivraison] = useState('');
-  const [tva, setTva] = useState('19');
+  const [tva, setTva] = useState('18');
   const [lignes, setLignes] = useState([]);
   const [envoi, setEnvoi] = useState(false);
   useEffect(() => {
