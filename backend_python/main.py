@@ -1692,7 +1692,8 @@ async def call_mistral(prompt: str, system: str, api_key: str, model="mistral-la
         return resp.json()["choices"][0]["message"]["content"]
 
 async def appel_ia(pool, prompt: str, contexte: str = "") -> dict:
-    """Bascule automatique Groq → Mistral → erreur"""
+    """IA interne uniquement : aucun appel vers un service externe (Groq, Mistral, Anthropic) ; code externe conservé mais désactivé."""
+    return {"erreur": "IA externe désactivée : l'assistant de NAIdo fonctionne uniquement en interne"}
     keys = await get_ia_keys(pool)
     
     if keys.get('ia_enabled') == 'false':

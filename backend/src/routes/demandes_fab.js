@@ -181,6 +181,8 @@ router.get('/:id/pdf', auth, async (req, res) => {
 
     const base_url = process.env.APP_BASE_URL || req.protocol + '://' + req.get('host');
     const qr_text = `${base_url}/api/df/${d.id}/pdf`;
+    // QR généré sur le serveur : l'adresse du document ne sort pas vers un service externe
+    const qr_img = await QRCode.toDataURL(qr_text, { width: 100, margin: 1, color: { dark: '#7c3aed', light: '#ffffff' } });
 
     const couleur = d.statut==='validee'?'#15803d':d.statut==='refusee'?'#dc2626':'#d97706';
     const bgCouleur = d.statut==='validee'?'#dcfce7':d.statut==='refusee'?'#fee2e2':'#fef3c7';
@@ -286,7 +288,7 @@ ${d.numero_of ? `
 `}
 
 <div class="qr-wrap">
-  <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(qr_text)}&color=7c3aed" alt="QR" width="100" height="100"/>
+  <img src="${qr_img}" alt="QR" width="100" height="100"/>
   <div style="font-size:6pt;color:#9ca3af;margin-top:2px;">${d.numero_df}</div>
 </div>
 
