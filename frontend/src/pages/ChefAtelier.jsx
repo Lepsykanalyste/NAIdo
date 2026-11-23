@@ -2469,6 +2469,7 @@ function Dashboard() {
         <DashboardCommercial />
       )}
 
+      {vueMode==='general' && (user?.role==='super_admin'||user?.role==='directeur') && <DashboardDirection />}
       {/* ══ VUE GÉNÉRALE NAI ══ */}
       {vueMode==='general' && user?.role!=='commercial' && (
         <div>
@@ -7518,6 +7519,61 @@ function ParametresSysteme() {
   );
 }
 
+
+export function DashboardDirection() {
+  const [d, setD] = useState(null);
+  const [erreur, setErreur] = useState(false);
+  useEffect(() => { axios.get(`${API}/direction/tableau-de-bord`).then(r => setD(r.data)).catch(() => setErreur(true)); }, []);
+  if (erreur) return <div style={{ color:'#b91c1c', fontSize:13, marginBottom:16 }}>Tableau de bord de la direction indisponible.</div>;
+  if (!d) return <div style={{ color:'#6b7280', fontSize:13, marginBottom:16 }}>Chargement du tableau de bord…</div>;
+  const carte = (titre, valeur, couleur, sous) => (
+    <div style={{ background:'#fff', borderRadius:12, border:'1px solid #e5e7eb', padding:14, minWidth:170, flex:'1 1 170px' }}>
+      <div style={{ fontSize:11, color:'#6b7280', fontWeight:700, textTransform:'uppercase' }}>{titre}</div>
+      <div style={{ fontSize:24, fontWeight:800, color:couleur, marginTop:4 }}>{valeur}</div>
+      {sous && <div style={{ fontSize:11, color:'#6b7280', marginTop:2 }}>{sous}</div>}
+    </div>
+  );
+  const fcfa = n => `${Number(n || 0).toLocaleString('fr-FR')} FCFA`;
+  return (
+    <div style={{ marginBottom: 22 }}>
+      <div style={{ fontSize:12, fontWeight:800, color:'#1d4ed8', letterSpacing:1, textTransform:'uppercase', marginBottom:8 }}>🔔 À traiter aujourd'hui</div>
+      <div style={{ display:'flex', gap:10, flexWrap:'wrap', marginBottom:10 }}>
+        {carte('Bons à valider', d.a_traiter.bons_a_valider, d.a_traiter.bons_a_valider ? '#dc2626' : '#15803d', fcfa(d.a_traiter.montant_bons_a_valider))}
+        {carte("Demandes d'achat en attente", d.a_traiter.demandes_en_attente, '#d97706')}
+        {carte('Non-conformités ouvertes', d.a_traiter.non_conformites_ouvertes, '#d97706')}
+        {carte('Pannes non réglées', d.a_traiter.pannes_non_reglees, d.a_traiter.pannes_non_reglees ? '#dc2626' : '#15803d')}
+      </div>
+      {d.a_traiter.bons_liste.length > 0 && (
+        <div style={{ background:'#fff', borderRadius:12, border:'1px solid #e5e7eb', padding:12, marginBottom:14 }}>
+          <div style={{ fontSize:12, fontWeight:700, marginBottom:6 }}>Bons en attente de votre validation</div>
+          {d.a_traiter.bons_liste.map(b => (
+            <div key={b.id} style={{ display:'flex', justifyContent:'space-between', fontSize:12, padding:'5px 0', borderBottom:'1px solid #f3f4f6' }}>
+              <span>{b.fournisseur || '—'} · {b.numero_of ? `OF ${b.numero_of}` : (b.libelle_frais || '—')}</span>
+              <b>{fcfa(b.montant_ttc)}</b>
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ fontSize:12, fontWeight:800, color:'#15803d', letterSpacing:1, textTransform:'uppercase', marginBottom:8 }}>✅ Ce qui marche</div>
+      <div style={{ display:'flex', gap:10, flexWrap:'wrap', marginBottom:14 }}>
+        {carte('OF en cours', d.ce_qui_marche.of_en_cours, '#1d4ed8')}
+        {carte('OF en retard', d.ce_qui_marche.of_en_retard, d.ce_qui_marche.of_en_retard ? '#dc2626' : '#15803d')}
+        {carte('Taux de rebut du mois', `${d.ce_qui_marche.taux_rebut_mois_pct} %`, '#374151')}
+        {carte('Articles sous le stock mini', d.ce_qui_marche.articles_sous_stock_mini, d.ce_qui_marche.articles_sous_stock_mini ? '#dc2626' : '#15803d')}
+      </div>
+      <div style={{ fontSize:12, fontWeight:800, color:'#7c3aed', letterSpacing:1, textTransform:'uppercase', marginBottom:8 }}>💰 Argent (ce mois)</div>
+      <div style={{ background:'#fff', borderRadius:12, border:'1px solid #e5e7eb', padding:14, marginBottom:20 }}>
+        <div style={{ fontSize:20, fontWeight:800 }}>{fcfa(d.argent.total_depenses_mois)}</div>
+        <div style={{ fontSize:11, color:'#6b7280', marginBottom:8 }}>Dépenses validées par la direction, par libellé de frais ou par OF</div>
+        {d.argent.depenses_mois_par_poste.map(p => (
+          <div key={p.poste} style={{ display:'flex', justifyContent:'space-between', fontSize:12, padding:'4px 0', borderBottom:'1px solid #f3f4f6' }}>
+            <span>{p.poste}</span><span>{fcfa(p.montant)} ({p.n})</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export default function ChefAtelier() {
   const { user, logout, changerPoste } = useAuth();
