@@ -174,29 +174,80 @@ router.put('/:id/valider', auth, async (req, res) => {
 
 // PUT /api/mouvements/:id/receptionner — Réception & confirmation quantités
 router.put('/:id/receptionner', auth, async (req, res) => {
+  const client = await db.connect();
   try {
+    await client.query('BEGIN');
     const { lignes_recues } = req.body;
-    const { rows: [mvt] } = await db.query(
-      'SELECT * FROM mouvements_stock WHERE id=$1', [req.params.id]
+    const { rows: [mvt] } = await client.query(
+      'SELECT * FROM mouvements_stock WHERE id=$1 FOR UPDATE', [req.params.id]
     );
-    if (!mvt || mvt.statut !== 'valide')
+    if (!mvt || mvt.statut !== 'valide') {
+      await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Mouvement non validé ou introuvable' });
+    }
 
-    // Mettre à jour quantités réelles
+    // Quantité réellement reçue : si elle diffère de la prévue (déjà sortie/entrée à la validation),
+    // l'écart est corrigé dans le stock. Un motif est obligatoire pour tout écart.
     for (const l of (lignes_recues || [])) {
-      await db.query(
+      const { rows: [lg] } = await client.query(
+        'SELECT * FROM lignes_mouvement WHERE id=$1 AND mouvement_id=$2', [l.id, mvt.id]
+      );
+      if (!lg) continue;
+      const reel = parseFloat(l.qte_reelle);
+      if (!Number.isFinite(reel) || reel < 0) {
+        const e = new Error('Quantité reçue invalide'); e.http = 400; throw e;
+      }
+      const prevu = parseFloat(lg.qte_prevue) || 0;
+      const ecart = reel - prevu;
+      if (Math.abs(ecart) > 1e-9) {
+        if (!l.motif_ecart || !String(l.motif_ecart).trim()) {
+          const e = new Error('Motif obligatoire pour un écart entre quantité prévue et reçue'); e.http = 400; throw e;
+        }
+        // Destination : l'écart s'ajoute (ou se retire) au stock
+        if (mvt.emplacement_dest_id) {
+          await client.query(`
+            INSERT INTO stock_articles (article_id, emplacement_id, qte_disponible)
+            VALUES ($1,$2,$3)
+            ON CONFLICT (article_id, emplacement_id)
+            DO UPDATE SET qte_disponible = stock_articles.qte_disponible + $3`,
+            [lg.article_id, mvt.emplacement_dest_id, ecart]);
+        }
+        // Source : l'écart inverse ; refusé si le stock source ne suffit pas
+        if (mvt.emplacement_source_id) {
+          const { rows: [st] } = await client.query(
+            'SELECT qte_disponible FROM stock_articles WHERE article_id=$1 AND emplacement_id=$2 FOR UPDATE',
+            [lg.article_id, mvt.emplacement_source_id]);
+          const dispo = st ? parseFloat(st.qte_disponible) : 0;
+          if (ecart > 0 && !(dispo >= ecart)) {
+            const e = new Error('Stock source insuffisant pour l\'écart de réception'); e.http = 400; throw e;
+          }
+          await client.query(`
+            INSERT INTO stock_articles (article_id, emplacement_id, qte_disponible)
+            VALUES ($1,$2,$3)
+            ON CONFLICT (article_id, emplacement_id)
+            DO UPDATE SET qte_disponible = stock_articles.qte_disponible - $3`,
+            [lg.article_id, mvt.emplacement_source_id, ecart]);
+        }
+      }
+      await client.query(
         'UPDATE lignes_mouvement SET qte_reelle=$1, poids_reel_kg=$2, motif_ecart=$3 WHERE id=$4',
-        [l.qte_reelle, l.poids_reel_kg, l.motif_ecart, l.id]
+        [reel, l.poids_reel_kg, l.motif_ecart || null, l.id]
       );
     }
 
-    await db.query(`
+    await client.query(`
       UPDATE mouvements_stock SET statut='receptionne', receptionne_par=$1, date_reception=NOW()
       WHERE id=$2
     `, [req.user.id, req.params.id]);
+    await client.query('COMMIT');
 
     res.json({ success: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    await client.query('ROLLBACK');
+    if (err.http) return res.status(err.http).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  } finally { client.release(); }
 });
 
 // GET /api/mouvements/:id/pdf
