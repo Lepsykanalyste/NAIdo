@@ -3000,7 +3000,7 @@ function Articles() {
     cadence_theorique_kg_h:'', temps_reglage_min:'30',
     prix_achat:'0', prix_vente:'0', prix_cession_interne:'0',
     stock_mini:'0', dlc_jours:'', allergenes:'', normes_iso:'',
-    points_ccp: false, atelier_production_id:'', sous_famille_id:'',
+    points_ccp: false, atelier_production_id:'',
   });
 
   const chargerRefs = async () => {
@@ -3085,7 +3085,6 @@ function Articles() {
       normes_iso: a.normes_iso || '',
       points_ccp: a.points_ccp || false,
       atelier_production_id: a.atelier_production_id ? String(a.atelier_production_id) : '',
-      sous_famille_id: a.sous_famille_id ? String(a.sous_famille_id) : '',
     });
     setShowForm(true);
     setTimeout(() => window.scrollTo(0, 0), 100);
@@ -3098,7 +3097,7 @@ function Articles() {
     setEditArtId(null);
     setComposition([]);
     setNewComp({ groupe_id:'', pct:'' });
-    setForm({ code:'', designation:'', famille_id:'', unite_mesure_id:'', type_article:'produit_fini', tracabilite_type:'lot', format_lot:'LOT-YYYYMMDD-001', matieres_principales:[], couleur:'', longueur_mm:'', largeur_mm:'', hauteur_mm:'', poids_theorique_kg:'', poids_reel_kg:'', poids_mandrin_kg:'', cadence_theorique_kg_h:'', temps_reglage_min:'30', prix_achat:'0', prix_vente:'0', prix_cession_interne:'0', stock_mini:'0', dlc_jours:'', allergenes:'', normes_iso:'', points_ccp:false, atelier_production_id:'', sous_famille_id:'' });
+    setForm({ code:'', designation:'', famille_id:'', unite_mesure_id:'', type_article:'produit_fini', tracabilite_type:'lot', format_lot:'LOT-YYYYMMDD-001', matieres_principales:[], couleur:'', longueur_mm:'', largeur_mm:'', hauteur_mm:'', poids_theorique_kg:'', poids_reel_kg:'', poids_mandrin_kg:'', cadence_theorique_kg_h:'', temps_reglage_min:'30', prix_achat:'0', prix_vente:'0', prix_cession_interne:'0', stock_mini:'0', dlc_jours:'', allergenes:'', normes_iso:'', points_ccp:false, atelier_production_id:'' });
     setShowForm(true);
     setTimeout(() => document.getElementById('art-code')?.focus(), 100);
   };
@@ -3135,7 +3134,7 @@ function Articles() {
         else if (payload[k] !== null && payload[k] !== undefined) payload[k] = parseFloat(payload[k]) || 0;
       });
       // IDs en null si vide
-      ['famille_id','unite_mesure_id','atelier_production_id','sous_famille_id'].forEach(k => {
+      ['famille_id','unite_mesure_id','atelier_production_id'].forEach(k => {
         if (payload[k] === '') payload[k] = null;
       });
 
@@ -3220,10 +3219,6 @@ function Articles() {
                     { v:'consommable', l:'Consommable' },
                     { v:'piece_detachee', l:'Pièce détachée' },
                   ]}/>
-              {form.type_article === 'matiere_premiere' && (
-                <SelectField label="Groupe de matière (pour les DBM)" value={form.sous_famille_id||''} onChange={e => setForm({...form, sous_famille_id:e.target.value})}
-                  options={groupesMp.map(g => ({ v:String(g.id), l:`${g.famille_libelle} → ${g.libelle}` }))}/>
-              )}
                 <SelectField label="Unité de mesure *" value={form.unite_mesure_id} onChange={e => setForm({...form,unite_mesure_id:e.target.value})} required={true}
                   options={unites.length ? unites.map(u => ({ v:String(u.id), l:`${u.code} — ${u.libelle}` })) : [{v:'',l:'⚠ Activez des unités dans Référentiels'}]}/>
                 <SelectField label="Atelier de production" value={form.atelier_production_id} onChange={e => setForm({...form,atelier_production_id:e.target.value})}
@@ -5644,6 +5639,89 @@ function CoutMachineLigne({ m, onSave }) {
   );
 }
 
+export function EcransParPoste({ onClose }) {
+  const [d, setD] = useState(null);
+  const [saisie, setSaisie] = useState({});
+  const [initial, setInitial] = useState({});
+  useEffect(() => {
+    axios.get(`${API}/droits/ecrans`).then(r => {
+      setD(r.data);
+      setSaisie(JSON.parse(JSON.stringify(r.data.matrice || {})));
+      setInitial(JSON.parse(JSON.stringify(r.data.matrice || {})));
+    }).catch(e => toast.error(e.response?.data?.error || 'Erreur de chargement'));
+  }, []);
+  const lire = (m, p, e) => (m[p] && m[p][e]) || { voir: false, modifier: false };
+  const changer = (p, e, patch) => setSaisie(s => {
+    const cur = { ...lire(s, p, e), ...patch };
+    if (cur.modifier) cur.voir = true;
+    if (!cur.voir) cur.modifier = false;
+    return { ...s, [p]: { ...(s[p] || {}), [e]: cur } };
+  });
+  const enregistrer = async () => {
+    const changements = [];
+    for (const p of d.postes) for (const ec of d.ecrans) {
+      const a = lire(saisie, p.code, ec.id), b = lire(initial, p.code, ec.id);
+      if (a.voir !== b.voir || a.modifier !== b.modifier) changements.push({ poste: p.code, ecran: ec.id, voir: a.voir, modifier: a.modifier });
+    }
+    if (!changements.length) return toast('Aucun changement à enregistrer');
+    try {
+      for (const c of changements) await axios.put(`${API}/droits/ecrans`, c);
+      toast.success(`${changements.length} droit(s) enregistré(s) ✓`);
+      onClose();
+    } catch (e) { toast.error(e.response?.data?.error || "Erreur d'enregistrement"); }
+  };
+  return (
+    <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:30}}>
+      <div style={{background:'#fff',borderRadius:14,width:'96%',maxWidth:1200,padding:24,maxHeight:'88vh',overflow:'auto'}}>
+        <div style={{display:'flex',justifyContent:'space-between',marginBottom:10}}>
+          <h3 style={{margin:0,color:'#0369a1',fontSize:16,fontWeight:800}}>Écrans visibles et modifiables, par poste</h3>
+          <button onClick={onClose} style={{background:'none',border:'none',fontSize:20,cursor:'pointer'}}>✕</button>
+        </div>
+        <div style={{fontSize:12,color:'#6b7280',marginBottom:10}}>
+          Cochez <b>voir</b> pour qu'un écran apparaisse dans le menu du poste ; cochez <b>modifier</b> pour qu'il puisse changer les données.
+          La direction et le super administrateur gardent tous les écrans.
+        </div>
+        {!d ? <div style={{color:'#6b7280'}}>Chargement…</div> : (
+          <>
+            <div style={{overflowX:'auto'}}>
+              <table style={{borderCollapse:'collapse',fontSize:11}}>
+                <thead>
+                  <tr>
+                    <th style={{textAlign:'left',padding:6,border:'1px solid #e5e7eb',position:'sticky',left:0,background:'#f5f3ff',minWidth:150}}>Poste</th>
+                    {d.ecrans.map(ec => (
+                      <th key={ec.id} style={{padding:4,border:'1px solid #e5e7eb',minWidth:70,maxWidth:90,fontSize:10,fontWeight:700,verticalAlign:'bottom'}}>{ec.label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {d.postes.map(p => (
+                    <tr key={p.code}>
+                      <td style={{padding:6,border:'1px solid #e5e7eb',fontWeight:700,position:'sticky',left:0,background:'#fff',whiteSpace:'nowrap'}}>{p.libelle}</td>
+                      {d.ecrans.map(ec => {
+                        const v = lire(saisie, p.code, ec.id);
+                        return (
+                          <td key={ec.id} style={{padding:3,border:'1px solid #e5e7eb',textAlign:'center',background: v.modifier ? '#dcfce7' : v.voir ? '#dbeafe' : '#fff'}}>
+                            <label style={{display:'block',fontSize:9}}><input type="checkbox" checked={v.voir} onChange={e => changer(p.code, ec.id, { voir: e.target.checked })}/> voir</label>
+                            <label style={{display:'block',fontSize:9}}><input type="checkbox" checked={v.modifier} onChange={e => changer(p.code, ec.id, { modifier: e.target.checked })}/> modifier</label>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div style={{display:'flex',justifyContent:'flex-end',gap:10,marginTop:16}}>
+              <button onClick={onClose} style={{border:'1px solid #d1d5db',background:'#fff',borderRadius:8,padding:'9px 16px',cursor:'pointer'}}>Annuler</button>
+              <button onClick={enregistrer} style={{background:'#0369a1',color:'#fff',border:'none',padding:'9px 22px',borderRadius:8,cursor:'pointer',fontWeight:700}}>✓ Enregistrer</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Utilisateurs() {
   const [users, setUsers] = useState([]);
   const [employes, setEmployes] = useState([]);
@@ -5663,6 +5741,7 @@ function Utilisateurs() {
   const [droits, setDroits] = useState(null);
   const [droitsSaisie, setDroitsSaisie] = useState({});
   const [showCouts, setShowCouts] = useState(false);
+  const [showEcrans, setShowEcrans] = useState(false);
   const [machinesCout, setMachinesCout] = useState([]);
 
   const charger = async () => {
@@ -5847,6 +5926,10 @@ function Utilisateurs() {
           style={{background:'#fff',color:'#0369a1',border:'1px solid #0369a1',padding:'9px 16px',borderRadius:8,cursor:'pointer',fontWeight:700}}>
           🏭 Coûts machines
         </button>
+        <button onClick={()=>setShowEcrans(true)}
+          style={{background:'#fff',color:'#0369a1',border:'1px solid #0369a1',padding:'9px 16px',borderRadius:8,cursor:'pointer',fontWeight:700}}>
+          🧭 Écrans par poste
+        </button>
       </div>
 
       {/* Stats par rôle */}
@@ -5922,6 +6005,8 @@ function Utilisateurs() {
           </div>
         )}
       </div>
+
+      {showEcrans && <EcransParPoste onClose={() => setShowEcrans(false)} />}
 
       {/* Cout horaire des machines */}
       {showCouts && (
