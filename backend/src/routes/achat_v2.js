@@ -19,6 +19,7 @@ const express = require('express');
 const router  = express.Router();
 const db      = require('../config/db');
 const { auth } = require('../middleware/auth');
+const { peutVoirPrix, retirerPrix } = require('../middleware/prix');
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EPS  = 0.0005;
@@ -248,12 +249,14 @@ router.get('/commandes/:id/receptions', auth, async (req, res, next) => {
     const c = await db.query('SELECT numero_commande FROM commandes_achat WHERE id=$1', [req.params.id]);
     if (!c.rows.length) return res.status(404).json({ error: 'Commande introuvable' });
     const recs = await chargerReceptions(req.params.id);
-    res.json(recs.map(r => ({ ...r, numero_reception: `${c.rows[0].numero_commande}-R${String(r.rang).padStart(2, '0')}` })));
+    const liste = recs.map(r => ({ ...r, numero_reception: `${c.rows[0].numero_commande}-R${String(r.rang).padStart(2, '0')}` }));
+    res.json(peutVoirPrix(req.user) ? liste : retirerPrix(liste));
   } catch (e) { err(res, e, 'Erreur historique receptions'); }
 });
 
 // GET /commandes/:id/pdf — bon de commande
 router.get('/commandes/:id/pdf', auth, async (req, res, next) => {
+  if (!peutVoirPrix(req.user)) return res.status(403).json({ error: 'Impression réservée aux rôles autorisés à voir les prix' });
   if (!UUID.test(req.params.id)) return next();
   try {
     const c = await db.query(`
@@ -302,6 +305,7 @@ router.get('/commandes/:id/pdf', auth, async (req, res, next) => {
 
 // GET /receptions/:id/pdf — bordereau de reception
 router.get('/receptions/:id/pdf', auth, async (req, res, next) => {
+  if (!peutVoirPrix(req.user)) return res.status(403).json({ error: 'Impression réservée aux rôles autorisés à voir les prix' });
   if (!UUID.test(req.params.id)) return next();
   try {
     const r = await db.query(`SELECT commande_id FROM receptions_achat WHERE id=$1`, [req.params.id]);
@@ -361,9 +365,10 @@ router.get('/dashboard', auth, async (req, res) => {
       db.query(`SELECT COUNT(*)::int AS n FROM (${SQL_STOCK_BAS}) x`),
       db.query(`SELECT COUNT(*)::int AS n FROM demandes_achat WHERE statut='en_attente'`),
     ]);
-    res.json({ commandes_a_confirmer: c.rows[0].a_confirmer, commandes_a_receptionner: c.rows[0].a_receptionner,
+    const kpi = { commandes_a_confirmer: c.rows[0].a_confirmer, commandes_a_receptionner: c.rows[0].a_receptionner,
                montant_engage: c.rows[0].montant_engage, fournisseurs_actifs: f.rows[0].n,
-               articles_sous_stock_mini: sb.rows[0].n, demandes_en_attente: da.rows[0].n });
+               articles_sous_stock_mini: sb.rows[0].n, demandes_en_attente: da.rows[0].n };
+    res.json(peutVoirPrix(req.user) ? kpi : retirerPrix(kpi));
   } catch (e) { err(res, e, 'Erreur tableau de bord achat'); }
 });
 
@@ -373,6 +378,7 @@ router.get('/articles-stock-bas', auth, async (req, res) => {
 
 // Prix moyen PONDERE par les quantites recues
 router.get('/articles-prix-moyen', auth, async (req, res) => {
+  if (!peutVoirPrix(req.user)) return res.status(403).json({ error: 'Prix moyens réservés aux rôles autorisés à voir les prix' });
   try {
     const { rows } = await db.query(`
       SELECT la.article_id,
@@ -410,7 +416,8 @@ router.get('/demandes/:id', auth, async (req, res, next) => {
     const d = await db.query(`SELECT da.*, (u.prenom || ' ' || u.nom) AS demandeur_nom FROM demandes_achat da LEFT JOIN utilisateurs u ON u.id=da.demandeur_id WHERE da.id=$1`, [req.params.id]);
     if (!d.rows.length) return res.status(404).json({ error: 'Demande introuvable' });
     const l = await db.query(`SELECT l.*, a.code AS article_code, a.prix_achat FROM lignes_demande_achat l LEFT JOIN articles a ON a.id=l.article_id WHERE l.demande_id=$1 ORDER BY l.id`, [req.params.id]);
-    res.json({ ...d.rows[0], lignes: l.rows });
+    const demande = { ...d.rows[0], lignes: l.rows };
+    res.json(peutVoirPrix(req.user) ? demande : retirerPrix(demande));
   } catch (e) { err(res, e, 'Erreur detail demande'); }
 });
 

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
 const { auth } = require('../middleware/auth');
+const { peutVoirPrix, retirerPrix } = require('../middleware/prix');
 
 const num = v => (v===''||v===null||v===undefined)?null:parseFloat(v)||null;
 const numD = (v,d=0) => (v===''||v===null||v===undefined)?d:parseFloat(v)||d;
@@ -61,7 +62,7 @@ router.get('/commandes', auth, async (req, res) => {
     if (fournisseur_id) { p.push(fournisseur_id); q+=` AND ca.fournisseur_id=$${p.length}`; }
     q+=' ORDER BY ca.created_at DESC LIMIT 100';
     const { rows } = await db.query(q, p);
-    res.json(rows);
+    res.json(peutVoirPrix(req.user) ? rows : retirerPrix(rows));
   } catch(e) { res.status(500).json({ error:e.message }); }
 });
 
@@ -72,7 +73,8 @@ router.get('/commandes/:id', auth, async (req, res) => {
       db.query(`SELECT l.*,a.code AS article_code,um.code AS unite_code FROM lignes_achat l LEFT JOIN articles a ON a.id=l.article_id LEFT JOIN unites_mesure um ON um.id=l.unite_id WHERE l.commande_id=$1 ORDER BY l.created_at`,[req.params.id])
     ]);
     if (!cmd.rows.length) return res.status(404).json({ error:'Commande introuvable' });
-    res.json({ ...cmd.rows[0], lignes:lignes.rows });
+    const detail = { ...cmd.rows[0], lignes:lignes.rows };
+    res.json(peutVoirPrix(req.user) ? detail : retirerPrix(detail));
   } catch(e) { res.status(500).json({ error:e.message }); }
 });
 
