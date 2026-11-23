@@ -8216,7 +8216,7 @@ function OrdresLivraison() {
 
         {/* Menu */}
         <nav style={{ flex:1, overflowY:'auto', padding:'8px 0' }}>
-          {menuPourMoi(getMenuFiltre(user?.role), ecransMoi).map(item => {
+          {menuPourMoi(ecransMoi ? MENU : getMenuFiltre(user?.role), ecransMoi).map(item => {
             if (item.separator) {
               return sidebarOuverte ? (
                 <div key={item.id} style={{ padding:'12px 14px 4px', fontSize:10, fontWeight:700, color:'#4b5563', letterSpacing:1, textTransform:'uppercase', whiteSpace:'nowrap' }}>
