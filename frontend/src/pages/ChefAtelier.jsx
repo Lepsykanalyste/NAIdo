@@ -1507,6 +1507,28 @@ function DemandesFabrication() {
 // ══════════════════════════════════════════════════════════════
 // COMPOSANT DETAIL OF (avec composition lots)
 // ══════════════════════════════════════════════════════════════
+export function CoutRevientOF({ ofId }) {
+  const [c, setC] = useState(null);
+  useEffect(() => { if (ofId) axios.get(`${API}/couts-of/of/${ofId}`).then(r => setC(r.data)).catch(() => setC(false)); }, [ofId]);
+  if (!c) return null;
+  const f = n => `${Number(n || 0).toLocaleString('fr-FR')} FCFA`;
+  const ligne = (label, montant, detail) => (
+    <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, padding:'5px 0', borderBottom:'1px solid #e0f2fe' }}>
+      <span>{label}{detail && <span style={{ color:'#6b7280' }}> · {detail}</span>}</span><b>{f(montant)}</b>
+    </div>
+  );
+  return (
+    <div style={{ background:'#f0f9ff', borderRadius:12, border:'1px solid #bae6fd', padding:14, marginBottom:16 }}>
+      <div style={{ fontWeight:800, fontSize:13, color:'#0369a1', marginBottom:6 }}>💰 Coût de revient de l'OF</div>
+      {ligne('Matières consommées', c.matieres_fcfa)}
+      {ligne('Temps machine', c.temps_machine.montant_fcfa, `${c.temps_machine.heures} h × ${f(c.temps_machine.taux_horaire_fcfa)}/h`)}
+      {ligne('Maintenance (interventions)', c.interventions_maintenance.montant_fcfa, `${c.interventions_maintenance.nombre} intervention(s)`)}
+      {ligne('Achats validés', c.achats_valides.montant_fcfa, `${c.achats_valides.nombre} bon(s)`)}
+      <div style={{ display:'flex', justifyContent:'space-between', fontSize:14, fontWeight:800, marginTop:8 }}><span>Total</span><span>{f(c.total_fcfa)}</span></div>
+    </div>
+  );
+}
+
 function DetailOF({ detail, machines, onClose, onRefresh, onStatut, setOngletActif }) {
   const { user } = useAuth();
   const [lots, setLots] = useState([]);
@@ -1638,6 +1660,7 @@ function DetailOF({ detail, machines, onClose, onRefresh, onStatut, setOngletAct
         <button onClick={onClose} style={{background:'none',border:'none',fontSize:18,cursor:'pointer'}}>✕</button>
       </div>
 
+      <CoutRevientOF ofId={detail.id} />
       {/* Infos principales */}
       <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:10,marginBottom:16,fontSize:12}}>
         {[
