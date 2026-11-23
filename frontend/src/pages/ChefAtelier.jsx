@@ -2284,6 +2284,7 @@ onClick={()=>ouvrirPdfSecurise(`/api/of/${of.id}/pdf`)}
 function DashboardCommercial() {
   const { user } = useAuth();
   const [dfs, setDfs] = useState([]);
+  const [ofs, setOfs] = useState([]);
   const [stock, setStock] = useState({});
   const [loading, setLoading] = useState(true);
 
@@ -2291,7 +2292,9 @@ function DashboardCommercial() {
     Promise.all([
       axios.get(`${API}/df`).catch(()=>({data:[]})),
       axios.get(`${API}/stock/resume`).catch(()=>({data:{}})),
-    ]).then(([d,s])=>{
+      axios.get(`${API}/of`).catch(()=>({data:[]})),
+    ]).then(([d,s,o])=>{
+      setOfs(Array.isArray(o.data)?o.data:[]);
       setDfs(Array.isArray(d.data)?d.data:[]);
       setStock(s.data||{});
     }).finally(()=>setLoading(false));
@@ -2299,6 +2302,9 @@ function DashboardCommercial() {
 
   const dfEnAttente = dfs.filter(d=>d.statut==='en_attente').length;
   const dfValidees = dfs.filter(d=>d.statut==='validee').length;
+  // Avancement des OF : terminés = statut final ; en cours = tout le reste sauf annulés
+  const ofTermines = ofs.filter(o=>['termine','cloture'].includes(o.statut)).length;
+  const ofEnCours = ofs.filter(o=>!['termine','cloture','annule'].includes(o.statut)).length;
 
   return (
     <div>
@@ -2306,6 +2312,8 @@ function DashboardCommercial() {
         {[
           {icon:'📝',label:'DF en attente',value:dfEnAttente,color:'#d97706',bg:'#fef3c7'},
           {icon:'✅',label:'DF validées → OF',value:dfValidees,color:'#15803d',bg:'#dcfce7'},
+          {icon:'🏭',label:'OF en cours',value:ofEnCours,color:'#0369a1',bg:'#e0f2fe'},
+          {icon:'✅',label:'OF terminés',value:ofTermines,color:'#15803d',bg:'#dcfce7'},
           {icon:'📦',label:'Valeur stock',value:user?.role==='chef_atelier'?'—':stock.valeur_totale?parseFloat(stock.valeur_totale).toLocaleString('fr-FR')+' FCFA':'—',color:'#7c3aed',bg:'#f5f3ff'},
         ].map(k=>(
           <div key={k.label} style={{background:k.bg,borderRadius:12,padding:'16px'}}>
