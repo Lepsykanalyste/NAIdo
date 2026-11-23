@@ -5625,6 +5625,25 @@ function AssistantIA() {
   );
 }
 
+function CoutMachineLigne({ m, onSave }) {
+  const [val, setVal] = useState(m.cout_horaire_fcfa == null ? '' : String(Number(m.cout_horaire_fcfa)));
+  const provisoire = m.cout_horaire_fcfa == null;
+  return (
+    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:10,padding:'8px 0',borderBottom:'1px solid #f3f4f6'}}>
+      <div>
+        <div style={{fontWeight:700,fontSize:13}}>{m.nom}</div>
+        <div style={{fontSize:10,color:'#6b7280'}}>{m.code} · {provisoire ? 'valeur provisoire' : 'coût propre'}</div>
+      </div>
+      <div style={{display:'flex',gap:6,alignItems:'center'}}>
+        <input value={val} onChange={e=>setVal(e.target.value)} placeholder="FCFA/h"
+          style={{width:120,border:'1px solid #d1d5db',borderRadius:8,padding:'6px 8px',fontSize:13}}/>
+        <button onClick={()=>onSave(m, val)}
+          style={{background:'#0369a1',color:'#fff',border:'none',padding:'6px 12px',borderRadius:8,cursor:'pointer',fontWeight:700,fontSize:12}}>Enregistrer</button>
+      </div>
+    </div>
+  );
+}
+
 function Utilisateurs() {
   const [users, setUsers] = useState([]);
   const [employes, setEmployes] = useState([]);
@@ -5643,6 +5662,8 @@ function Utilisateurs() {
   const [showDroits, setShowDroits] = useState(false);
   const [droits, setDroits] = useState(null);
   const [droitsSaisie, setDroitsSaisie] = useState({});
+  const [showCouts, setShowCouts] = useState(false);
+  const [machinesCout, setMachinesCout] = useState([]);
 
   const charger = async () => {
     try {
@@ -5696,6 +5717,17 @@ function Utilisateurs() {
     catch(e) { toast.error(messageErreur(e)); }
   };
   useEffect(() => { if (showDroits || showForm) chargerDroits(); }, [showDroits, showForm]);
+  const chargerMachinesCout = async () => {
+    try { const { data } = await axios.get(`${API}/couts-of/machines`); setMachinesCout(Array.isArray(data) ? data : []); }
+    catch(e) { toast.error(messageErreur(e)); }
+  };
+  useEffect(() => { if (showCouts) chargerMachinesCout(); }, [showCouts]);
+  const enregistrerCoutMachine = async (m, valeur) => {
+    const v = String(valeur).trim() === '' ? null : Number(String(valeur).replace(/\s/g, '').replace(',', '.'));
+    if (v !== null && (!Number.isFinite(v) || v < 0)) return toast.error('Montant invalide');
+    try { await axios.put(`${API}/couts-of/machines/${m.id}/cout-horaire`, { cout_horaire_fcfa: v }); toast.success('Coût enregistré ✓'); chargerMachinesCout(); }
+    catch(e) { toast.error(messageErreur(e)); }
+  };
   const enregistrerDroits = async () => {
     try { await axios.put(`${API}/utilisateurs/droits/matrice`, { matrice: droitsSaisie }); toast.success('Droits enregistrés ✓ (effectifs dans la minute)'); chargerDroits(); }
     catch(e) { toast.error(messageErreur(e)); }
@@ -5811,6 +5843,10 @@ function Utilisateurs() {
           style={{background:'#fff',color:'#7c3aed',border:'1px solid #7c3aed',padding:'9px 16px',borderRadius:8,cursor:'pointer',fontWeight:700}}>
           🔐 Droits
         </button>
+        <button onClick={()=>setShowCouts(true)}
+          style={{background:'#fff',color:'#0369a1',border:'1px solid #0369a1',padding:'9px 16px',borderRadius:8,cursor:'pointer',fontWeight:700}}>
+          🏭 Coûts machines
+        </button>
       </div>
 
       {/* Stats par rôle */}
@@ -5886,6 +5922,24 @@ function Utilisateurs() {
           </div>
         )}
       </div>
+
+      {/* Cout horaire des machines */}
+      {showCouts && (
+        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:40}}>
+          <div style={{background:'#fff',borderRadius:14,width:'95%',maxWidth:640,padding:24,maxHeight:'85vh',overflowY:'auto'}}>
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:10}}>
+              <h3 style={{margin:0,color:'#0369a1',fontSize:16,fontWeight:800}}>Coût horaire des machines</h3>
+              <button onClick={()=>setShowCouts(false)} style={{background:'none',border:'none',fontSize:20,cursor:'pointer'}}>✕</button>
+            </div>
+            <div style={{fontSize:12,color:'#6b7280',marginBottom:12}}>
+              Une machine sans coût propre utilise la valeur provisoire de l'atelier
+              {machinesCout[0] && machinesCout[0].taux_provisoire != null ? ` (${Number(machinesCout[0].taux_provisoire).toLocaleString('fr-FR')} FCFA/h)` : ''}.
+              Laissez le champ vide pour revenir à la valeur provisoire.
+            </div>
+            {machinesCout.map(m => <CoutMachineLigne key={m.id} m={m} onSave={enregistrerCoutMachine} />)}
+          </div>
+        </div>
+      )}
 
       {/* Droits : matrice */}
       {showDroits && (
