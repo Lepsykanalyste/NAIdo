@@ -73,26 +73,9 @@ function middleware(req, res, next) {
   try { payload = jwt.verify(h.split(' ')[1], process.env.JWT_SECRET); } catch { return next(); }
   const d = decider(payload.role, req.method, chemin);
   if (d.autorise) return next();
-  // Droit « devis » : une écriture sur /api/devis est aussi permise si le poste a le droit Devis (écran Droits, modifier)
-  if (/^\/api\/devis(\/|$)/.test(chemin) && !estLecture(req.method)) {
-    return droitEcranModifier(payload.role, 'devis')
-      .then((ok) => (ok ? next() : refuser(req, res, next, payload, chemin, d)))
-      .catch(() => refuser(req, res, next, payload, chemin, d));
-  }
-  return refuser(req, res, next, payload, chemin, d);
-}
-
-function refuser(req, res, next, payload, chemin, d) {
   console.warn(`[RBAC] REFUS ${payload.login || payload.id} role=${payload.role} ${req.method} ${chemin} : ${d.raison}`);
   if ((process.env.RBAC_MODE || 'enforce') === 'audit') return next();
   return res.status(403).json({ error: 'Acces refuse : votre role ne permet pas cette action' });
-}
-
-async function droitEcranModifier(role, ecran) {
-  const r = String(role || '');
-  if (['directeur', 'super_admin'].includes(r)) return true;
-  const { rows } = await db.query('SELECT modifier FROM droits_ecrans WHERE poste = $1 AND ecran = $2', [r, ecran]);
-  return !!(rows[0] && rows[0].modifier);
 }
 
 module.exports = middleware;

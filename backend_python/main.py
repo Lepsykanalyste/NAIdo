@@ -2275,7 +2275,8 @@ async def get_postes_de_la_personne(user_id: str, user=Depends(get_current_user)
 # Chaque domaine regroupe des motifs de la politique ; les motifs absents de la politique ou non listes ici ne sont pas modifies.
 DOMAINES_DROITS = [
     ("Achats", ["/api/achat", "/api/fournisseurs", "/api/articles", "/api/referentiels"]),
-    ("Ventes", ["/api/vente", "/api/bc", "/api/devis", "/api/ol"]),
+    ("Ventes", ["/api/vente", "/api/bc", "/api/ol"]),
+    ("Devis", ["/api/devis"]),
     ("Stock", ["/api/stock", "/api/mouvements", "/api/emplacements", "/api/dbm"]),
     ("Production", ["/api/of", "/api/lots-prod", "/api/sessions", "/api/ticket-prod", "/api/tickets", "/api/composition", "/api/shifts", "/api/regleur", "/api/planning"]),
     ("Atelier 3", ["/api/at3", "/api/cessions", "/api/rondes", "/api/ateliers"]),
