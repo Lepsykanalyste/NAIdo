@@ -5,20 +5,22 @@ const bcrypt = require('bcryptjs');
 const { auth, role } = require('../middleware/auth');
 
 // GET /api/users
-router.get('/', auth, role('chef_atelier'), async (req, res) => {
+router.get('/', auth, role('chef_atelier', 'super_admin'), async (req, res) => {
   try {
     const { rows } = await db.query(`
       SELECT u.id, u.nom, u.prenom, u.login, u.badge_qr, u.actif, r.nom AS role
       FROM utilisateurs u JOIN roles r ON r.id = u.role_id ORDER BY u.nom
     `);
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erreur serveur' }); }
 });
 
 // POST /api/users
-router.post('/', auth, role('chef_atelier'), async (req, res) => {
+router.post('/', auth, role('chef_atelier', 'super_admin'), async (req, res) => {
   try {
     const { nom, prenom, login, password, role_nom, badge_qr } = req.body;
+    if (typeof password !== 'string' || password.length < 8)
+      return res.status(400).json({ error: 'Mot de passe : 8 caractères minimum' });
     const hash = await bcrypt.hash(password, 10);
     const roleRes = await db.query('SELECT id FROM roles WHERE nom=$1', [role_nom]);
     if (!roleRes.rows.length) return res.status(400).json({ error: 'Rôle invalide' });
@@ -28,15 +30,17 @@ router.post('/', auth, role('chef_atelier'), async (req, res) => {
       VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, nom, prenom, login, badge_qr
     `, [nom, prenom, login, hash, roleRes.rows[0].id, badge_qr]);
     res.status(201).json(rows[0]);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erreur serveur' }); }
 });
 
 // PUT /api/users/:id
-router.put('/:id', auth, role('chef_atelier'), async (req, res) => {
+router.put('/:id', auth, role('chef_atelier', 'super_admin'), async (req, res) => {
   try {
     const { nom, prenom, actif, role_nom, badge_qr, password } = req.body;
     const roleRes = await db.query('SELECT id FROM roles WHERE nom=$1', [role_nom]);
     let hash;
+    if (password !== undefined && password !== '' && (typeof password !== 'string' || password.length < 8))
+      return res.status(400).json({ error: 'Mot de passe : 8 caractères minimum' });
     if (password) hash = await bcrypt.hash(password, 10);
 
     const { rows } = await db.query(`
@@ -49,7 +53,7 @@ router.put('/:id', auth, role('chef_atelier'), async (req, res) => {
       : [nom, prenom, actif, roleRes.rows[0].id, badge_qr, req.params.id]
     );
     res.json(rows[0]);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Erreur serveur' }); }
 });
 
 module.exports = router;

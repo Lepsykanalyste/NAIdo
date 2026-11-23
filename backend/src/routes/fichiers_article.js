@@ -21,7 +21,7 @@ const COLONNE = { fiche_technique: 'fiche_technique_path', fiche_securite: 'fich
 const upload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => { fs.mkdirSync(DIR, { recursive: true }); cb(null, DIR); },
-    filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`)
+    filename: (req, file, cb) => cb(null, `${require('crypto').randomBytes(12).toString('hex')}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`)
   }),
   limits: { fileSize: 20 * 1024 * 1024, files: 3 },
   fileFilter: (req, file, cb) => {

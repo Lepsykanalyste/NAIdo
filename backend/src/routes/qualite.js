@@ -15,7 +15,7 @@ const storage = multer.diskStorage({
     cb(null, dir);
   },
   filename: (req, file, cb) => {
-    cb(null, `${Date.now()}-${file.originalname}`);
+    cb(null, `${require('crypto').randomBytes(12).toString('hex')}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g, '_')}`);
   }
 });
 const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });

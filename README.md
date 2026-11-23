@@ -31,7 +31,7 @@ L'application est accessible sur : **http://IP_SERVEUR:8095**
 
 | Login | Mot de passe | Rôle |
 |-------|-------------|------|
-| admin | Admin2026!  | Super Admin |
+| admin | Défini à la création (voir `backend/scripts/create_admin.js`, variable `NAIDO_ADMIN_PASSWORD`) | Super Admin |
 
 > ⚠️ **Changer le mot de passe admin dès la première connexion.**
 

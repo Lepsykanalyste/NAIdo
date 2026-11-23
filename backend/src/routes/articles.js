@@ -12,7 +12,7 @@ const storage = multer.diskStorage({
     fs.mkdirSync(dir, { recursive: true });
     cb(null, dir);
   },
-  filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g,'_')}`)
+  filename: (req, file, cb) => cb(null, `${require('crypto').randomBytes(12).toString('hex')}-${file.originalname.replace(/[^a-zA-Z0-9._-]/g,'_')}`)
 });
 const upload = multer({ storage, limits: { fileSize: 20 * 1024 * 1024 } });
 const uploadFields = upload.fields([

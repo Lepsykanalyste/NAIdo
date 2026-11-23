@@ -339,8 +339,9 @@ router.post('/:id/envoyer-email', auth, async (req, res) => {
       },
     });
 
-    const validationUrl = `http://192.100.100.6:8095/api/devis/valider/${d.token_validation}`;
-    const pdfUrl = `http://192.100.100.6:8095/api/devis/${d.id}/pdf`;
+    const appBase = process.env.APP_BASE_URL || 'http://192.100.100.6:8095';
+    const validationUrl = `${appBase}/api/devis/valider/${d.token_validation}`;
+    const pdfUrl = `${appBase}/api/devis/${d.id}/pdf`;
 
     await transporter.sendMail({
       from: `"NAI - ${d.commercial_nom}" <${emailConfig.user || d.commercial_email}>`,
@@ -383,8 +384,20 @@ router.post('/:id/envoyer-email', auth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// GET /api/devis/valider/:token — validation par le client (lien email)
-router.get('/valider/:token', async (req, res) => {
+// GET /api/devis/valider/:token — page de confirmation (ne modifie rien : les antivirus et aperçus de messagerie suivent les liens)
+router.get('/valider/:token', (req, res) => {
+  const token = String(req.params.token || '');
+  if (!/^[A-Za-z0-9_-]{8,100}$/.test(token)) return res.status(404).send('<h1>Lien invalide</h1>');
+  res.send(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><title>Validation du devis</title></head><body style="font-family:Arial;text-align:center;padding:60px;">
+    <h2>Confirmer la validation de votre devis</h2>
+    <form method="post" action="/api/devis/valider/${token}">
+      <button type="submit" style="padding:14px 28px;font-size:16px;background:#15803d;color:#fff;border:none;border-radius:8px;cursor:pointer;">Confirmer le devis</button>
+    </form>
+  </body></html>`);
+});
+
+// POST /api/devis/valider/:token — validation effective par le client
+router.post('/valider/:token', async (req, res) => {
   try {
     const { rows } = await db.query(
       "UPDATE devis SET statut='accepte', validee_par_client_at=NOW() WHERE token_validation=$1 AND statut='envoye' RETURNING numero_devis, client_id",

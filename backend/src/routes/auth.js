@@ -35,7 +35,8 @@ router.post('/login', async (req, res) => {
               prenom: user.prenom, role: user.role_nom, atelier_id: user.atelier_id, postes }
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
@@ -70,7 +71,8 @@ router.post('/changer-poste', require('../middleware/auth').auth, async (req, re
     res.json({ token, user: { id: req.user.id, login: compte.login, nom: compte.nom, prenom: compte.prenom,
                               role: poste, atelier_id: compte.atelier_id, postes } });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
@@ -95,7 +97,8 @@ router.post('/login-badge', async (req, res) => {
     res.json({ token, user: { id: user.id, login: user.login, nom: user.nom,
                                prenom: user.prenom, role: user.role_nom, atelier_id: user.atelier_id } });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 

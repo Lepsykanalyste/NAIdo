@@ -117,8 +117,9 @@ app.use('/api/cessions',        require('./routes/cessions'));
 app.use('/api/regleur', require('./routes/regleur_historique'));
 
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(err.status || 500).json({ error: err.message || 'Erreur serveur' });
+  const statut = err.status || 500;
+  if (statut >= 500) console.error(err.stack);
+  res.status(statut).json({ error: statut < 500 ? (err.message || 'Requête invalide') : 'Erreur serveur' });
 });
 
 app.listen(PORT, () => console.log(`NAIdo v3 démarré sur le port ${PORT}`));
