@@ -2281,6 +2281,310 @@ onClick={()=>ouvrirPdfSecurise(`/api/of/${of.id}/pdf`)}
   );
 }
 
+// Tableau de bord comptable : chiffre d'affaires du mois, encaissements, créances, engagements achats
+function DashboardComptable() {
+  const [stats, setStats] = useState({});
+  const [ventes, setVentes] = useState([]);
+  const [achats, setAchats] = useState({});
+  useEffect(() => {
+    const aujourdhui = new Date();
+    const debut = new Date(aujourdhui.getFullYear(), aujourdhui.getMonth(), 1).toISOString().slice(0,10);
+    const fin = aujourdhui.toISOString().slice(0,10);
+    Promise.all([
+      axios.get(`${API}/vente/ventes/stats/resume`, { params: { debut, fin } }).catch(()=>({data:{}})),
+      axios.get(`${API}/vente/ventes`).catch(()=>({data:[]})),
+      axios.get(`${API}/achat/dashboard`).catch(()=>({data:{}})),
+    ]).then(([s,v,a])=>{
+      setStats(s.data||{});
+      setVentes(Array.isArray(v.data)?v.data:[]);
+      setAchats(a.data||{});
+    });
+  }, []);
+  const aEncaisser = ventes.filter(v=>v.statut!=='annule' && parseFloat(v.solde_restant||0) > 0);
+  const f = (n) => parseFloat(n||0).toLocaleString('fr-FR') + ' FCFA';
+  const cartes = [
+    {icon:'📈',label:'CA TTC du mois',value:f(stats.ca_ttc),color:'#15803d',bg:'#dcfce7'},
+    {icon:'💰',label:'Encaissé du mois',value:f(stats.total_encaisse),color:'#0369a1',bg:'#e0f2fe'},
+    {icon:'🧾',label:'Restant à encaisser',value:f(stats.total_restant),color:'#d97706',bg:'#fef3c7'},
+    {icon:'🛒',label:'Engagé auprès des fournisseurs',value:f(achats.montant_engage),color:'#7c3aed',bg:'#f5f3ff'},
+  ];
+  return (
+    <div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12,marginBottom:20}}>
+        {cartes.map(k=>(
+          <div key={k.label} style={{background:k.bg,borderRadius:12,padding:'16px'}}>
+            <div style={{fontSize:10,color:'#6b7280',marginBottom:4}}>{k.icon} {k.label}</div>
+            <div style={{fontSize:18,fontWeight:800,color:k.color}}>{k.value}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{background:'#fff',borderRadius:14,border:'1px solid #e5e7eb',overflow:'hidden'}}>
+        <div style={{padding:'14px 20px',borderBottom:'1px solid #e5e7eb',fontWeight:700,fontSize:14}}>🧾 Ventes à encaisser</div>
+        {aEncaisser.length===0 ? <div style={{padding:24,textAlign:'center',color:'#6b7280'}}>Aucune créance en cours</div> :
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+          <thead><tr style={{background:'#fffbeb'}}>
+            {['N° vente','Client','Total TTC','Encaissé','Reste à encaisser'].map(h=>(<th key={h} style={{padding:'8px 12px',textAlign:'left',fontWeight:600,color:'#92400e'}}>{h}</th>))}
+          </tr></thead>
+          <tbody>
+            {aEncaisser.slice(0,20).map((v,i)=>(
+              <tr key={v.id||i} style={{borderBottom:'1px solid #f3f4f6'}}>
+                <td style={{padding:'8px 12px',fontWeight:700}}>{v.numero_vente||'—'}</td>
+                <td style={{padding:'8px 12px'}}>{v.client_nom||'—'}</td>
+                <td style={{padding:'8px 12px'}}>{f(v.montant_ttc)}</td>
+                <td style={{padding:'8px 12px'}}>{f(v.montant_paye)}</td>
+                <td style={{padding:'8px 12px',fontWeight:700,color:'#b45309'}}>{f(v.solde_restant)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>}
+      </div>
+    </div>
+  );
+}
+
+// Tableau de bord RH : effectifs, congés en attente, absences du jour
+function DashboardRH() {
+  const [employes, setEmployes] = useState([]);
+  const [conges, setConges] = useState([]);
+  const [presences, setPresences] = useState([]);
+  useEffect(() => {
+    Promise.all([
+      axios.get(`${API}/rh/employes`).catch(()=>({data:[]})),
+      axios.get(`${API}/rh/conges?statut=en_attente`).catch(()=>({data:[]})),
+      axios.get(`${API}/rh/presences`).catch(()=>({data:[]})),
+    ]).then(([e,c,p])=>{
+      setEmployes(Array.isArray(e.data)?e.data:[]);
+      setConges(Array.isArray(c.data)?c.data:[]);
+      setPresences(Array.isArray(p.data)?p.data:[]);
+    });
+  }, []);
+  const aujourdhui = new Date().toISOString().slice(0,10);
+  const actifs = employes.filter(e=>!e.statut || e.statut==='actif').length;
+  const congesAttente = conges.filter(c=>c.statut==='en_attente').length;
+  const absentsJour = presences.filter(p=>String(p.date_presence||'').slice(0,10)===aujourdhui && ['absent','maladie'].includes(p.type_presence)).length;
+  const cartes = [
+    {icon:'👥',label:'Employés actifs',value:actifs,color:'#0369a1',bg:'#e0f2fe'},
+    {icon:'🏖️',label:'Congés en attente',value:congesAttente,color:'#d97706',bg:'#fef3c7'},
+    {icon:'🚫',label:'Absences du jour',value:absentsJour,color:'#dc2626',bg:'#fee2e2'},
+  ];
+  return (
+    <div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:12,marginBottom:20}}>
+        {cartes.map(k=>(
+          <div key={k.label} style={{background:k.bg,borderRadius:12,padding:'16px'}}>
+            <div style={{fontSize:10,color:'#6b7280',marginBottom:4}}>{k.icon} {k.label}</div>
+            <div style={{fontSize:22,fontWeight:800,color:k.color}}>{k.value}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{background:'#fff',borderRadius:14,border:'1px solid #e5e7eb',overflow:'hidden'}}>
+        <div style={{padding:'14px 20px',borderBottom:'1px solid #e5e7eb',fontWeight:700,fontSize:14}}>🏖️ Demandes de congé en attente</div>
+        {congesAttente===0 ? <div style={{padding:24,textAlign:'center',color:'#6b7280'}}>Aucune demande en attente</div> :
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+          <thead><tr style={{background:'#fffbeb'}}>
+            {['Employé','Type','Du','Au','Jours'].map(h=>(<th key={h} style={{padding:'8px 12px',textAlign:'left',fontWeight:600,color:'#92400e'}}>{h}</th>))}
+          </tr></thead>
+          <tbody>
+            {conges.filter(c=>c.statut==='en_attente').slice(0,20).map((c,i)=>(
+              <tr key={c.id||i} style={{borderBottom:'1px solid #f3f4f6'}}>
+                <td style={{padding:'8px 12px',fontWeight:700}}>{c.employe_nom||c.nom||'—'}</td>
+                <td style={{padding:'8px 12px'}}>{c.type_conge||'—'}</td>
+                <td style={{padding:'8px 12px'}}>{c.date_debut?new Date(c.date_debut).toLocaleDateString('fr-FR'):'—'}</td>
+                <td style={{padding:'8px 12px'}}>{c.date_fin?new Date(c.date_fin).toLocaleDateString('fr-FR'):'—'}</td>
+                <td style={{padding:'8px 12px'}}>{c.nb_jours||'—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>}
+      </div>
+    </div>
+  );
+}
+
+// Tableau de bord qualité (QHSE) : non-conformités ouvertes, lots en quarantaine
+function DashboardQualite() {
+  const [ncs, setNcs] = useState([]);
+  const [lots, setLots] = useState([]);
+  useEffect(() => {
+    Promise.all([
+      axios.get(`${API}/qhse/nc`).catch(()=>({data:[]})),
+      axios.get(`${API}/stock/lots`).catch(()=>({data:[]})),
+    ]).then(([n,l])=>{
+      setNcs(Array.isArray(n.data)?n.data:[]);
+      setLots(Array.isArray(l.data)?l.data:[]);
+    });
+  }, []);
+  const ouvertes = ncs.filter(n=>!['clos','annule'].includes(n.statut));
+  const graves = ouvertes.filter(n=>['critique','bloquante'].includes(n.gravite));
+  const aujourdhui = new Date().toDateString();
+  const ncDuJour = ncs.filter(n=>n.created_at && new Date(n.created_at).toDateString()===aujourdhui).length;
+  const quarantaine = lots.filter(l=>['quarantaine','bloque'].includes(l.statut));
+  const cartes = [
+    {icon:'⚠️',label:'NC ouvertes',value:ouvertes.length,color:'#d97706',bg:'#fef3c7'},
+    {icon:'🚨',label:'NC critiques ou bloquantes',value:graves.length,color:'#dc2626',bg:'#fee2e2'},
+    {icon:'🆕',label:'NC créées aujourd\'hui',value:ncDuJour,color:'#0369a1',bg:'#e0f2fe'},
+    {icon:'⏳',label:'Lots en quarantaine',value:quarantaine.length,color:'#7c3aed',bg:'#f5f3ff'},
+  ];
+  return (
+    <div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12,marginBottom:20}}>
+        {cartes.map(k=>(
+          <div key={k.label} style={{background:k.bg,borderRadius:12,padding:'16px'}}>
+            <div style={{fontSize:10,color:'#6b7280',marginBottom:4}}>{k.icon} {k.label}</div>
+            <div style={{fontSize:22,fontWeight:800,color:k.color}}>{k.value}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{background:'#fff',borderRadius:14,border:'1px solid #e5e7eb',overflow:'hidden',marginBottom:16}}>
+        <div style={{padding:'14px 20px',borderBottom:'1px solid #e5e7eb',fontWeight:700,fontSize:14}}>⚠️ Non-conformités ouvertes</div>
+        {ouvertes.length===0 ? <div style={{padding:24,textAlign:'center',color:'#6b7280'}}>Aucune non-conformité ouverte</div> :
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+          <thead><tr style={{background:'#fffbeb'}}>
+            {['N° NC','Titre','Gravité','Statut'].map(h=>(<th key={h} style={{padding:'8px 12px',textAlign:'left',fontWeight:600,color:'#92400e'}}>{h}</th>))}
+          </tr></thead>
+          <tbody>
+            {ouvertes.slice(0,20).map((n,i)=>(
+              <tr key={n.id||i} style={{borderBottom:'1px solid #f3f4f6'}}>
+                <td style={{padding:'8px 12px',fontWeight:700}}>{n.numero_nc||'—'}</td>
+                <td style={{padding:'8px 12px'}}>{n.titre||'—'}</td>
+                <td style={{padding:'8px 12px'}}>{n.gravite||'—'}</td>
+                <td style={{padding:'8px 12px'}}>{n.statut||'—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>}
+      </div>
+      <div style={{background:'#fff',borderRadius:14,border:'1px solid #e5e7eb',overflow:'hidden'}}>
+        <div style={{padding:'14px 20px',borderBottom:'1px solid #e5e7eb',fontWeight:700,fontSize:14}}>⏳ Lots en quarantaine ou bloqués</div>
+        {quarantaine.length===0 ? <div style={{padding:24,textAlign:'center',color:'#6b7280'}}>Aucun lot en quarantaine</div> :
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+          <thead><tr style={{background:'#f5f3ff'}}>
+            {['N° lot','Statut','Quantité disponible'].map(h=>(<th key={h} style={{padding:'8px 12px',textAlign:'left',fontWeight:600,color:'#6d28d9'}}>{h}</th>))}
+          </tr></thead>
+          <tbody>
+            {quarantaine.slice(0,20).map((l,i)=>(
+              <tr key={l.id||i} style={{borderBottom:'1px solid #f3f4f6'}}>
+                <td style={{padding:'8px 12px',fontWeight:700}}>{l.numero_lot||'—'}</td>
+                <td style={{padding:'8px 12px'}}>{l.statut}</td>
+                <td style={{padding:'8px 12px'}}>{parseFloat(l.qte_disponible||0).toLocaleString('fr-FR')}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>}
+      </div>
+    </div>
+  );
+}
+
+// Tableau de bord du magasinier (magasin central, AT3) : mouvements à valider, lots en quarantaine, stock disponible
+function DashboardMagasin() {
+  const [lots, setLots] = useState([]);
+  const [mvts, setMvts] = useState([]);
+  useEffect(() => {
+    Promise.all([
+      axios.get(`${API}/stock/lots`).catch(()=>({data:[]})),
+      axios.get(`${API}/mouvements?statut=brouillon`).catch(()=>({data:[]})),
+    ]).then(([l,m])=>{
+      setLots(Array.isArray(l.data)?l.data:[]);
+      setMvts(Array.isArray(m.data)?m.data:[]);
+    });
+  }, []);
+  const quarantaine = lots.filter(l=>['quarantaine','bloque'].includes(l.statut));
+  const disponibles = lots.filter(l=>l.statut==='disponible');
+  const stockTotal = disponibles.reduce((s,l)=>s+(parseFloat(l.qte_disponible)||0),0);
+  const cartes = [
+    {icon:'📥',label:'Mouvements à valider',value:mvts.length,color:'#d97706',bg:'#fef3c7'},
+    {icon:'⏳',label:'Lots en quarantaine',value:quarantaine.length,color:'#dc2626',bg:'#fee2e2'},
+    {icon:'📦',label:'Lots disponibles',value:disponibles.length,color:'#15803d',bg:'#dcfce7'},
+    {icon:'⚖️',label:'Quantité disponible',value:stockTotal.toLocaleString('fr-FR'),color:'#7c3aed',bg:'#f5f3ff'},
+  ];
+  return (
+    <div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:12,marginBottom:20}}>
+        {cartes.map(k=>(
+          <div key={k.label} style={{background:k.bg,borderRadius:12,padding:'16px'}}>
+            <div style={{fontSize:10,color:'#6b7280',marginBottom:4}}>{k.icon} {k.label}</div>
+            <div style={{fontSize:22,fontWeight:800,color:k.color}}>{k.value}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{background:'#fff',borderRadius:14,border:'1px solid #e5e7eb',overflow:'hidden',marginBottom:16}}>
+        <div style={{padding:'14px 20px',borderBottom:'1px solid #e5e7eb',fontWeight:700,fontSize:14}}>⏳ Lots en quarantaine ou bloqués</div>
+        {quarantaine.length===0 ? <div style={{padding:24,textAlign:'center',color:'#6b7280'}}>Aucun lot en quarantaine</div> :
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+          <thead><tr style={{background:'#fef2f2'}}>
+            {['N° lot','Statut','Quantité disponible'].map(h=>(<th key={h} style={{padding:'8px 12px',textAlign:'left',fontWeight:600,color:'#b91c1c'}}>{h}</th>))}
+          </tr></thead>
+          <tbody>
+            {quarantaine.slice(0,20).map((l,i)=>(
+              <tr key={l.id||i} style={{borderBottom:'1px solid #f3f4f6'}}>
+                <td style={{padding:'8px 12px',fontWeight:700}}>{l.numero_lot||'—'}</td>
+                <td style={{padding:'8px 12px'}}>{l.statut}</td>
+                <td style={{padding:'8px 12px'}}>{parseFloat(l.qte_disponible||0).toLocaleString('fr-FR')}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>}
+      </div>
+      <div style={{background:'#fff',borderRadius:14,border:'1px solid #e5e7eb',overflow:'hidden'}}>
+        <div style={{padding:'14px 20px',borderBottom:'1px solid #e5e7eb',fontWeight:700,fontSize:14}}>📥 Mouvements en brouillon à valider</div>
+        {mvts.length===0 ? <div style={{padding:24,textAlign:'center',color:'#6b7280'}}>Aucun mouvement à valider</div> :
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+          <thead><tr style={{background:'#fffbeb'}}>
+            {['Type','Statut','Date'].map(h=>(<th key={h} style={{padding:'8px 12px',textAlign:'left',fontWeight:600,color:'#92400e'}}>{h}</th>))}
+          </tr></thead>
+          <tbody>
+            {mvts.slice(0,20).map((m,i)=>(
+              <tr key={m.id||i} style={{borderBottom:'1px solid #f3f4f6'}}>
+                <td style={{padding:'8px 12px'}}>{m.type_mouvement||'—'}</td>
+                <td style={{padding:'8px 12px'}}>{m.statut}</td>
+                <td style={{padding:'8px 12px'}}>{m.date_mouvement?new Date(m.date_mouvement).toLocaleDateString('fr-FR'):'—'}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>}
+      </div>
+    </div>
+  );
+}
+
+// Tableau de l'avancement des OF (réutilisable : direction, commercial)
+const LIBELLE_STATUT_OF_GLOBAL = {planifie:'Planifié',lance:'Lancé',en_attente_regleur:'En attente régleur',en_cours:'En cours',en_attente_operateur:'En attente opérateur',termine:'Terminé',clos:'Clôturé',annule:'Annulé'};
+function TableauOF({ ofs }) {
+  return (
+    <div style={{background:'#fff',borderRadius:14,border:'1px solid #e5e7eb',overflow:'hidden',marginBottom:16}}>
+      <div style={{padding:'14px 20px',borderBottom:'1px solid #e5e7eb',fontWeight:700,fontSize:14}}>🏭 Ordres de fabrication : avancement</div>
+      {ofs.length===0 ? <div style={{padding:24,textAlign:'center',color:'#6b7280'}}>Aucun ordre de fabrication</div> :
+      <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+        <thead><tr style={{background:'#f0f9ff'}}>
+          {['N° OF','Article','Client','Avancement','Livraison prévue','Statut'].map(h=>(
+            <th key={h} style={{padding:'8px 12px',textAlign:'left',fontWeight:600,color:'#0369a1',borderBottom:'2px solid #bae6fd'}}>{h}</th>
+          ))}
+        </tr></thead>
+        <tbody>
+        {ofs.slice(0,20).map((o,i)=>{
+          const cible = parseFloat(o.quantite_cible)||0;
+          const prod = parseFloat(o.quantite_produite)||0;
+          const pct = cible>0 ? Math.min(100, Math.round(prod/cible*100)) : 0;
+          return (
+          <tr key={o.id} style={{borderBottom:'1px solid #f3f4f6',background:i%2===0?'#fff':'#fafafa'}}>
+            <td style={{padding:'8px 12px',fontWeight:700,color:'#0369a1'}}>{o.numero_of}</td>
+            <td style={{padding:'8px 12px'}}>{o.article_nom||'—'}</td>
+            <td style={{padding:'8px 12px',fontSize:12}}>{o.client_nom||'—'}</td>
+            <td style={{padding:'8px 12px',minWidth:150}}>
+              <div style={{background:'#e5e7eb',borderRadius:6,height:8,overflow:'hidden'}}><div style={{background:'#0369a1',width:pct+'%',height:'100%'}}></div></div>
+              <div style={{fontSize:11,color:'#6b7280',marginTop:2}}>{prod.toLocaleString('fr-FR')} / {cible.toLocaleString('fr-FR')} ({pct}%)</div>
+            </td>
+            <td style={{padding:'8px 12px',fontSize:12}}>{o.date_livraison_prevue?new Date(o.date_livraison_prevue).toLocaleDateString('fr-FR'):'—'}</td>
+            <td style={{padding:'8px 12px',fontSize:12}}>{LIBELLE_STATUT_OF_GLOBAL[o.statut]||o.statut}</td>
+          </tr>
+          ); })}
+        </tbody>
+      </table>}
+    </div>
+  );
+}
+
 function DashboardCommercial() {
   const { user } = useAuth();
   const [dfs, setDfs] = useState([]);
@@ -2303,8 +2607,9 @@ function DashboardCommercial() {
   const dfEnAttente = dfs.filter(d=>d.statut==='en_attente').length;
   const dfValidees = dfs.filter(d=>d.statut==='validee').length;
   // Avancement des OF : terminés = statut final ; en cours = tout le reste sauf annulés
-  const ofTermines = ofs.filter(o=>['termine','cloture'].includes(o.statut)).length;
-  const ofEnCours = ofs.filter(o=>!['termine','cloture','annule'].includes(o.statut)).length;
+  const ofTermines = ofs.filter(o=>['termine','clos'].includes(o.statut)).length;
+  const ofEnCours = ofs.filter(o=>!['termine','clos','annule'].includes(o.statut)).length;
+  const LIBELLE_STATUT_OF = {planifie:'Planifié',lance:'Lancé',en_attente_regleur:'En attente régleur',en_cours:'En cours',en_attente_operateur:'En attente opérateur',termine:'Terminé',clos:'Clôturé',annule:'Annulé'};
 
   return (
     <div>
@@ -2321,6 +2626,36 @@ function DashboardCommercial() {
             <div style={{fontSize:22,fontWeight:800,color:k.color}}>{k.value}</div>
           </div>
         ))}
+      </div>
+      <div style={{background:'#fff',borderRadius:14,border:'1px solid #e5e7eb',overflow:'hidden',marginBottom:16}}>
+        <div style={{padding:'14px 20px',borderBottom:'1px solid #e5e7eb',fontWeight:700,fontSize:14}}>🏭 Ordres de fabrication : avancement</div>
+        {ofs.length===0 ? <div style={{padding:24,textAlign:'center',color:'#6b7280'}}>Aucun ordre de fabrication</div> :
+        <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+          <thead><tr style={{background:'#f0f9ff'}}>
+            {['N° OF','Article','Client','Avancement','Livraison prévue','Statut'].map(h=>(
+              <th key={h} style={{padding:'8px 12px',textAlign:'left',fontWeight:600,color:'#0369a1',borderBottom:'2px solid #bae6fd'}}>{h}</th>
+            ))}
+          </tr></thead>
+          <tbody>
+          {ofs.slice(0,20).map((o,i)=>{
+            const cible = parseFloat(o.quantite_cible)||0;
+            const prod = parseFloat(o.quantite_produite)||0;
+            const pct = cible>0 ? Math.min(100, Math.round(prod/cible*100)) : 0;
+            return (
+            <tr key={o.id} style={{borderBottom:'1px solid #f3f4f6',background:i%2===0?'#fff':'#fafafa'}}>
+              <td style={{padding:'8px 12px',fontWeight:700,color:'#0369a1'}}>{o.numero_of}</td>
+              <td style={{padding:'8px 12px'}}>{o.article_nom||'—'}</td>
+              <td style={{padding:'8px 12px',fontSize:12}}>{o.client_nom||'—'}</td>
+              <td style={{padding:'8px 12px',minWidth:150}}>
+                <div style={{background:'#e5e7eb',borderRadius:6,height:8,overflow:'hidden'}}><div style={{background:'#0369a1',width:pct+'%',height:'100%'}}></div></div>
+                <div style={{fontSize:11,color:'#6b7280',marginTop:2}}>{prod.toLocaleString('fr-FR')} / {cible.toLocaleString('fr-FR')} ({pct}%)</div>
+              </td>
+              <td style={{padding:'8px 12px',fontSize:12}}>{o.date_livraison_prevue?new Date(o.date_livraison_prevue).toLocaleDateString('fr-FR'):'—'}</td>
+              <td style={{padding:'8px 12px',fontSize:12}}>{LIBELLE_STATUT_OF[o.statut]||o.statut}</td>
+            </tr>
+            ); })}
+          </tbody>
+        </table>}
       </div>
       <div style={{background:'#fff',borderRadius:14,border:'1px solid #e5e7eb',overflow:'hidden'}}>
         <div style={{padding:'14px 20px',borderBottom:'1px solid #e5e7eb',fontWeight:700,fontSize:14}}>📝 Mes demandes de fabrication</div>
@@ -2363,6 +2698,8 @@ function DashboardAT3() {
   const [quarantaine, setQuar] = useState([]);
   const [stock, setStock] = useState([]);
   const [cessions, setCessions] = useState([]);
+  const [ofs, setOfs] = useState([]);
+  useEffect(() => { axios.get(`${API}/of`).then(r=>setOfs(Array.isArray(r.data)?r.data:[])).catch(()=>{}); }, []);
   const [pannes, setPannes] = useState({});
   const charger = async () => {
     try {
@@ -2392,6 +2729,7 @@ function DashboardAT3() {
   const machinesEX=Array.from({length:9},(_,i)=>{const code=`EX${String(i+1).padStart(2,"0")}`;const m=trs.find(t=>(t.machine_code||"").includes(code));return{code,v:m?parseFloat(m.trs||0):null};});
   const machinesSOU=Array.from({length:5},(_,i)=>{const code=`SOU${String(i+1).padStart(2,"0")}`;const m=trs.find(t=>(t.machine_code||"").includes(code));return{code,v:m?parseFloat(m.trs||0):null};});
   return (<div>
+      <TableauOF ofs={ofs.filter(o => !o.atelier_id || String(o.atelier_id).toUpperCase().includes('AT3') || String(o.atelier_libelle||'').toUpperCase().includes('AT3'))} />
     <div style={{background:"linear-gradient(135deg,#14532d,#166534)",borderRadius:14,padding:"16px 20px",marginBottom:16,color:"#fff",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
       <div><div style={{fontWeight:800,fontSize:17}}>🏭 Atelier 3 — Tableau de Bord</div><div style={{fontSize:12,opacity:0.8}}>{user?.prenom} {user?.nom} · {new Date().toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"})}</div></div>
       <button onClick={charger} style={{background:"rgba(255,255,255,0.2)",border:"none",color:"#fff",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:12}}>🔄</button>
@@ -2417,6 +2755,8 @@ function Dashboard() {
   const [alertes, setAlertes] = useState([]);
   const [ateliersDash, setAteliersDash] = useState([]);
   const [dossiersOuverts, setDossiersOuverts] = useState({});
+  const [ofs, setOfs] = useState([]);
+  useEffect(() => { axios.get(`${API}/of`).then(r=>setOfs(Array.isArray(r.data)?r.data:[])).catch(()=>{}); }, []);
 
   const charger = async () => {
     try {
@@ -2454,7 +2794,8 @@ function Dashboard() {
 
   return (
     <div>
-      {/* Navigation en dossiers ateliers */}
+      {['directeur','super_admin'].includes(user?.role||'') && <TableauOF ofs={ofs} />}
+{/* Navigation en dossiers ateliers */}
       {!['commercial','vente','achat','rh','qhse'].includes(user?.role||'') && (<div style={{marginBottom:20,display:'flex',gap:12,flexWrap:'wrap',alignItems:'flex-start'}}>
         {/* Vue générale */}
         <button onClick={()=>setVueMode('general')} style={{
@@ -8169,7 +8510,7 @@ function OrdresLivraison() {
       case 'ol': return <OrdresLivraison />;
       case 'of': return <OrdresFabrication setOngletActif={setOngletActif} />;
       case 'quarantaine': return <QuarantaineAT3 />;
-      case 'dashboard': return (() => { if (user?.role === 'achat') return <DashboardAchat />; if (user?.role === 'chef_atelier') return <DashboardAT3 />; if (user?.role === 'magasinier_mp') return <DashboardMagasinMP />; return <Dashboard />; })();
+      case 'dashboard': return (() => { if (user?.role === 'achat') return <DashboardAchat />; if (user?.role === 'chef_atelier') return <DashboardAT3 />; if (user?.role === 'magasinier_mp') return <DashboardMagasinMP />; if (['magasinier','magasinier_at3','magasinier_central'].includes(user?.role)) return <DashboardMagasin />; if (['qualite','qhse','responsable_qhse'].includes(user?.role)) return <DashboardQualite />; if (['rh','responsable_rh'].includes(user?.role)) return <DashboardRH />; if (user?.role === 'comptable') return <DashboardComptable />; return <Dashboard />; })();
       case 'production': return <SuiviProduction />;
       case 'planning': return <PlanningMachines />;
       case 'rapportjour': return <RapportsJournaliers />;

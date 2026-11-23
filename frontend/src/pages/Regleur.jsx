@@ -356,6 +356,7 @@ function EcranListe({ user, onValider, onGmao, onHistorique }) {
   const [onglet,   setOnglet]  = useState('attente');
   const [loading,  setLoading] = useState(true);
   const [ticket,   setTicket]  = useState(null);
+  const [enProd,   setEnProd]  = useState(0);
 
   const charger = useCallback(async () => {
     setLoading(true);
@@ -366,6 +367,7 @@ function EcranListe({ user, onValider, onGmao, onHistorique }) {
       ]);
       const allOfs  = Array.isArray(r1.data) ? r1.data : [];
       const allSess = Array.isArray(r2.data) ? r2.data : [];
+      setEnProd(allOfs.filter(o => o.statut === 'en_cours').length);
       setOfs(allOfs.filter(o => ['planifie','lance','en_attente_regleur'].includes(o.statut)));
       setSessions(allSess.filter(s => !s.regleur_valide));
       setValides(allSess.filter(s => s.regleur_valide));
@@ -397,6 +399,20 @@ function EcranListe({ user, onValider, onGmao, onHistorique }) {
           <button style={S.btnQ}     onClick={() => { logout(); navigate('/login'); }}>Quitter</button>
         </div>
       </header>
+
+      <div style={{ display:'flex', gap:8, padding:'10px 16px', flexWrap:'wrap' }}>
+        {[
+          { label:'À régler', value: total, bg:'#fef3c7', color:'#92400e' },
+          { label:'En production', value: enProd, bg:'#e0f2fe', color:'#0369a1' },
+          { label:'Sessions actives', value: sessions.length + valides.length, bg:'#dcfce7', color:'#15803d' },
+          { label:"Validés aujourd'hui", value: valides.length, bg:'#f5f3ff', color:'#6d28d9' },
+        ].map(k => (
+          <div key={k.label} style={{ background:k.bg, borderRadius:10, padding:'8px 14px', minWidth:120 }}>
+            <div style={{ fontSize:11, color:'#6b7280' }}>{k.label}</div>
+            <div style={{ fontSize:20, fontWeight:800, color:k.color }}>{k.value}</div>
+          </div>
+        ))}
+      </div>
 
       <nav style={S.nav}>
         {[
