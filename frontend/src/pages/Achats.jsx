@@ -10,6 +10,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import { ImageFichier, ouvrirFichier } from '../utils/fichiers.jsx';
 import { useAuth } from '../hooks/useAuth.jsx';
 import { ouvrirPdfSecurise } from '../utils/pdf';
 
@@ -927,7 +928,7 @@ export function ArticlesDivers() {
 
       {voir && (
         <Modal titre={`👁 ${voir.code} — ${voir.designation}`} onClose={() => setVoir(null)} largeur={560}>
-          {voir.photo_path && <div style={{ textAlign: 'center', marginBottom: 12 }}><img src={voir.photo_path} alt={voir.designation} style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 8 }} /></div>}
+          {voir.photo_path && <div style={{ textAlign: 'center', marginBottom: 12 }}><ImageFichier chemin={voir.photo_path} alt={voir.designation} style={{ maxWidth: '100%', maxHeight: 200, borderRadius: 8 }} /></div>}
           {[['Fournisseur habituel', voir.fournisseur || '—'], ['Référence fournisseur', voir.reference_fournisseur || '—'], ['Famille', voir.famille_libelle || '—'],
             ['Unité', voir.unite_libelle ? `${voir.unite_libelle} (${voir.unite_code})` : '—'], ['Prix d\'achat', fcfa(voir.prix_achat)],
             ['Prix moyen (réceptions)', prixMoyens[voir.id] ? `${fcfa(prixMoyens[voir.id].prix)} (${prixMoyens[voir.id].nb} réception${prixMoyens[voir.id].nb > 1 ? 's' : ''})` : 'Aucune réception encore'],
@@ -937,8 +938,8 @@ export function ArticlesDivers() {
             </div>
           ))}
           <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap' }}>
-            {voir.fiche_technique_path ? <a href={voir.fiche_technique_path} target="_blank" rel="noreferrer" style={{ background: '#dbeafe', color: '#1d4ed8', padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>📄 Fiche technique</a> : <span style={{ fontSize: 12, color: '#9ca3af' }}>Pas de fiche technique</span>}
-            {voir.fiche_securite_path ? <a href={voir.fiche_securite_path} target="_blank" rel="noreferrer" style={{ background: '#fee2e2', color: '#dc2626', padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>⚠ Fiche de sécurité</a> : <span style={{ fontSize: 12, color: '#9ca3af' }}>Pas de fiche de sécurité</span>}
+            {voir.fiche_technique_path ? <a href="#" onClick={(e) => { e.preventDefault(); ouvrirFichier(voir.fiche_technique_path); }} style={{ background: '#dbeafe', color: '#1d4ed8', padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>📄 Fiche technique</a> : <span style={{ fontSize: 12, color: '#9ca3af' }}>Pas de fiche technique</span>}
+            {voir.fiche_securite_path ? <a href="#" onClick={(e) => { e.preventDefault(); ouvrirFichier(voir.fiche_securite_path); }} style={{ background: '#fee2e2', color: '#dc2626', padding: '6px 12px', borderRadius: 8, fontSize: 12, fontWeight: 700, textDecoration: 'none' }}>⚠ Fiche de sécurité</a> : <span style={{ fontSize: 12, color: '#9ca3af' }}>Pas de fiche de sécurité</span>}
           </div>
         </Modal>
       )}

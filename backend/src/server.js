@@ -39,7 +39,8 @@ const badgeParAdresse = rateLimit({ windowMs: 15 * 60 * 1000, max: 20, message: 
 app.use('/api/auth/login', loginParAdresse, loginParCompte);
 app.use('/api/auth/login-badge', badgeParAdresse, loginParCompte);
 app.use('/api', require('./middleware/rbac'));   // controle d'acces par role (config/permissions.json)
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+// Fichiers téléversés : réservés aux utilisateurs connectés (plus d'accès public par URL)
+app.use('/uploads', require('./middleware/auth').auth, express.static(path.join(__dirname, '../uploads')));
 
 // ── ROUTES ────────────────────────────────────────────────────
 // Référentiels

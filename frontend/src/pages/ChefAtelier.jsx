@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { ouvrirFichier } from '../utils/fichiers.jsx';
 import { useAuth } from '../hooks/useAuth.jsx';
 import { useNavigate } from 'react-router-dom';
 
@@ -3869,15 +3870,15 @@ function MatieresPremières() {
                 <td style={{ padding:'9px 14px' }}>
                   <div style={{ display:'flex', gap:4 }}>
                     {m.fiche_technique_path && (
-                      <a href={m.fiche_technique_path} target="_blank" rel="noreferrer"
-                        onClick={e => e.stopPropagation()}
+                      <a href="#"
+                        onClick={e => { e.preventDefault(); e.stopPropagation(); ouvrirFichier(m.fiche_technique_path); }}
                         style={{ background:'#dbeafe', color:'#1d4ed8', padding:'2px 8px', borderRadius:6, fontSize:11, textDecoration:'none', fontWeight:600 }}>
                         📄 TDS
                       </a>
                     )}
                     {m.fiche_securite_path && (
-                      <a href={m.fiche_securite_path} target="_blank" rel="noreferrer"
-                        onClick={e => e.stopPropagation()}
+                      <a href="#"
+                        onClick={e => { e.preventDefault(); e.stopPropagation(); ouvrirFichier(m.fiche_securite_path); }}
                         style={{ background:'#fee2e2', color:'#dc2626', padding:'2px 8px', borderRadius:6, fontSize:11, textDecoration:'none', fontWeight:600 }}>
                         ⚠ FDS
                       </a>
