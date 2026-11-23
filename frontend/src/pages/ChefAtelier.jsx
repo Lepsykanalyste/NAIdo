@@ -2021,7 +2021,7 @@ function OrdresFabrication({ setOngletActif }) {
         axios.get(`${API}/of${filtreStatut?'?statut='+filtreStatut:''}${filtreAtelier?'&atelier_id='+filtreAtelier:''}`),
         axios.get(`${API}/articles`),
         axios.get(`${API}/vente/clients`).catch(()=>({data:[]})),
-        axios.get(`${API}/machines`),
+        axios.get(`${API}/machines`).catch(()=>({data:[]})),
         axios.get(`${API}/ateliers`),
       ]);
       setOfs(o.data||[]); setArticles(a.data||[]);
@@ -2116,7 +2116,7 @@ function OrdresFabrication({ setOngletActif }) {
             {['planifie','lance','en_cours','termine','annule'].map(s=><option key={s} value={s}>{labelStatut(s)}</option>)}
           </select>
         </div>
-        {user?.role!=='chef_atelier' && <button onClick={()=>setShowForm(s=>!s)} style={{background:'#0369a1',color:'#fff',border:'none',borderRadius:8,padding:'9px 18px',cursor:'pointer',fontWeight:700,fontSize:13}}>{showForm?'✕ Annuler':'+ Nouvel OF'}</button>}
+        {!['chef_atelier','commercial'].includes(user?.role) && <button onClick={()=>setShowForm(s=>!s)} style={{background:'#0369a1',color:'#fff',border:'none',borderRadius:8,padding:'9px 18px',cursor:'pointer',fontWeight:700,fontSize:13}}>{showForm?'✕ Annuler':'+ Nouvel OF'}</button>}
       </div>
 
       {/* Formulaire création */}
