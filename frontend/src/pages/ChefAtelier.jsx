@@ -5668,10 +5668,10 @@ function Utilisateurs() {
 
   // Droits : matrice poste x domaine (lecture et modification)
   const chargerDroits = async () => {
-    try { const { data } = await axios.get(`${API}/utilisateurs/droits/matrice`); setDroits(data); setDroitsSaisie(data.matrice); }
+    try { const { data } = await axios.get(`${API}/utilisateurs/droits/matrice`); if (!data || !data.matrice || !Array.isArray(data.domaines)) throw new Error('reponse inattendue'); setDroits(data); setDroitsSaisie(data.matrice); }
     catch(e) { toast.error(messageErreur(e)); }
   };
-  useEffect(() => { if (showDroits) chargerDroits(); }, [showDroits]);
+  useEffect(() => { if (showDroits || showForm) chargerDroits(); }, [showDroits, showForm]);
   const enregistrerDroits = async () => {
     try { await axios.put(`${API}/utilisateurs/droits/matrice`, { matrice: droitsSaisie }); toast.success('Droits enregistrés ✓ (effectifs dans la minute)'); chargerDroits(); }
     catch(e) { toast.error(messageErreur(e)); }
@@ -5988,7 +5988,6 @@ function Utilisateurs() {
               <F label="Nom *" k="nom" ph="NOM" required/>
               <F label="Prénom *" k="prenom" ph="Prénom" required/>
               <F label="Login *" k="login" ph="ali.kone" required/>
-              <F label="Login (identifiant de connexion)" k="login" ph="ex. achat"/>
               {!form.id && <F label="Mot de passe *" k="password" type="password" ph="Min. 6 caractères" required/>}
               <F label="Email" k="email" type="email" ph="ali.kone@nai.ci"/>
               <div>
@@ -6039,17 +6038,30 @@ function Utilisateurs() {
               )}
             </div>
 
-            {/* Prévisualisation rôle */}
+            {/* Droits réels du poste (matrice des droits) */}
             {form.role && (
               <div style={{background:'#f0f4ff',borderRadius:10,padding:12,marginBottom:16,border:'1px solid #c7d2fe'}}>
-                <div style={{fontSize:12,color:'#1d4ed8',fontWeight:700,marginBottom:4}}>
-                  🔐 Permissions du rôle : {roles.find(r=>r.code===form.role)?.label}
+                <div style={{fontSize:12,color:'#1d4ed8',fontWeight:700,marginBottom:6}}>
+                  🔐 Droits du poste « {roles.find(r=>r.code===form.role)?.label || form.role} »
                 </div>
-                <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-                  {(roles.find(r=>r.code===form.role)?.acces||[]).map(a=>(
-                    <span key={a} style={{background:'#dbeafe',color:'#1d4ed8',padding:'2px 8px',borderRadius:20,fontSize:10,fontWeight:700}}>{a}</span>
-                  ))}
-                </div>
+                {droits?.matrice?.[form.role] ? (
+                  <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                    {droits.domaines.map(d => {
+                      const v = droits.matrice[form.role][d.nom];
+                      if (!v) return null;
+                      return (
+                        <span key={d.nom} style={{background: v === 'modifier' ? '#dcfce7' : '#dbeafe', color: v === 'modifier' ? '#166534' : '#1d4ed8', padding:'2px 8px', borderRadius:20, fontSize:10, fontWeight:700}}>
+                          {d.nom} : {v}
+                        </span>
+                      );
+                    })}
+                    {!droits.domaines.some(d => droits.matrice[form.role]?.[d.nom]) && <span style={{fontSize:11,color:'#6b7280'}}>Aucun accès aux domaines</span>}
+                  </div>
+                ) : (
+                  <div style={{fontSize:11,color:'#6b7280'}}>
+                    {['directeur','super_admin'].includes(form.role) ? 'Accès complet (direction)' : 'Droits non gérés dans la matrice pour ce code : voir l\'écran Droits, ou le code est un ancien poste'}
+                  </div>
+                )}
               </div>
             )}
 
