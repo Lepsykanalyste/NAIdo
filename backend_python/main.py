@@ -2252,6 +2252,13 @@ async def postes_de_la_personne(user_id: str, payload: dict, user=Depends(get_cu
                 user_id, principal)
     return {"success": True, "postes": codes, "principal": principal}
 
+@app.get("/api/utilisateurs/{user_id}/postes")
+async def get_postes_de_la_personne(user_id: str, user=Depends(get_current_user)):
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("SELECT r.nom FROM utilisateur_postes up JOIN roles r ON r.id=up.role_id WHERE up.utilisateur_id=$1 ORDER BY r.nom", user_id)
+        principal = await conn.fetchval("SELECT role FROM utilisateurs WHERE id=$1", user_id)
+    return {"postes": [x["nom"] for x in rows], "principal": principal}
+
 @app.get("/api/utilisateurs/{user_id}/acces")
 async def get_acces_utilisateur(user_id: str, user=Depends(get_current_user)):
     async with pool.acquire() as conn:

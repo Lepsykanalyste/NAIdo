@@ -41,6 +41,15 @@ export function AuthProvider({ children }) {
     return data.user;
   };
 
+  const changerPoste = async (poste) => {
+    const { data } = await axios.post('/api/auth/changer-poste', { poste });
+    setToken(data.token);
+    setUser(data.user);
+    localStorage.setItem('naido_token', data.token);
+    localStorage.setItem('naido_user', JSON.stringify(data.user));
+    return data.user;
+  };
+
   const logout = () => {
     setToken(null);
     setUser(null);
@@ -49,7 +58,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, loginBadge, logout }}>
+    <AuthContext.Provider value={{ user, token, login, loginBadge, logout, changerPoste }}>
       {children}
     </AuthContext.Provider>
   );

@@ -5613,6 +5613,9 @@ function Utilisateurs() {
   const [newPwd, setNewPwd] = useState('');
   const [search, setSearch] = useState('');
   const [filtreRole, setFiltreRole] = useState('');
+  const [showPostes, setShowPostes] = useState(false);
+  const [postesAdmin, setPostesAdmin] = useState([]);
+  const [nouveauPoste, setNouveauPoste] = useState('');
 
   const charger = async () => {
     try {
@@ -5629,6 +5632,36 @@ function Utilisateurs() {
   };
 
   useEffect(() => { charger(); }, []);
+
+  // Postes de la personne en cours de modification
+  useEffect(() => {
+    if (showForm && form.id) axios.get(`${API}/utilisateurs/${form.id}/postes`)
+      .then(r => setForm(f => f.id ? {...f, postes: r.data.postes} : f)).catch(() => {});
+  }, [showForm, form.id]);
+
+  // Gestion des postes (creer, renommer, supprimer)
+  const chargerPostesAdmin = async () => {
+    try { const { data } = await axios.get(`${API}/utilisateurs/postes`); setPostesAdmin(data); }
+    catch(e) { toast.error('Erreur chargement des postes'); }
+  };
+  useEffect(() => { if (showPostes) chargerPostesAdmin(); }, [showPostes]);
+  const messageErreur = (e) => e.response?.data?.detail || e.response?.data?.error || 'Erreur';
+  const creerPoste = async () => {
+    if (!nouveauPoste.trim()) return toast.error('Saisissez le nom du poste');
+    try { await axios.post(`${API}/utilisateurs/postes`, { libelle: nouveauPoste }); setNouveauPoste(''); toast.success('Poste créé ✓'); chargerPostesAdmin(); charger(); }
+    catch(e) { toast.error(messageErreur(e)); }
+  };
+  const renommerPoste = async (p) => {
+    const libelle = window.prompt('Nouveau nom du poste', p.libelle);
+    if (!libelle || libelle === p.libelle) return;
+    try { await axios.put(`${API}/utilisateurs/postes/${p.code}`, { libelle }); toast.success('Poste renommé ✓'); chargerPostesAdmin(); charger(); }
+    catch(e) { toast.error(messageErreur(e)); }
+  };
+  const supprimerPoste = async (p) => {
+    if (!window.confirm(`Supprimer le poste « ${p.libelle} » ?`)) return;
+    try { await axios.delete(`${API}/utilisateurs/postes/${p.code}`); toast.success('Poste supprimé ✓'); chargerPostesAdmin(); charger(); }
+    catch(e) { toast.error(messageErreur(e)); }
+  };
 
   // Quand on sélectionne un employé, on prérempli
   const selectionnerEmploye = (empId) => {
@@ -5670,6 +5703,7 @@ function Utilisateurs() {
     try {
       if (form.id) {
         await axios.put(`${API}/utilisateurs/${form.id}`, form);
+        if (form.postes && form.postes.length) await axios.put(`${API}/utilisateurs/${form.id}/postes`, { postes: form.postes, principal: form.role });
         toast.success('Utilisateur modifié ✓');
       } else {
         if (!form.password || form.password.length < 6)
@@ -5725,6 +5759,10 @@ function Utilisateurs() {
         <button onClick={()=>{setForm({role:'operateur',actif:true});setShowForm(true);}}
           style={{background:'#1d4ed8',color:'#fff',border:'none',padding:'9px 20px',borderRadius:8,cursor:'pointer',fontWeight:700}}>
           + Nouvel utilisateur
+        </button>
+        <button onClick={()=>setShowPostes(true)}
+          style={{background:'#fff',color:'#1d4ed8',border:'1px solid #1d4ed8',padding:'9px 16px',borderRadius:8,cursor:'pointer',fontWeight:700}}>
+          ⚙ Postes
         </button>
       </div>
 
@@ -5802,6 +5840,35 @@ function Utilisateurs() {
         )}
       </div>
 
+      {/* Gestion des postes */}
+      {showPostes && (
+        <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:40}}>
+          <div style={{background:'#fff',borderRadius:14,width:'95%',maxWidth:600,padding:24,maxHeight:'85vh',overflowY:'auto'}}>
+            <div style={{display:'flex',justifyContent:'space-between',marginBottom:16}}>
+              <h3 style={{margin:0,color:'#1d4ed8',fontSize:16,fontWeight:800}}>Gestion des postes</h3>
+              <button onClick={()=>setShowPostes(false)} style={{background:'none',border:'none',fontSize:20,cursor:'pointer'}}>✕</button>
+            </div>
+            <div style={{display:'flex',gap:8,marginBottom:16}}>
+              <input value={nouveauPoste} onChange={e=>setNouveauPoste(e.target.value)} placeholder="Nom du nouveau poste, ex. Chef magasin"
+                style={{flex:1,border:'1px solid #d1d5db',borderRadius:8,padding:'9px 12px',fontSize:13}}/>
+              <button onClick={creerPoste} style={{background:'#1d4ed8',color:'#fff',border:'none',padding:'9px 16px',borderRadius:8,cursor:'pointer',fontWeight:700}}>+ Créer</button>
+            </div>
+            {postesAdmin.map(p=>(
+              <div key={p.code} style={{display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:'1px solid #e5e7eb',padding:'8px 0',gap:8}}>
+                <div>
+                  <div style={{fontWeight:600,fontSize:13}}>{p.libelle}</div>
+                  <div style={{fontSize:10,color:'#6b7280'}}>code : {p.code} · {p.nb_comptes} personne(s)</div>
+                </div>
+                <div style={{display:'flex',gap:6}}>
+                  <button onClick={()=>renommerPoste(p)} style={{border:'1px solid #d1d5db',background:'#fff',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:12}}>Renommer</button>
+                  <button onClick={()=>supprimerPoste(p)} style={{border:'1px solid #fca5a5',background:'#fff',color:'#b91c1c',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:12}}>Supprimer</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Formulaire création/édition */}
       {showForm && (
         <div style={{position:'fixed',top:0,left:0,right:0,bottom:0,background:'rgba(0,0,0,0.5)',zIndex:1000,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:40,overflowY:'auto'}}>
@@ -5836,6 +5903,7 @@ function Utilisateurs() {
               <F label="Nom *" k="nom" ph="NOM" required/>
               <F label="Prénom *" k="prenom" ph="Prénom" required/>
               <F label="Login *" k="login" ph="ali.kone" required/>
+              <F label="Login (identifiant de connexion)" k="login" ph="ex. achat"/>
               {!form.id && <F label="Mot de passe *" k="password" type="password" ph="Min. 6 caractères" required/>}
               <F label="Email" k="email" type="email" ph="ali.kone@nai.ci"/>
               <div>
@@ -5847,6 +5915,25 @@ function Utilisateurs() {
                 {form.role && (
                   <div style={{marginTop:6,fontSize:10,color:'#6b7280'}}>
                     Accès : {(roles.find(r=>r.code===form.role)?.acces||[]).join(', ')}
+                  </div>
+                )}
+                {form.id && (
+                  <div style={{marginTop:10}}>
+                    <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>Postes de cette personne</label>
+                    <div style={{display:'flex',flexWrap:'wrap',gap:10}}>
+                      {roles.map(r=>(
+                        <label key={r.code} style={{fontSize:12,display:'flex',alignItems:'center',gap:4}}>
+                          <input type="checkbox" checked={(form.postes||[]).includes(r.code)}
+                            onChange={e=>{
+                              const cur = form.postes||[];
+                              const next = e.target.checked ? [...cur, r.code] : cur.filter(c=>c!==r.code);
+                              setForm({...form, postes: next, role: next.includes(form.role) ? form.role : (next[0]||form.role)});
+                            }}/>
+                          {r.label}
+                        </label>
+                      ))}
+                    </div>
+                    <div style={{fontSize:10,color:'#6b7280',marginTop:4}}>Le poste « Rôle » ci-dessus est le poste principal, ouvert à la connexion.</div>
                   </div>
                 )}
               </div>
@@ -7336,7 +7423,7 @@ function ParametresSysteme() {
 
 
 export default function ChefAtelier() {
-  const { user, logout } = useAuth();
+  const { user, logout, changerPoste } = useAuth();
   const navigate = useNavigate();
   const [ongletActif, setOngletActif] = useState('dashboard');
   const [sidebarOuverte, setSidebarOuverte] = useState(true);
@@ -7795,6 +7882,13 @@ function OrdresLivraison() {
               <div style={{ flex:1, overflow:'hidden' }}>
                 <div style={{ fontSize:12, fontWeight:600, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{user?.prenom} {user?.nom}</div>
                 <div style={{ fontSize:10, color:'#6b7280' }}>{user?.role}</div>
+                {(user?.postes||[]).length > 1 && (
+                  <select value={user.role} title="Poste actif"
+                    onChange={e => changerPoste(e.target.value).then(() => window.location.assign('/')).catch(err => toast.error(err.response?.data?.error || 'Changement de poste impossible'))}
+                    style={{ marginTop:4, background:'#111827', color:'#e5e7eb', border:'1px solid #374151', borderRadius:6, fontSize:11, padding:'2px 4px', maxWidth:'100%' }}>
+                    {user.postes.map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                )}
               </div>
               <button onClick={handleLogout} title="Déconnexion" style={{ background:'none', border:'none', color:'#6b7280', cursor:'pointer', padding:4 }}>
                 <Icon d={ICONS.logout} size={16}/>
