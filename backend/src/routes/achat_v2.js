@@ -463,7 +463,9 @@ router.post('/demandes/:id/transformer', auth, async (req, res, next) => {
     }
     await client.query(`UPDATE demandes_achat SET statut='traite', commande_id=$1, traite_par=$2, traite_at=NOW() WHERE id=$3`, [cmd.id, req.user?.id || null, req.params.id]);
     await client.query('COMMIT');
-    res.status(201).json(cmd);
+    // on renvoie le bon tel qu'il est enregistre (avec son statut de validation)
+    const { rows: [cmdFinal] } = await db.query('SELECT * FROM commandes_achat WHERE id = $1', [cmd.id]);
+    res.status(201).json(cmdFinal);
   } catch (e) { await client.query('ROLLBACK'); err(res, e, 'Erreur transformation en bon de commande'); }
   finally { client.release(); }
 });
