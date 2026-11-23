@@ -3266,7 +3266,7 @@ function Articles() {
                 <InputField label="Largeur (mm)" value={form.largeur_mm} onChange={e => setForm({...form,largeur_mm:e.target.value})} type="number" placeholder="0"/>
                 <InputField label="Hauteur (mm)" value={form.hauteur_mm} onChange={e => setForm({...form,hauteur_mm:e.target.value})} type="number" placeholder="0"/>
                 <InputField label="Poids théorique (kg)" value={form.poids_theorique_kg} onChange={e => setForm({...form,poids_theorique_kg:e.target.value})} type="number" placeholder="0.000"/>
-                <InputField label="Poids réel (kg)" value={form.poids_reel_kg} onChange={e => setForm({...form,poids_reel_kg:e.target.value})} type="number" placeholder="0.000"/>
+                <InputField label="Poids moyen réel (kg)" value={form.poids_reel_kg} onChange={e => setForm({...form,poids_reel_kg:e.target.value})} type="number" placeholder="0.000"/>
                 <InputField label="Poids mandrin (kg)" value={form.poids_mandrin_kg} onChange={e => setForm({...form,poids_mandrin_kg:e.target.value})} type="number" placeholder="0.000"/>
                 <InputField label="Couleur" value={form.couleur} onChange={e => setForm({...form,couleur:e.target.value})} placeholder="Naturel, Blanc, Noir..."/>
                 <InputField label="Cadence théorique (kg/h)" value={form.cadence_theorique_kg_h} onChange={e => setForm({...form,cadence_theorique_kg_h:e.target.value})} type="number" placeholder="0"/>
@@ -5734,6 +5734,17 @@ export function EcransParPoste({ onClose }) {
   );
 }
 
+// Champ de la fiche utilisateur : defini hors de l'ecran, pour ne pas perdre le curseur a chaque lettre
+function CampoFormulaire({label,k,type='text',ph='',required=false,form,setForm}) {
+  return (
+    <div>
+      <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>{label}{required&&<span style={{color:'#dc2626'}}> *</span>}</label>
+      <input type={type} value={form[k]||''} onChange={e=>setForm({...form,[k]:e.target.value})} placeholder={ph}
+        style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13,boxSizing:'border-box'}}/>
+    </div>
+  );
+}
+
 function Utilisateurs() {
   const [users, setUsers] = useState([]);
   const [employes, setEmployes] = useState([]);
@@ -5903,13 +5914,6 @@ function Utilisateurs() {
     (!search || `${u.nom} ${u.prenom} ${u.login}`.toLowerCase().includes(search.toLowerCase()))
   );
 
-  const F = ({label,k,type='text',ph='',required=false}) => (
-    <div>
-      <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>{label}{required&&<span style={{color:'#dc2626'}}> *</span>}</label>
-      <input type={type} value={form[k]||''} onChange={e=>setForm({...form,[k]:e.target.value})} placeholder={ph}
-        style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13,boxSizing:'border-box'}}/>
-    </div>
-  );
 
   return (
     <div>
@@ -6166,11 +6170,11 @@ function Utilisateurs() {
             )}
 
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:12,marginBottom:16}}>
-              <F label="Nom *" k="nom" ph="NOM" required/>
-              <F label="Prénom *" k="prenom" ph="Prénom" required/>
-              <F label="Login *" k="login" ph="ali.kone" required/>
-              {!form.id && <F label="Mot de passe *" k="password" type="password" ph="Min. 6 caractères" required/>}
-              <F label="Email" k="email" type="email" ph="ali.kone@nai.ci"/>
+              <CampoFormulaire form={form} setForm={setForm} label="Nom *" k="nom" ph="NOM" required/>
+              <CampoFormulaire form={form} setForm={setForm} label="Prénom *" k="prenom" ph="Prénom" required/>
+              <CampoFormulaire form={form} setForm={setForm} label="Login *" k="login" ph="ali.kone" required/>
+              {!form.id && <CampoFormulaire form={form} setForm={setForm} label="Mot de passe *" k="password" type="password" ph="Min. 6 caractères" required/>}
+              <CampoFormulaire form={form} setForm={setForm} label="Email" k="email" type="email" ph="ali.kone@nai.ci"/>
               <div>
                 <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>Rôle *</label>
                 <select value={form.role||'operateur'} onChange={e=>setForm({...form,role:e.target.value})}

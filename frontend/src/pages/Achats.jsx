@@ -121,6 +121,15 @@ function useListes() {
 function NouvelleCommande({ fournisseurs, articles, onClose, onCree }) {
   const [form, setForm] = useState({ fournisseur_id: '', date_commande: aujourdhui(), date_livraison_prevue: '', reference_fournisseur: '', notes: '', taux_tva: '19' });
   const [lignes, setLignes] = useState([{ article_id: '', designation: '', quantite_commandee: '1', prix_unitaire_ht: '' }]);
+  const [motifType, setMotifType] = useState('of');
+  const [ofId, setOfId] = useState('');
+  const [libelleId, setLibelleId] = useState('');
+  const [ofsCmd, setOfsCmd] = useState([]);
+  const [libellesCmd, setLibellesCmd] = useState([]);
+  useEffect(() => {
+    axios.get(`${API}/achat/ofs-ouverts`).then(r => setOfsCmd(Array.isArray(r.data) ? r.data : [])).catch(() => {});
+    axios.get(`${API}/achat/libelles-frais`).then(r => setLibellesCmd(Array.isArray(r.data) ? r.data : [])).catch(() => {});
+  }, []);
   const [envoi, setEnvoi] = useState(false);
   const majLigne = (i, patch) => setLignes(ls => ls.map((l, k) => (k === i ? { ...l, ...patch } : l)));
   const ht = lignes.reduce((s, l) => s + nb(l.quantite_commandee) * nb(l.prix_unitaire_ht), 0);
@@ -128,11 +137,13 @@ function NouvelleCommande({ fournisseurs, articles, onClose, onCree }) {
 
   const creer = async () => {
     if (!form.fournisseur_id) return toast.error('Choisissez un fournisseur');
+    if (motifType === 'of' && !ofId) return toast.error('Choisissez un OF, ou passez en frais généraux');
+    if (motifType === 'libelle' && !libelleId) return toast.error('Choisissez un libellé de frais');
     const ok = lignes.filter(l => nb(l.quantite_commandee) > 0 && (l.article_id || l.designation.trim()));
     if (!ok.length) return toast.error('Ajoutez au moins un article avec une quantité');
     setEnvoi(true);
     try {
-      await axios.post(`${API}/achat/commandes`, { ...form, lignes: ok.map(l => ({ ...l, taux_tva: form.taux_tva })) });
+      await axios.post(`${API}/achat/commandes`, { ...form, ...(motifType === 'of' ? { of_id: ofId } : { libelle_frais_id: libelleId }), lignes: ok.map(l => ({ ...l, taux_tva: form.taux_tva })) });
       toast.success('Bon de commande créé : en attente de validation de la direction');
       onCree();
     } catch (e) { toast.error(msg(e)); }
@@ -148,6 +159,24 @@ function NouvelleCommande({ fournisseurs, articles, onClose, onCree }) {
             {fournisseurs.map(f => <option key={f.id} value={f.id}>{f.raison_sociale}</option>)}
           </select>
         </Champ>
+        <div style={{ gridColumn: '1 / -1', border: '1px solid #e5e7eb', borderRadius: 10, padding: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Pour quoi achetez-vous ? (obligatoire)</div>
+          <div style={{ display: 'flex', gap: 16, marginBottom: 6, fontSize: 13 }}>
+            <label><input type="radio" checked={motifType === 'of'} onChange={() => setMotifType('of')} /> Une production (OF)</label>
+            <label><input type="radio" checked={motifType === 'libelle'} onChange={() => setMotifType('libelle')} /> Frais généraux</label>
+          </div>
+          {motifType === 'of' ? (
+            <select value={ofId} onChange={e => setOfId(e.target.value)} style={inputStyle}>
+              <option value="">-- Choisir un OF --</option>
+              {ofsCmd.map(o => <option key={o.id} value={o.id}>{o.numero_of} — {o.article_designation || o.article_code || ''}</option>)}
+            </select>
+          ) : (
+            <select value={libelleId} onChange={e => setLibelleId(e.target.value)} style={inputStyle}>
+              <option value="">-- Choisir un libellé --</option>
+              {libellesCmd.map(l => <option key={l.id} value={l.id}>{l.libelle}</option>)}
+            </select>
+          )}
+        </div>
         <Champ label="Date commande"><input type="date" value={form.date_commande} onChange={e => setForm({ ...form, date_commande: e.target.value })} style={inputStyle} /></Champ>
         <Champ label="Livraison prévue"><input type="date" value={form.date_livraison_prevue} onChange={e => setForm({ ...form, date_livraison_prevue: e.target.value })} style={inputStyle} /></Champ>
         <Champ label="TVA %"><input type="number" value={form.taux_tva} onChange={e => setForm({ ...form, taux_tva: e.target.value })} style={inputStyle} /></Champ>
