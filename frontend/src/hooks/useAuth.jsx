@@ -5,6 +5,26 @@ import axios from 'axios';
 const _initialToken = localStorage.getItem('naido_token');
 if (_initialToken) axios.defaults.headers.common['Authorization'] = `Bearer ${_initialToken}`;
 
+// Session expiree (jeton refuse par le serveur) : retour a la connexion avec un message, sans erreur de chargement
+export function estSessionExpiree(error) {
+  const status = error?.response?.status;
+  const url = String(error?.config?.url || '');
+  return status === 401 && !url.includes('/auth/login') && !!localStorage.getItem('naido_token');
+}
+axios.interceptors.response.use(
+  (r) => r,
+  (error) => {
+    if (estSessionExpiree(error)) {
+      localStorage.removeItem('naido_token');
+      localStorage.removeItem('naido_user');
+      delete axios.defaults.headers.common['Authorization'];
+      window.alert('Votre session a expiré. Reconnectez-vous.');
+      if (!window.location.pathname.startsWith('/login')) window.location.assign('/login');
+    }
+    return Promise.reject(error);
+  }
+);
+
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {

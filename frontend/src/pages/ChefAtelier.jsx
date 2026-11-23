@@ -132,7 +132,6 @@ const MENU = [
   { id:'vente',       label:'Ventes',              icon:'stock',       color:'#15803d' },
   { id:'fournisseurs',label:'Fournisseurs',         icon:'articles',    color:'#6d28d9' },
   { id:'achat',       label:'Commandes Achat',     icon:'stock',       color:'#9333ea' },
-  { id:'demandes_achat', label:"Demandes d'achat", icon:'stock',     color:'#d97706' },
   { id:'separator3',  label:'QHSE & MAINTENANCE',  separator:true },
   { id:'ronde',       label:'Ronde Chef de Quart',  icon:'qhse',        color:'#d97706' },
   { id:'nc',          label:'Non-Conformités',       icon:'qhse',        color:'#dc2626' },
