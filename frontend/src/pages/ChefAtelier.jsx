@@ -1520,8 +1520,10 @@ function DemandesFabrication() {
 // COMPOSANT DETAIL OF (avec composition lots)
 // ══════════════════════════════════════════════════════════════
 export function CoutRevientOF({ ofId }) {
+  const { user } = useAuth();
   const [c, setC] = useState(null);
-  useEffect(() => { if (ofId) axios.get(`${API}/couts-of/of/${ofId}`).then(r => setC(r.data)).catch(() => setC(false)); }, [ofId]);
+  if (!['directeur', 'super_admin'].includes(String(user?.role || ''))) return null; // le cout de revient est reserve a la direction
+  useEffect(() => { if (ofId && ['directeur', 'super_admin'].includes(String(user?.role || ''))) axios.get(`${API}/couts-of/of/${ofId}`).then(r => setC(r.data)).catch(() => setC(false)); }, [ofId, user?.role]);
   if (!c) return null;
   const f = n => `${Number(n || 0).toLocaleString('fr-FR')} FCFA`;
   const ligne = (label, montant, detail) => (
