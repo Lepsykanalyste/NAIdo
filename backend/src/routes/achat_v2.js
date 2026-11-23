@@ -561,4 +561,14 @@ router.delete('/libelles-frais/:id', auth, async (req, res) => {
   } catch (e) { err(res, e, 'Erreur suppression libelle'); }
 });
 
+// Lot 3 : ordres de fabrication ouverts, pour rattacher une demande d'achat (lecture seule, tout utilisateur de l'achat)
+router.get('/ofs-ouverts', auth, async (req, res) => {
+  try {
+    const { rows } = await db.query(`SELECT o.id, o.numero_of, a.code AS article_code, a.designation AS article_designation
+      FROM ordres_fabrication o LEFT JOIN articles a ON a.id = o.article_id
+      WHERE o.statut NOT IN ('termine','annule') ORDER BY o.numero_of DESC LIMIT 500`);
+    res.json(rows);
+  } catch (e) { err(res, e, 'Erreur liste OF'); }
+});
+
 module.exports = router;

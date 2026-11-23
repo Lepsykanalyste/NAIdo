@@ -339,18 +339,53 @@ function NouvelleDemande({ articles, onClose, onCree }) {
   const [lignes, setLignes] = useState([{ article_id: '', designation: '', quantite_demandee: '1' }]);
   const [notes, setNotes] = useState('');
   const [envoi, setEnvoi] = useState(false);
+  const [motifType, setMotifType] = useState('of');
+  const [ofId, setOfId] = useState('');
+  const [libelleId, setLibelleId] = useState('');
+  const [ofs, setOfs] = useState([]);
+  const [libelles, setLibelles] = useState([]);
+  const [filtreOf, setFiltreOf] = useState('');
+  useEffect(() => {
+    axios.get(`${API}/achat/ofs-ouverts`).then(r => setOfs(Array.isArray(r.data) ? r.data : [])).catch(() => {});
+    axios.get(`${API}/achat/libelles-frais`).then(r => setLibelles(Array.isArray(r.data) ? r.data : [])).catch(() => {});
+  }, []);
   const maj = (i, patch) => setLignes(ls => ls.map((l, k) => (k === i ? { ...l, ...patch } : l)));
   const envoyer = async () => {
     const ok = lignes.filter(l => nb(l.quantite_demandee) > 0 && (l.article_id || l.designation.trim()));
     if (!ok.length) return toast.error('Ajoutez au moins un article avec une quantité');
     setEnvoi(true);
-    try { await axios.post(`${API}/achat/demandes`, { notes, lignes: ok }); toast.success("Demande d'achat envoyée au service achat"); onCree(); }
+    if (motifType === 'of' && !ofId) { setEnvoi(false); return toast.error('Choisissez un OF, ou passez en frais généraux'); }
+    if (motifType === 'libelle' && !libelleId) { setEnvoi(false); return toast.error('Choisissez un libellé de frais'); }
+    try { await axios.post(`${API}/achat/demandes`, { notes, lignes: ok, ...(motifType === 'of' ? { of_id: ofId } : { libelle_frais_id: libelleId }) }); toast.success("Demande d'achat envoyée au service achat"); onCree(); }
     catch (e) { toast.error(msg(e)); }
     setEnvoi(false);
   };
   return (
     <Modal titre="📝 Nouvelle demande d'achat" onClose={onClose} largeur={760}>
       <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>Indiquez ce dont vous avez besoin. Le service achat choisira le fournisseur et le prix.</div>
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 12, marginBottom: 14 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>À quoi sert cette demande ? (obligatoire)</div>
+        <div style={{ display: 'flex', gap: 16, marginBottom: 8, fontSize: 13 }}>
+          <label><input type="radio" checked={motifType === 'of'} onChange={() => setMotifType('of')} /> Une production (OF)</label>
+          <label><input type="radio" checked={motifType === 'libelle'} onChange={() => setMotifType('libelle')} /> Frais généraux</label>
+        </div>
+        {motifType === 'of' ? (
+          <>
+            <input placeholder="Rechercher un OF (numéro ou article)..." value={filtreOf} onChange={e => setFiltreOf(e.target.value)} style={{ ...inputStyle, marginBottom: 6 }} />
+            <select value={ofId} onChange={e => setOfId(e.target.value)} style={inputStyle}>
+              <option value="">-- Choisir un OF --</option>
+              {ofs.filter(o => !filtreOf || `${o.numero_of} ${o.article_code || ''} ${o.article_designation || ''}`.toLowerCase().includes(filtreOf.toLowerCase())).map(o => (
+                <option key={o.id} value={o.id}>{o.numero_of} — {o.article_designation || o.article_code || ''}</option>
+              ))}
+            </select>
+          </>
+        ) : (
+          <select value={libelleId} onChange={e => setLibelleId(e.target.value)} style={inputStyle}>
+            <option value="">-- Choisir un libellé --</option>
+            {libelles.map(l => <option key={l.id} value={l.id}>{l.libelle}</option>)}
+          </select>
+        )}
+      </div>
       {lignes.map((l, i) => (
         <div key={i} style={{ display: 'grid', gridTemplateColumns: '3fr 1fr auto', gap: 8, marginBottom: 8, alignItems: 'end' }}>
           <Champ label={i === 0 ? 'Article du catalogue (ou saisissez un libellé libre)' : ''}>
@@ -521,6 +556,47 @@ export function DemandesAchatAtelier() {
 // ══════════════════════════════════════════════════════════════
 // COMMANDES D'ACHAT (page principale)
 // ══════════════════════════════════════════════════════════════
+function GestionLibelles({ onClose }) {
+  const [liste, setListe] = useState([]);
+  const [nouveau, setNouveau] = useState('');
+  const charger = () => axios.get(`${API}/achat/libelles-frais?tous=1`).then(r => setListe(Array.isArray(r.data) ? r.data : [])).catch(e => toast.error(msg(e)));
+  useEffect(() => { charger(); }, []);
+  const creer = async () => {
+    if (!nouveau.trim()) return toast.error('Saisissez le libellé');
+    try { await axios.post(`${API}/achat/libelles-frais`, { libelle: nouveau }); setNouveau(''); charger(); } catch (e) { toast.error(msg(e)); }
+  };
+  const renommer = async l => {
+    const v = window.prompt('Nouveau libellé', l.libelle);
+    if (!v || v === l.libelle) return;
+    try { await axios.put(`${API}/achat/libelles-frais/${l.id}`, { libelle: v }); charger(); } catch (e) { toast.error(msg(e)); }
+  };
+  const basculer = async l => {
+    try { await axios.put(`${API}/achat/libelles-frais/${l.id}`, { actif: !l.actif }); charger(); } catch (e) { toast.error(msg(e)); }
+  };
+  const supprimer = async l => {
+    if (!window.confirm(`Supprimer « ${l.libelle} » ?`)) return;
+    try { const { data } = await axios.delete(`${API}/achat/libelles-frais/${l.id}`); toast.success(data.desactive ? 'Déjà utilisé : libellé désactivé' : 'Libellé supprimé'); charger(); } catch (e) { toast.error(msg(e)); }
+  };
+  return (
+    <Modal titre="⚙ Libellés de frais" onClose={onClose} largeur={600}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+        <input value={nouveau} onChange={e => setNouveau(e.target.value)} placeholder="Nouveau libellé" style={{ ...inputStyle, flex: 1 }} />
+        <Btn plein onClick={creer}>+ Créer</Btn>
+      </div>
+      {liste.map(l => (
+        <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #f3f4f6', gap: 8 }}>
+          <span style={{ fontSize: 13, color: l.actif ? '#111827' : '#9ca3af', textDecoration: l.actif ? 'none' : 'line-through' }}>{l.libelle}{!l.actif && ' (désactivé)'}</span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <Btn onClick={() => renommer(l)}>Renommer</Btn>
+            <Btn bg="#f3f4f6" color="#374151" onClick={() => basculer(l)}>{l.actif ? 'Désactiver' : 'Réactiver'}</Btn>
+            <Btn bg="#fee2e2" color="#dc2626" onClick={() => supprimer(l)}>Supprimer</Btn>
+          </div>
+        </div>
+      ))}
+    </Modal>
+  );
+}
+
 export default function AchatsV2() {
   const { user } = useAuth();
   const role = user?.role;
@@ -534,11 +610,21 @@ export default function AchatsV2() {
   const [recep, setRecep] = useState(null);
   const [histo, setHisto] = useState(null);
   const [rafraichir, setRafraichir] = useState(0);
+  const [libellesOuvert, setLibellesOuvert] = useState(false);
 
   const charger = () => axios.get(`${API}/achat/commandes${filtre ? `?statut=${filtre}` : ''}`).then(r => setCommandes(Array.isArray(r.data) ? r.data : [])).catch(() => {});
   useEffect(() => { charger(); }, [filtre, rafraichir]);
   const recharger = () => setRafraichir(n => n + 1);
 
+  const validerBon = async c => {
+    if (!window.confirm(`Valider le bon ${c.numero_commande} ?`)) return;
+    try { await axios.post(`${API}/achat/commandes/${c.id}/valider`); toast.success('Bon validé ✓'); recharger(); } catch (e) { toast.error(msg(e)); }
+  };
+  const refuserBon = async c => {
+    const motif = window.prompt(`Motif du refus du bon ${c.numero_commande} :`);
+    if (!motif || !motif.trim()) return toast.error('Le motif est obligatoire');
+    try { await axios.post(`${API}/achat/commandes/${c.id}/refuser`, { motif }); toast.success('Bon refusé'); recharger(); } catch (e) { toast.error(msg(e)); }
+  };
   const statut = async (c, s, question) => {
     if (question && !window.confirm(question)) return;
     try { await axios.put(`${API}/achat/commandes/${c.id}/statut`, { statut: s }); toast.success('Statut mis à jour'); recharger(); }
@@ -553,6 +639,12 @@ export default function AchatsV2() {
         ))}
       </div>
 
+      {direction && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+          <Btn bg="#f3f4f6" color="#374151" onClick={() => setLibellesOuvert(true)}>⚙ Libellés de frais</Btn>
+        </div>
+      )}
+      {libellesOuvert && <GestionLibelles onClose={() => setLibellesOuvert(false)} />}
       {onglet === 'demandes' && <PanneauDemandes peutTransformer={achat} onBonCree={recharger} />}
 
       {onglet === 'commandes' && (
@@ -581,6 +673,11 @@ export default function AchatsV2() {
                       <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
                         <Btn onClick={() => setDetail(c.id)}>👁 Voir</Btn>
                         <Btn bg="#f3f4f6" color="#374151" onClick={() => ouvrirPdfSecurise(`${API}/achat/commandes/${c.id}/pdf`)}>📄 PDF</Btn>
+                        {c.validation === 'en_attente_direction' && direction && <Btn bg="#dcfce7" color="#15803d" onClick={() => validerBon(c)}>✓ Valider</Btn>}
+                        {c.validation === 'en_attente_direction' && direction && <Btn bg="#fee2e2" color="#dc2626" onClick={() => refuserBon(c)}>✕ Refuser</Btn>}
+                        {c.validation === 'en_attente_direction' && !direction && <span style={{ fontSize: 10, color: '#9ca3af', fontStyle: 'italic', alignSelf: 'center' }}>En attente de la direction</span>}
+                        {c.validation === 'validee' && c.statut === 'brouillon' && achat && <Btn bg="#e0f2fe" color="#0369a1" onClick={() => statut(c, 'envoye')}>📤 Envoyer au fournisseur</Btn>}
+                        {c.validation === 'refusee' && <span title={c.motif_refus || ''} style={{ fontSize: 10, color: '#dc2626', alignSelf: 'center' }}>Refusé</span>}
                         {c.statut === 'envoye' && direction && <Btn bg="#dcfce7" color="#15803d" onClick={() => statut(c, 'confirme')}>✓ Confirmer</Btn>}
                         {c.statut === 'envoye' && !direction && <span style={{ fontSize: 10, color: '#9ca3af', fontStyle: 'italic', alignSelf: 'center' }}>Validation direction</span>}
                         {['confirme', 'receptionne_partiel'].includes(c.statut) && achat && <Btn bg="#e0f2fe" color="#0369a1" onClick={() => setRecep(c)}>📥 Réceptionner</Btn>}
