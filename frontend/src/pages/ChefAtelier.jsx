@@ -5894,14 +5894,20 @@ function Utilisateurs() {
                           <td style={{padding:8,border:'1px solid #e5e7eb',fontWeight:600,whiteSpace:'nowrap'}}>{p.libelle}</td>
                           {droits.domaines.map(d=>(
                             <td key={d.nom} style={{padding:4,border:'1px solid #e5e7eb',textAlign:'center'}}>
-                              <select value={(droitsSaisie[p.code]||{})[d.nom] || ''}
-                                onChange={e=>setDroitsSaisie({...droitsSaisie, [p.code]: {...(droitsSaisie[p.code]||{}), [d.nom]: e.target.value}})}
-                                style={{border:'1px solid #d1d5db',borderRadius:6,padding:'4px',fontSize:11,background:
-                                  ((droitsSaisie[p.code]||{})[d.nom]==='modifier')?'#dcfce7':((droitsSaisie[p.code]||{})[d.nom]==='voir')?'#dbeafe':'#fff'}}>
-                                <option value="">aucun</option>
-                                <option value="voir">voir</option>
-                                <option value="modifier">modifier</option>
-                              </select>
+                              {(() => {
+                                const val = (droitsSaisie[p.code]||{})[d.nom] || '';
+                                const maj = (v) => setDroitsSaisie({...droitsSaisie, [p.code]: {...(droitsSaisie[p.code]||{}), [d.nom]: v}});
+                                return (
+                                  <div style={{display:'flex',flexDirection:'column',gap:2,alignItems:'flex-start',fontSize:11}}>
+                                    <label style={{display:'flex',alignItems:'center',gap:4,cursor:'pointer'}}>
+                                      <input type="checkbox" checked={val !== ''} onChange={e => maj(e.target.checked ? 'voir' : '')}/> voir
+                                    </label>
+                                    <label style={{display:'flex',alignItems:'center',gap:4,cursor:'pointer'}}>
+                                      <input type="checkbox" checked={val === 'modifier'} onChange={e => maj(e.target.checked ? 'modifier' : (val ? 'voir' : ''))}/> modifier
+                                    </label>
+                                  </div>
+                                );
+                              })()}
                             </td>
                           ))}
                         </tr>
@@ -5996,11 +6002,6 @@ function Utilisateurs() {
                   style={{width:'100%',border:'1px solid #d1d5db',borderRadius:8,padding:'9px',fontSize:13}}>
                   {roles.map(r=><option key={r.code} value={r.code}>{r.label}</option>)}
                 </select>
-                {form.role && (
-                  <div style={{marginTop:6,fontSize:10,color:'#6b7280'}}>
-                    Accès : {(roles.find(r=>r.code===form.role)?.acces||[]).join(', ')}
-                  </div>
-                )}
                 {form.id && (
                   <div style={{marginTop:10}}>
                     <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>Postes de cette personne</label>
