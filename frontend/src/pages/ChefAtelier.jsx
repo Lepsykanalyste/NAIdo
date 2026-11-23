@@ -183,6 +183,18 @@ const MENU_PAR_ROLE = {
   comptable:         ['dashboard','separator2','stock','separator2b','vente','achat','alertes'],
 };
 
+// Menu de la personne : seuls les ecrans coches dans la matrice restent (les separateurs vides sont retires)
+function menuPourMoi(menu, ecrans) {
+  if (!ecrans || ecrans.tout) return menu;
+  const voir = new Set(ecrans.ecrans);
+  const filtre = menu.filter(i => i.id.startsWith('separator') || voir.has(i.id));
+  return filtre.filter((item, idx) => {
+    if (!item.id.startsWith('separator')) return true;
+    const suivant = filtre[idx + 1];
+    return !!suivant && !suivant.id.startsWith('separator');
+  });
+}
+
 function getMenuFiltre(role) {
   const autorise = MENU_PAR_ROLE[role];
   if (autorise === null) return MENU; // super_admin et directeur voient tout
@@ -7788,6 +7800,8 @@ export function TableauPoste() {
 
 export default function ChefAtelier() {
   const { user, logout, changerPoste } = useAuth();
+  const [ecransMoi, setEcransMoi] = useState(null);
+  useEffect(() => { axios.get(`${API}/droits/mon-menu`).then(r => setEcransMoi(r.data)).catch(() => setEcransMoi(null)); }, [user?.role]);
   const navigate = useNavigate();
   const [ongletActif, setOngletActif] = useState('dashboard');
   const [sidebarOuverte, setSidebarOuverte] = useState(true);
@@ -8202,7 +8216,7 @@ function OrdresLivraison() {
 
         {/* Menu */}
         <nav style={{ flex:1, overflowY:'auto', padding:'8px 0' }}>
-          {getMenuFiltre(user?.role).map(item => {
+          {menuPourMoi(getMenuFiltre(user?.role), ecransMoi).map(item => {
             if (item.separator) {
               return sidebarOuverte ? (
                 <div key={item.id} style={{ padding:'12px 14px 4px', fontSize:10, fontWeight:700, color:'#4b5563', letterSpacing:1, textTransform:'uppercase', whiteSpace:'nowrap' }}>
