@@ -7524,6 +7524,16 @@ export function DashboardDirection() {
   const [d, setD] = useState(null);
   const [erreur, setErreur] = useState(false);
   useEffect(() => { axios.get(`${API}/direction/tableau-de-bord`).then(r => setD(r.data)).catch(() => setErreur(true)); }, []);
+  const [exceptions, setExceptions] = useState([]);
+  const chargerExceptions = () => axios.get(`${API}/dbm/exceptions-fifo?statut=en_attente`).then(r => setExceptions(Array.isArray(r.data) ? r.data : [])).catch(() => {});
+  useEffect(() => { chargerExceptions(); }, []);
+  const decider = async (id, accord) => {
+    try {
+      if (accord) await axios.post(`${API}/dbm/exceptions-fifo/${id}/approuver`);
+      else { const motif = window.prompt('Motif du refus :'); if (!motif) return; await axios.post(`${API}/dbm/exceptions-fifo/${id}/refuser`, { motif }); }
+      chargerExceptions();
+    } catch (e) { window.alert(e.response?.data?.error || 'Erreur'); }
+  };
   if (erreur) return <div style={{ color:'#b91c1c', fontSize:13, marginBottom:16 }}>Tableau de bord de la direction indisponible.</div>;
   if (!d) return <div style={{ color:'#6b7280', fontSize:13, marginBottom:16 }}>Chargement du tableau de bord…</div>;
   const carte = (titre, valeur, couleur, sous) => (
@@ -7543,6 +7553,20 @@ export function DashboardDirection() {
         {carte('Non-conformités ouvertes', d.a_traiter.non_conformites_ouvertes, '#d97706')}
         {carte('Pannes non réglées', d.a_traiter.pannes_non_reglees, d.a_traiter.pannes_non_reglees ? '#dc2626' : '#15803d')}
       </div>
+      {exceptions.length > 0 && (
+        <div style={{ background:'#fff', borderRadius:12, border:'1px solid #fde68a', padding:12, marginBottom:14 }}>
+          <div style={{ fontSize:12, fontWeight:700, marginBottom:6 }}>Exceptions FIFO à approuver</div>
+          {exceptions.map(x => (
+            <div key={x.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:12, padding:'6px 0', borderBottom:'1px solid #f3f4f6', gap:8 }}>
+              <span>{x.article_code || ''} · sortir {x.lot_demande} ({Number(x.qte).toLocaleString('fr-FR')} kg) au lieu de {x.lot_plus_ancien} · « {x.motif} »</span>
+              <span style={{ display:'flex', gap:6 }}>
+                <button onClick={() => decider(x.id, true)} style={{ background:'#dcfce7', color:'#15803d', border:'none', borderRadius:6, padding:'4px 10px', cursor:'pointer' }}>Approuver</button>
+                <button onClick={() => decider(x.id, false)} style={{ background:'#fee2e2', color:'#dc2626', border:'none', borderRadius:6, padding:'4px 10px', cursor:'pointer' }}>Refuser</button>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
       {d.a_traiter.bons_liste.length > 0 && (
         <div style={{ background:'#fff', borderRadius:12, border:'1px solid #e5e7eb', padding:12, marginBottom:14 }}>
           <div style={{ fontSize:12, fontWeight:700, marginBottom:6 }}>Bons en attente de votre validation</div>

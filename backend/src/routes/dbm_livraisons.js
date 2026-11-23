@@ -24,12 +24,12 @@ const EPS  = 0.0005;
 const ok  = (res, data) => res.json(data);
 const err = (res, e, msg = '') => {
   console.error('[DBM-LIV]', msg, e?.message || e);
-  res.status(500).json({ error: e?.userMessage || msg || e?.message });
+  res.status(e?.http || 500).json({ error: e?.userMessage || msg || e?.message });
 };
 const num = v => { const n = parseFloat(v); return Number.isFinite(n) ? n : 0; };
 const fmt = (v, d = 1) => num(v).toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d });
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-const userError = msg => { const e = new Error(msg); e.userMessage = msg; return e; };
+const userError = (msg, http) => { const e = new Error(msg); e.userMessage = msg; if (http) e.http = http; return e; };
 const dateFr = d => d ? new Date(d).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : '—';
 
 // ── Style commun des PDF ──────────────────────────────────────
@@ -235,6 +235,15 @@ router.get('/:id', auth, async (req, res, next) => {
 // ══════════════════════════════════════════════════════════════
 // LIVRER — le magasin envoie (un bon par envoi, plusieurs lots possibles)
 // ══════════════════════════════════════════════════════════════
+// FIFO : les lots disponibles, du plus ancien au plus recent (date de reception, puis date limite)
+async function lotsFifo(client, articleId) {
+  const r = await client.query(`SELECT id, numero_lot, qte_disponible, date_reception, date_dluo FROM lots_stock
+    WHERE article_id = $1 AND statut = 'disponible' AND qte_disponible > 0
+    ORDER BY date_reception ASC NULLS LAST, date_dluo ASC NULLS LAST, id ASC FOR UPDATE`, [articleId]);
+  return r.rows;
+}
+const EST_DIRECTION_FIFO = (u) => ['directeur', 'super_admin'].includes(String(u?.role || ''));
+
 router.put('/:id/livrer', auth, async (req, res, next) => {
   if (!UUID.test(req.params.id)) return next();
   const client = await db.connect();
@@ -249,7 +258,7 @@ router.put('/:id/livrer', auth, async (req, res, next) => {
     const dbm = dbmRes.rows[0];
     if (['livre', 'annule'].includes(dbm.statut)) throw userError(`Cette DBM est deja ${dbm.statut}`);
 
-    const items = livraisons.map(l => ({ ligne_id: l.ligne_id, lot: String(l.numero_lot || '').trim(), qte: num(l.qte_livree) }))
+    const items = livraisons.map(l => ({ ligne_id: l.ligne_id, lot: String(l.numero_lot || '').trim(), qte: num(l.qte_livree), exception_id: l.exception_id || null }))
                             .filter(l => l.qte > 0 && l.ligne_id);
     if (!items.length) throw userError('Aucune quantite a livrer');
 
@@ -268,13 +277,45 @@ router.put('/:id/livrer', auth, async (req, res, next) => {
       lignes[ligneId] = l;
     }
 
+    // FIFO : on construit le plan de sortie lot par lot
+    const plan = [];
+    for (const it of items) {
+      const l = lignes[it.ligne_id];
+      const lots = await lotsFifo(client, l.article_id);
+      const total = lots.reduce((t, x) => t + num(x.qte_disponible), 0);
+      if (it.qte > total + EPS) throw userError(`${l.code} : stock insuffisant (disponible ${fmt(total, 3)} kg, demande ${fmt(it.qte, 3)} kg)`, 400);
+      if (!it.lot) {
+        let reste = it.qte;
+        for (const lot of lots) {
+          if (reste <= EPS) break;
+          const prise = Math.min(reste, num(lot.qte_disponible));
+          plan.push({ ligne_id: it.ligne_id, article_id: l.article_id, lot: lot.numero_lot, qte: prise, exception: null });
+          reste -= prise;
+        }
+        continue;
+      }
+      const lotDemande = lots.find(x => x.numero_lot === it.lot);
+      if (!lotDemande) throw userError(`${l.code} : le lot ${it.lot} n'a pas de stock disponible`);
+      let exceptionId = null;
+      if (lots[0].numero_lot !== it.lot) {
+        if (!it.exception_id) throw userError(`${l.code} : FIFO — le lot le plus ancien est ${lots[0].numero_lot}. Pour sortir ${it.lot}, demandez une exception approuvee par la direction.`, 400);
+        const ex = (await client.query(`SELECT * FROM exceptions_fifo WHERE id = $1 AND statut = 'approuvee' AND utilisee = false FOR UPDATE`, [it.exception_id])).rows[0];
+        if (!ex || ex.article_id !== l.article_id || ex.lot_demande !== it.lot || num(ex.qte) + EPS < it.qte)
+          throw userError(`${l.code} : exception FIFO invalide (non approuvee, deja utilisee, ou ne correspondant pas a ce lot et cette quantite)`, 400);
+        exceptionId = ex.id;
+      }
+      if (num(lotDemande.qte_disponible) + EPS < it.qte) throw userError(`${l.code} : le lot ${it.lot} ne couvre pas ${fmt(it.qte, 3)} kg`, 400);
+      plan.push({ ligne_id: it.ligne_id, article_id: l.article_id, lot: it.lot, qte: it.qte, exception: exceptionId });
+    }
+
     // Numero du bon : DBM-...-L001, L002, ... (compteur par DBM)
     await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [dbm.id]);
     const cnt = await client.query('SELECT COUNT(DISTINCT numero_livraison)::int AS n FROM dbm_livraisons WHERE dbm_id = $1', [dbm.id]);
     const numeroLivraison = `${dbm.numero_dbm}-L${String(cnt.rows[0].n + 1).padStart(3, '0')}`;
 
-    for (const it of items) {
+    for (const it of plan) {
       const l = lignes[it.ligne_id];
+      if (it.exception) await client.query(`UPDATE exceptions_fifo SET utilisee = true WHERE id = $1`, [it.exception]);
       await client.query(`
         INSERT INTO dbm_livraisons (dbm_id, ligne_id, article_id, numero_lot, qte_livree, livre_par, numero_livraison, receptionne)
         VALUES ($1,$2,$3,$4,$5,$6,$7,false)`,
@@ -389,6 +430,55 @@ router.put('/:id/receptionner', auth, async (req, res, next) => {
     ok(res, { message: statut === 'livre' ? 'Reception validee - DBM complete' : 'Reception validee', statut });
   } catch (e) { await client.query('ROLLBACK'); err(res, e, 'Erreur reception DBM'); }
   finally { client.release(); }
+});
+
+
+// ---------- Lot 5 : exceptions FIFO ----------
+router.post('/exceptions-fifo', auth, async (req, res) => {
+  try {
+    const { article_id, lot_demande, qte, motif } = req.body || {};
+    if (!article_id || !lot_demande || !(num(qte) > 0)) return res.status(400).json({ error: 'Article, lot et quantité sont obligatoires' });
+    if (!String(motif || '').trim()) return res.status(400).json({ error: 'Le motif de l\'exception est obligatoire' });
+    const lots = await db.query(`SELECT numero_lot FROM lots_stock WHERE article_id = $1 AND statut = 'disponible' AND qte_disponible > 0
+      ORDER BY date_reception ASC NULLS LAST, date_dluo ASC NULLS LAST, id ASC`, [article_id]);
+    if (!lots.rows.length) return res.status(400).json({ error: 'Aucun stock disponible pour cet article' });
+    if (lots.rows[0].numero_lot === lot_demande) return res.status(400).json({ error: 'Ce lot est déjà le plus ancien : aucune exception nécessaire' });
+    const { rows } = await db.query(`INSERT INTO exceptions_fifo (article_id, lot_plus_ancien, lot_demande, qte, motif, demande_par)
+      VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`, [article_id, lots.rows[0].numero_lot, lot_demande, num(qte), String(motif).trim(), req.user?.id || null]);
+    res.status(201).json(rows[0]);
+  } catch (e) { err(res, e, 'Erreur demande exception FIFO'); }
+});
+
+router.get('/exceptions-fifo', auth, async (req, res) => {
+  try {
+    const statut = req.query.statut || null;
+    const { rows } = await db.query(`SELECT e.*, a.code AS article_code, a.designation AS article_designation
+      FROM exceptions_fifo e LEFT JOIN articles a ON a.id = e.article_id
+      WHERE ($1::text IS NULL OR e.statut = $1) ORDER BY e.demande_at DESC LIMIT 200`, [statut]);
+    res.json(rows);
+  } catch (e) { err(res, e, 'Erreur liste exceptions FIFO'); }
+});
+
+router.post('/exceptions-fifo/:id/approuver', auth, async (req, res) => {
+  if (!EST_DIRECTION_FIFO(req.user)) return res.status(403).json({ error: 'Seule la direction approuve une exception FIFO' });
+  try {
+    const { rows } = await db.query(`UPDATE exceptions_fifo SET statut='approuvee', approuve_par=$2, approuve_at=NOW()
+      WHERE id=$1 AND statut='en_attente' RETURNING *`, [req.params.id, req.user?.id || null]);
+    if (!rows.length) return res.status(400).json({ error: 'Cette exception n\'est pas en attente' });
+    res.json(rows[0]);
+  } catch (e) { err(res, e, 'Erreur approbation exception FIFO'); }
+});
+
+router.post('/exceptions-fifo/:id/refuser', auth, async (req, res) => {
+  if (!EST_DIRECTION_FIFO(req.user)) return res.status(403).json({ error: 'Seule la direction refuse une exception FIFO' });
+  const motif = String(req.body?.motif || '').trim();
+  if (!motif) return res.status(400).json({ error: 'Le motif du refus est obligatoire' });
+  try {
+    const { rows } = await db.query(`UPDATE exceptions_fifo SET statut='refusee', motif_refus=$2, approuve_par=$3, approuve_at=NOW()
+      WHERE id=$1 AND statut='en_attente' RETURNING *`, [req.params.id, motif, req.user?.id || null]);
+    if (!rows.length) return res.status(400).json({ error: 'Cette exception n\'est pas en attente' });
+    res.json(rows[0]);
+  } catch (e) { err(res, e, 'Erreur refus exception FIFO'); }
 });
 
 module.exports = router;
