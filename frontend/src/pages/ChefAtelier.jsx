@@ -8310,7 +8310,14 @@ export default function ChefAtelier() {
   useEffect(() => { axios.get(`${API}/droits/mon-menu`).then(r => setEcransMoi(r.data)).catch(() => setEcransMoi(null)); }, [user?.role]);
   const navigate = useNavigate();
   const [ongletActif, setOngletActif] = useState('dashboard');
-  const [sidebarOuverte, setSidebarOuverte] = useState(true);
+  // Mobile (moins de 768 px) : barre latérale fermée par défaut, en panneau par-dessus le contenu
+  const [mobile, setMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth < 768);
+  const [sidebarOuverte, setSidebarOuverte] = useState(() => !(typeof window !== 'undefined' && window.innerWidth < 768));
+  useEffect(() => {
+    const f = () => setMobile(window.innerWidth < 768);
+    window.addEventListener('resize', f);
+    return () => window.removeEventListener('resize', f);
+  }, []);
   const [nbAlertes, setNbAlertes] = useState(0);
   const [notifs, setNotifs] = useState({ total: 0, items: [] });
   const [monEmailOuvert, setMonEmailOuvert] = useState(false);
@@ -8711,8 +8718,10 @@ function OrdresLivraison() {
     <div style={{ display:'flex', height:'100vh', fontFamily:'system-ui,sans-serif', background:'#f8fafc' }}>
 
       {/* ── SIDEBAR ── */}
+      {mobile && sidebarOuverte && <div onClick={() => setSidebarOuverte(false)} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.4)', zIndex:999 }} />}
       <aside style={{
-        width: sidebarOuverte ? 240 : 60, flexShrink:0,
+        width: mobile ? (sidebarOuverte ? 260 : 0) : (sidebarOuverte ? 240 : 60), flexShrink:0,
+        ...(mobile ? { position:'fixed', top:0, left:0, bottom:0, zIndex:1000 } : {}),
         background:'#111827', color:'#fff',
         display:'flex', flexDirection:'column',
         transition:'width .2s ease', overflow:'hidden'
@@ -8744,7 +8753,7 @@ function OrdresLivraison() {
             }
             const actif = ongletActif === item.id;
             return (
-              <button key={item.id} onClick={() => setOngletActif(item.id)}
+              <button key={item.id} onClick={() => { setOngletActif(item.id); if (mobile) setSidebarOuverte(false); }}
                 title={!sidebarOuverte ? item.label : ''}
                 style={{
                   width:'100%', display:'flex', alignItems:'center', gap:10,
@@ -8799,14 +8808,15 @@ function OrdresLivraison() {
       {/* ── CONTENU PRINCIPAL ── */}
       <div style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden' }}>
         {/* Header */}
-        <header style={{ background:'#fff', borderBottom:'1px solid #e5e7eb', padding:'0 24px', height:56, display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
-          <div>
-            <span style={{ fontWeight:700, fontSize:16, color:'#111827' }}>
+        <header style={{ background:'#fff', borderBottom:'1px solid #e5e7eb', padding: mobile ? '0 12px' : '0 24px', height:56, display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0, gap:8 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:8, minWidth:0 }}>
+            {mobile && <button onClick={() => setSidebarOuverte(true)} aria-label="Ouvrir le menu" style={{ background:'none', border:'none', fontSize:22, cursor:'pointer', padding:'0 4px', color:'#111827', lineHeight:1 }}>☰</button>}
+            <span style={{ fontWeight:700, fontSize:16, color:'#111827', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
               {menuItem && !menuItem.separator ? menuItem.label : ''}
             </span>
           </div>
           <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-            <span style={{ fontSize:12, color:'#9ca3af' }}>
+            <span style={{ fontSize:12, color:'#9ca3af', display: mobile ? 'none' : 'inline' }}>
               {new Date().toLocaleDateString('fr-FR', { weekday:'long', year:'numeric', month:'long', day:'numeric' })}
             </span>
             {nbAlertes > 0 && (
@@ -8819,7 +8829,7 @@ function OrdresLivraison() {
         </header>
 
         {/* Zone de contenu */}
-        <main style={{ flex:1, overflow:'auto', padding:24 }}>
+        <main style={{ flex:1, overflow:'auto', padding: mobile ? 12 : 24, minWidth:0 }}>
           {getSection(ongletActif) || <Dashboard />}
         </main>
 
