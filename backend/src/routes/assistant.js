@@ -74,6 +74,12 @@ const SUJETS = [
   { id: 'ventes_resume', nom: 'Ventes', motif: '/api/vente', rx: /\bca\b|chiffre|revenu|vente|\bventes?\b/, periode: true,
     sql: "SELECT COUNT(*)::int AS n, COALESCE(SUM(montant_ttc),0)::float AS m FROM ventes WHERE date_vente::date BETWEEN $1 AND $2 AND statut <> 'annule'",
     texte: (r, p) => `Chiffre d'affaires TTC ${p.libelle} : ${fcfa(r.m)} FCFA, sur ${r.n} vente(s).` },
+  { id: 'meilleur_client', nom: 'Meilleur client', motif: '/api/vente', rx: /meilleur client|top client|client.*(ca|chiffre)|meilleurs clients|plus gros client/, periode: true,
+    sql: `SELECT COALESCE(c.raison_sociale, 'Client non renseigné') AS nom, COALESCE(SUM(v.montant_ttc),0)::float AS m
+      FROM ventes v LEFT JOIN clients_complet c ON c.id = v.client_id
+      WHERE v.date_vente::date BETWEEN $1 AND $2 AND v.statut <> 'annule'
+      GROUP BY 1 ORDER BY 2 DESC LIMIT 1`,
+    texte: (r, p) => (r.nom ? `Meilleur client ${p.libelle} : ${r.nom}, ${fcfa(r.m)} FCFA TTC.` : `Aucune vente sur la période ${p.libelle}.`) },
   { id: 'ventes_encaisser', nom: 'Ventes - à encaisser', motif: '/api/vente', rx: /encaiss|impaye|solde|a payer|creance/,
     sql: "SELECT COUNT(*)::int AS n FROM ventes WHERE statut <> 'annule' AND COALESCE(solde_restant, 0) > 0",
     texte: (r) => `${r.n} vente(s) avec un solde à encaisser.` },
@@ -137,7 +143,7 @@ async function kpisPour(role, p) {
     const periodes = { month: 'ce mois', last_month: 'mois dernier', days30: '30 derniers jours', year: 'cette annee' };
     const periode = periodeDe(norm(periodes[p] || 'ce mois'));
     const out = { periode: periode.libelle, ca: null, ventes: null, achats: null, commandes: null, graph: null,
-      produits: null, paiements: null, statuts: null, encaisse: null, points: null };
+      produits: null, paiements: null, statuts: null, encaisse: null, clients: null, points: null };
     if (accesA(role, '/api/vente')) {
       const { rows } = await db.query("SELECT COUNT(*)::int AS n, COALESCE(SUM(montant_ttc),0)::float AS m FROM ventes WHERE date_vente::date BETWEEN $1 AND $2 AND statut <> 'annule'", [periode.debut, periode.fin]);
       out.ca = Math.round(rows[0].m); out.ventes = rows[0].n;
@@ -148,6 +154,12 @@ async function kpisPour(role, p) {
         WHERE v.date_vente::date BETWEEN $1 AND $2 AND v.statut <> 'annule'
         GROUP BY l.designation ORDER BY 2 DESC LIMIT 5`, [periode.debut, periode.fin]);
       out.produits = top.rows.map((r) => ({ nom: r.nom, valeur: Math.round(r.v) }));
+      // Meilleurs clients (chiffre d'affaires TTC par client)
+      const cli = await db.query(`SELECT COALESCE(c.raison_sociale, 'Client non renseigné') AS nom, COALESCE(SUM(v.montant_ttc),0)::float AS v
+        FROM ventes v LEFT JOIN clients_complet c ON c.id = v.client_id
+        WHERE v.date_vente::date BETWEEN $1 AND $2 AND v.statut <> 'annule'
+        GROUP BY 1 ORDER BY 2 DESC LIMIT 5`, [periode.debut, periode.fin]);
+      out.clients = cli.rows.map((r) => ({ nom: r.nom, valeur: Math.round(r.v) }));
       // Modes de paiement
       const pay = await db.query(`SELECT COALESCE(mode_paiement, 'non renseigné') AS nom, COALESCE(SUM(montant_ttc),0)::float AS v
         FROM ventes WHERE date_vente::date BETWEEN $1 AND $2 AND statut <> 'annule'
@@ -171,6 +183,7 @@ async function kpisPour(role, p) {
         out.ca ? `Montant encaissé : ${fcfa(out.encaisse)} FCFA, soit ${Math.round((out.encaisse / out.ca) * 100)} % du chiffre d'affaires.` : null,
         meilleur ? `Meilleur jour : ${meilleur}.` : null,
         out.produits && out.produits.length ? `Produit en tête : ${out.produits[0].nom}.` : null,
+        out.clients && out.clients.length ? `Meilleur client : ${out.clients[0].nom} (${fcfa(out.clients[0].valeur)} FCFA TTC).` : null,
       ].filter(Boolean);
     }
     if (accesA(role, '/api/achat')) {
@@ -266,6 +279,12 @@ router.get('/export', auth, async (req, res) => {
     if (k.produits === null) doc.font('Helvetica').fontSize(10).fillColor('#6b7280').text('Accès limité');
     else if (!k.produits.length) doc.font('Helvetica').fontSize(10).fillColor('#6b7280').text('Aucune vente sur la période.');
     else tableau(['Produit', 'Montant TTC (FCFA)'], k.produits.map((p) => [p.nom, fcfa(p.valeur)]), [3, 1.2]);
+
+    // Meilleurs clients
+    titre('Meilleurs clients');
+    if (k.clients === null) doc.font('Helvetica').fontSize(10).fillColor('#6b7280').text('Accès limité');
+    else if (!k.clients.length) doc.font('Helvetica').fontSize(10).fillColor('#6b7280').text('Aucune vente sur la période.');
+    else tableau(['Client', 'Montant TTC (FCFA)'], k.clients.map((c) => [c.nom, fcfa(c.valeur)]), [3, 1.2]);
 
     // Modes de paiement
     titre('Modes de paiement');

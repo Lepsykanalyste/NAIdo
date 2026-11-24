@@ -263,6 +263,13 @@ export default function AssistantNAI() {
           </div>
         </div>
 
+        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 14, marginBottom: 12 }}>
+          <div style={{ fontWeight: 700, marginBottom: 10 }}>Meilleurs clients</div>
+          {k.clients === null || k.clients === undefined
+            ? <div style={{ fontSize: 12, color: '#9ca3af' }}>Accès limité</div>
+            : k.clients.length ? <BarresH items={k.clients} /> : <div style={{ fontSize: 12, color: '#9ca3af' }}>Aucune vente sur la période.</div>}
+        </div>
+
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 12, marginBottom: 12 }}>
           <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 14 }}>
             <div style={{ fontWeight: 700, marginBottom: 10 }}>Statut des ventes</div>
