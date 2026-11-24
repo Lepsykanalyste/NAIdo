@@ -8351,6 +8351,8 @@ export default function ChefAtelier() {
   const [dispo, setDispo] = useState({ ordre: [], groupes: [] });
   const [editionMenu, setEditionMenu] = useState(false);
   const [groupesFermes, setGroupesFermes] = useState({});
+  const [glisse, setGlisse] = useState(null);   // écran en cours de glisser-déposer
+  const [survol, setSurvol] = useState(null);   // zone survolée (écran, groupe ou haut du menu)
   useEffect(() => { axios.get(`${API}/preferences/menu`).then(r => setDispo(r.data || { ordre: [], groupes: [] })).catch(() => {}); }, []);
   const sauverDispo = async (nouveau) => {
     setDispo(nouveau);
@@ -8371,6 +8373,25 @@ export default function ChefAtelier() {
       top: ordre.filter(id => !dansGroupe.has(id)).map(parId).filter(Boolean),
       groupes: dispo.groupes.map(g => ({ nom: g.nom, items: g.ids.filter(id => ids.includes(id)).map(parId).filter(Boolean) })),
     };
+  };
+  // Glisser-déposer : un écran est déposé sur un autre écran (juste avant lui, dans son groupe),
+  // ou sur un groupe, ou sur « Haut du menu » (zone { type:'zone', nom: null })
+  const deplacerMenu = (dragged, cible) => {
+    if (!dragged) return;
+    let ordre = etatMenu().ordre.filter(x => x !== dragged);
+    const groupes = dispo.groupes.map(g => ({ ...g, ids: g.ids.filter(x => x !== dragged) }));
+    let nomCible = null;
+    if (cible.type === 'item') {
+      if (cible.id === dragged) return;
+      nomCible = dispo.groupes.find(g => g.ids.includes(cible.id))?.nom || null;
+      const idx = ordre.indexOf(cible.id);
+      ordre.splice(idx < 0 ? ordre.length : idx, 0, dragged);
+    } else {
+      nomCible = cible.nom;
+      ordre.push(dragged);
+    }
+    if (nomCible) { const g = groupes.find(x => x.nom === nomCible); if (g) g.ids = [...g.ids, dragged]; }
+    sauverDispo({ ...dispo, ordre, groupes });
   };
   const monterDescendre = (id, delta) => {
     const { ordre } = etatMenu();
@@ -8843,7 +8864,7 @@ function OrdresLivraison() {
                     <button onClick={nouveauGroupeMenu} style={{ ...btnMenuPerso, flex:1 }}>+ Nouveau groupe</button>
                     <button onClick={reinitialiserMenu} style={{ ...btnMenuPerso, flex:1 }}>Réinitialiser</button>
                   </div>
-                  <div style={{ fontSize:10, color:'#6b7280' }}>↑ ↓ : ordre · liste : groupe (vide = haut du menu)</div>
+                  <div style={{ fontSize:10, color:'#6b7280' }}>Glissez un écran sur un autre, sur un groupe ou sur « Haut du menu ». Les flèches restent disponibles.</div>
                 </>
               )}
             </div>
@@ -8872,7 +8893,14 @@ function OrdresLivraison() {
               }
               const groupe = dispo.groupes.find(g => g.ids.includes(item.id));
               return (
-                <div key={item.id} style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 10px', color:'#e5e7eb', fontSize:12 }}>
+                <div key={item.id} draggable
+                  onDragStart={() => setGlisse(item.id)}
+                  onDragEnd={() => { setGlisse(null); setSurvol(null); }}
+                  onDragOver={ev => { ev.preventDefault(); setSurvol(item.id); }}
+                  onDrop={ev => { ev.preventDefault(); deplacerMenu(glisse, { type:'item', id:item.id }); setGlisse(null); setSurvol(null); }}
+                  style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 10px', color:'#e5e7eb', fontSize:12, cursor:'grab',
+                    borderTop: survol === item.id && glisse && glisse !== item.id ? '2px solid #60a5fa' : '2px solid transparent',
+                    background: glisse === item.id ? '#1f2937' : 'none', borderRadius:4 }}>
                   <span style={{ flex:1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{item.label}</span>
                   <button onClick={() => monterDescendre(item.id, -1)} style={flechePerso} aria-label="Monter">↑</button>
                   <button onClick={() => monterDescendre(item.id, 1)} style={flechePerso} aria-label="Descendre">↓</button>
@@ -8886,10 +8914,21 @@ function OrdresLivraison() {
             };
             return (
               <>
+                {editionMenu && (
+                  <div onDragOver={ev => { ev.preventDefault(); setSurvol('top'); }}
+                    onDrop={ev => { ev.preventDefault(); deplacerMenu(glisse, { type:'zone', nom:null }); setGlisse(null); setSurvol(null); }}
+                    style={{ padding:'6px 14px 2px', fontSize:10, fontWeight:700, color:'#9ca3af', letterSpacing:1, textTransform:'uppercase', borderRadius:6,
+                      background: survol === 'top' && glisse ? '#1f2937' : 'none' }}>
+                    Haut du menu
+                  </div>
+                )}
                 {e.top.map(ligne)}
                 {e.groupes.map(g => (
                   <div key={'g-' + g.nom}>
-                    <div style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 14px 2px' }}>
+                    <div onDragOver={ev => { if (editionMenu) { ev.preventDefault(); setSurvol('g:' + g.nom); } }}
+                      onDrop={ev => { ev.preventDefault(); if (editionMenu) deplacerMenu(glisse, { type:'zone', nom:g.nom }); setGlisse(null); setSurvol(null); }}
+                      style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 14px 2px', borderRadius:6,
+                        background: editionMenu && survol === 'g:' + g.nom && glisse ? '#1f2937' : 'none' }}>
                       <button onClick={() => setGroupesFermes(s => ({ ...s, [g.nom]: !s[g.nom] }))}
                         style={{ background:'none', border:'none', color:'#9ca3af', cursor:'pointer', padding:0, flex:1, textAlign:'left', fontSize:10, fontWeight:700, letterSpacing:1, textTransform:'uppercase' }}>
                         {groupesFermes[g.nom] ? '▸' : '▾'} {g.nom}
