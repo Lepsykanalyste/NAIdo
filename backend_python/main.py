@@ -2378,6 +2378,10 @@ async def update_permission(role: str, module: str, payload: dict, user=Depends(
         return dict(row)
 
 # ── PARAMÈTRES SYSTÈME ────────────────────────────────────────
+import re as _re_params
+# Anciens réglages d'IA externe (clés API, modèles, contexte) : ni affichés, ni lisibles, ni modifiables
+_CLE_IA_RETIREE = _re_params.compile(r"^ia_|api_key|groq|mistral|anthropic", _re_params.I)
+
 @app.get("/api/parametres")
 async def get_parametres(user=Depends(get_current_user)):
     async with pool.acquire() as conn:
@@ -2385,6 +2389,8 @@ async def get_parametres(user=Depends(get_current_user)):
         result = []
         for r in rows:
             d = dict(r)
+            if _CLE_IA_RETIREE.search(d["cle"]):
+                continue
             # Filtrer selon droits
             if d["modifiable_par"] == "super_admin" and not is_super_admin(user):
                 d["valeur"] = "***"  # Masqué
@@ -2395,7 +2401,7 @@ async def get_parametres(user=Depends(get_current_user)):
 async def update_parametre(cle: str, payload: dict, user=Depends(get_current_user)):
     async with pool.acquire() as conn:
         param = await conn.fetchrow("SELECT * FROM parametres_systeme WHERE cle=$1", cle)
-        if not param:
+        if not param or _CLE_IA_RETIREE.search(cle):
             raise HTTPException(404, "Paramètre introuvable")
         # Vérifier droits
         role_requis = param["modifiable_par"]
@@ -2414,7 +2420,7 @@ async def update_parametre(cle: str, payload: dict, user=Depends(get_current_use
 async def get_parametre(cle: str, user=Depends(get_current_user)):
     async with pool.acquire() as conn:
         row = await conn.fetchrow("SELECT * FROM parametres_systeme WHERE cle=$1", cle)
-        if not row: raise HTTPException(404)
+        if not row or _CLE_IA_RETIREE.search(cle): raise HTTPException(404)
         return dict(row)
 
 # ── LOGS D'ACTIVITÉ ───────────────────────────────────────────

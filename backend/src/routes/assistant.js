@@ -48,6 +48,14 @@ const SUJETS = [
     rx: /conge/,
     sql: "SELECT COUNT(*)::int AS n FROM conges WHERE statut = 'en_attente'",
     texte: (n) => `${n} demande(s) de congé en attente.` },
+  { id: 'ventes_mois', nom: 'Ventes - chiffre d\'affaires du mois', motif: '/api/vente',
+    rx: /\bca\b|chiffre|revenu|vente/,
+    sql: "SELECT COALESCE(SUM(montant_ttc),0)::float AS n FROM ventes WHERE date_vente >= date_trunc('month', now()) AND statut <> 'annule'",
+    texte: (n) => `Chiffre d'affaires TTC du mois en cours : ${Math.round(n).toLocaleString('fr-FR')} FCFA.`, montant: true },
+  { id: 'ventes_encaisser', nom: 'Ventes - à encaisser', motif: '/api/vente',
+    rx: /encaiss|impaye|solde|a payer|creance/,
+    sql: "SELECT COUNT(*)::int AS n FROM ventes WHERE statut <> 'annule' AND COALESCE(solde_restant, 0) > 0",
+    texte: (n) => `${n} vente(s) avec un solde à encaisser.` },
 ];
 
 const SUGGESTIONS = ['Combien de bons à envoyer ?', 'Commandes à réceptionner', 'Achats du mois', 'Alertes non lues', 'Mes droits'];

@@ -5976,6 +5976,7 @@ function AssistantIA() {
     { label:'📦 Bons à envoyer',      question:'Combien de bons à envoyer au fournisseur ?' },
     { label:'📥 À réceptionner',      question:'Commandes à réceptionner' },
     { label:'💰 Achats du mois',      question:'Montant des achats du mois' },
+    { label:'📈 CA du mois',          question:'CA du mois' },
     { label:'🔔 Alertes non lues',    question:'Alertes non lues' },
     { label:'🧪 Non-conformités',     question:'Non-conformités ouvertes' },
     { label:'🧾 Mes droits',          question:'Mes droits' },
@@ -6061,7 +6062,7 @@ function AssistantIA() {
         <div style={{background:'linear-gradient(135deg,#4338ca,#6366f1)',borderRadius:12,padding:'12px 16px',marginBottom:10,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
           <div>
             <div style={{fontWeight:800,color:'#fff',fontSize:14}}>🤖 Assistant IA NAI</div>
-            <div style={{color:'#c7d2fe',fontSize:11}}>Accès complet aux données · Mémoire de conversation</div>
+            <div style={{color:'#c7d2fe',fontSize:11}}>Calcul local · selon vos droits</div>
           </div>
           <div style={{display:'flex',gap:8}}>
             <button onClick={()=>setShowHistory(!showHistory)}
