@@ -12,7 +12,7 @@ import ControleAvantCession from './ControleAvantCession';
 import { CompositionFicheArticle, CompositionOF } from './CompositionArticle';
 import AchatsV2, { ArticlesDivers, DashboardAchat, DemandesAchatAtelier, SectionStockBas } from './Achats';
 import toast from 'react-hot-toast';
-import { confirmer } from '../utils/confirmer.jsx';
+import { confirmer, saisir } from '../utils/confirmer.jsx';
 import { ouvrirPdfSecurise, telechargerSecurise } from '../utils/pdf';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
@@ -1042,7 +1042,7 @@ function MenuActionsDF({ df, isDir, user, onValider, onRefuser, onAnnuler, onMod
                 <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                   <button onClick={()=>ouvrirPdfSecurise("/api/df/"+df.id+"/pdf")} style={{background:"#7c3aed",color:"#fff",border:"none",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:13}}>🖨 PDF</button>
                   {df.statut==="en_attente" && isDir && <button onClick={()=>{onValider();setShow(false);}} style={{background:"#dcfce7",color:"#15803d",border:"none",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:13,fontWeight:700}}>✓ Valider → OF</button>}
-                  {df.statut==="en_attente" && isDir && <button onClick={()=>{const m=window.prompt("Motif refus :");if(m){onRefuser(m);setShow(false);}}} style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:13}}>✗ Refuser</button>}
+                  {df.statut==="en_attente" && isDir && <button onClick={async ()=>{const m=(await saisir("Motif refus :"));if(m){onRefuser(m);setShow(false);}}} style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:13}}>✗ Refuser</button>}
                   <button onClick={()=>{onAnnuler();setShow(false);}} style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:13}}>🗑 Annuler</button>
                 </div>
               </div>
@@ -1187,7 +1187,7 @@ function DemandesFabrication() {
   };
 
   const annulerDF = async (id) => {
-    const motif = window.prompt('Motif de la demande d\'annulation (obligatoire) :');
+    const motif = (await saisir('Motif de la demande d\'annulation (obligatoire) :'));
     if (!motif) return;
     try {
       await axios.put(`${API}/df/${id}/demander-annulation`, { motif });
@@ -1412,7 +1412,7 @@ function DemandesFabrication() {
                         <button onClick={()=>{setShowValider(df);chargerMachines('AT3');}} style={{background:'#dcfce7',color:'#15803d',border:'none',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:11,fontWeight:700}}>✓ Valider</button>
                       )}
                       {df.statut==='en_attente' && isDir && (
-                        <button onClick={()=>{const m=window.prompt('Motif refus :');if(m) refuser(df.id,m);}} style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:11}}>✗ Refuser</button>
+                        <button onClick={async ()=>{const m=(await saisir('Motif refus :'));if(m) refuser(df.id,m);}} style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:11}}>✗ Refuser</button>
                       )}
                       {df.statut!=='en_attente' && <span style={{fontSize:11,color:'#9ca3af'}}>—</span>}
                     </div>
@@ -1474,7 +1474,7 @@ function DemandesFabrication() {
                   <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
                     <button onClick={()=>ouvrirPdfSecurise('/api/df/'+dfSelectionne.id+'/pdf')} style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:8,padding:'8px 14px',cursor:'pointer',fontSize:13}}>🖨 PDF</button>
                     {dfSelectionne.statut==='en_attente' && isDir && <button onClick={()=>{setShowValider(dfSelectionne);chargerMachines('AT3');setDfSelectionne(null);}} style={{background:'#dcfce7',color:'#15803d',border:'none',borderRadius:8,padding:'8px 14px',cursor:'pointer',fontSize:13,fontWeight:700}}>✓ Valider</button>}
-                    {dfSelectionne.statut==='en_attente' && isDir && <button onClick={()=>{const m=window.prompt('Motif refus :');if(m){refuser(dfSelectionne.id,m);setDfSelectionne(null);}}} style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:8,padding:'8px 14px',cursor:'pointer',fontSize:13}}>✗ Refuser</button>}
+                    {dfSelectionne.statut==='en_attente' && isDir && <button onClick={async ()=>{const m=(await saisir('Motif refus :'));if(m){refuser(dfSelectionne.id,m);setDfSelectionne(null);}}} style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:8,padding:'8px 14px',cursor:'pointer',fontSize:13}}>✗ Refuser</button>}
                     <button onClick={()=>{annulerDF(dfSelectionne.id);setDfSelectionne(null);}} style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:8,padding:'8px 14px',cursor:'pointer',fontSize:13}}>🗑 Annuler</button>
                   </div>
                 </div>
@@ -3148,11 +3148,11 @@ function PlanningMachines() {
   return (
     <div>
       <div style={{ display:'flex', gap:10, marginBottom:20, alignItems:'center', flexWrap:'wrap' }}>
-        <button onClick={() => { const d=new Date(date); d.setDate(d.getDate()-1); setDate(d.toISOString().split('T')[0]); }}
+        <button onClick={async () => { const d=new Date(date); d.setDate(d.getDate()-1); setDate(d.toISOString().split('T')[0]); }}
           style={{ background:'#fff', border:'1px solid #d1d5db', padding:'8px 14px', borderRadius:8, cursor:'pointer' }}>←</button>
         <input type="date" value={date} onChange={e => setDate(e.target.value)}
           style={{ border:'1px solid #d1d5db', borderRadius:8, padding:'8px 12px', fontSize:13 }}/>
-        <button onClick={() => { const d=new Date(date); d.setDate(d.getDate()+1); setDate(d.toISOString().split('T')[0]); }}
+        <button onClick={async () => { const d=new Date(date); d.setDate(d.getDate()+1); setDate(d.toISOString().split('T')[0]); }}
           style={{ background:'#fff', border:'1px solid #d1d5db', padding:'8px 14px', borderRadius:8, cursor:'pointer' }}>→</button>
         <button onClick={() => setDate(new Date().toISOString().split('T')[0])}
           style={{ background:'#f0fdf4', border:'1px solid #86efac', color:'#15803d', padding:'8px 14px', borderRadius:8, cursor:'pointer', fontWeight:600, fontSize:13 }}>Aujourd'hui</button>
@@ -6202,7 +6202,7 @@ function Utilisateurs() {
     catch(e) { toast.error(messageErreur(e)); }
   };
   const renommerPoste = async (p) => {
-    const libelle = window.prompt('Nouveau nom du poste', p.libelle);
+    const libelle = (await saisir('Nouveau nom du poste', p.libelle));
     if (!libelle || libelle === p.libelle) return;
     try { await axios.put(`${API}/utilisateurs/postes/${p.code}`, { libelle }); toast.success('Poste renommé ✓'); chargerPostesAdmin(); charger(); }
     catch(e) { toast.error(messageErreur(e)); }
@@ -8112,7 +8112,7 @@ export function DashboardDirection() {
   const decider = async (id, accord) => {
     try {
       if (accord) await axios.post(`${API}/dbm/exceptions-fifo/${id}/approuver`);
-      else { const motif = window.prompt('Motif du refus :'); if (!motif) return; await axios.post(`${API}/dbm/exceptions-fifo/${id}/refuser`, { motif }); }
+      else { const motif = (await saisir('Motif du refus :')); if (!motif) return; await axios.post(`${API}/dbm/exceptions-fifo/${id}/refuser`, { motif }); }
       chargerExceptions();
     } catch (e) { window.alert(e.response?.data?.error || 'Erreur'); }
   };
@@ -9981,7 +9981,7 @@ function GMAO() {
   const rattacherOT = async (ot) => {
     try {
       const { data: ofs } = await axios.get(`${API}/achat/ofs-ouverts`);
-      const saisie = window.prompt("Numéro de l'OF auquel rattacher cette intervention (ex. OF-2026-1006) :");
+      const saisie = (await saisir("Numéro de l'OF auquel rattacher cette intervention (ex. OF-2026-1006) :"));
       if (!saisie || !saisie.trim()) return;
       const of = (Array.isArray(ofs) ? ofs : []).find(o => o.numero_of === saisie.trim());
       if (!of) return window.alert('OF introuvable parmi les OF ouverts');
@@ -9991,9 +9991,9 @@ function GMAO() {
     } catch (e) { window.alert(e.response?.data?.error || 'Erreur de rattachement'); }
   };
   const demanderPieceOT = async (ot) => {
-    const designation = window.prompt('Pièce ou prestation à demander :');
+    const designation = (await saisir('Pièce ou prestation à demander :'));
     if (!designation || !designation.trim()) return;
-    const quantite = window.prompt('Quantité :', '1');
+    const quantite = (await saisir('Quantité :', '1'));
     if (!quantite || !(parseFloat(quantite) > 0)) return;
     try {
       await axios.post(`${API}/couts-of/ordres-travail/${ot.id}/demande-achat`, { lignes: [{ designation: designation.trim(), quantite_demandee: parseFloat(quantite) }] });

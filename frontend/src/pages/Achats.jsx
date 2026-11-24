@@ -10,7 +10,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
-import { confirmer } from '../utils/confirmer.jsx';
+import { confirmer, saisir } from '../utils/confirmer.jsx';
 import { ImageFichier, ouvrirFichier } from '../utils/fichiers.jsx';
 import { useAuth } from '../hooks/useAuth.jsx';
 import { ouvrirPdfSecurise } from '../utils/pdf';
@@ -597,7 +597,7 @@ function GestionLibelles({ onClose }) {
     try { await axios.post(`${API}/achat/libelles-frais`, { libelle: nouveau }); setNouveau(''); charger(); } catch (e) { toast.error(msg(e)); }
   };
   const renommer = async l => {
-    const v = window.prompt('Nouveau libellé', l.libelle);
+    const v = (await saisir('Nouveau libellé', l.libelle));
     if (!v || v === l.libelle) return;
     try { await axios.put(`${API}/achat/libelles-frais/${l.id}`, { libelle: v }); charger(); } catch (e) { toast.error(msg(e)); }
   };
@@ -652,7 +652,7 @@ export default function AchatsV2() {
     try { await axios.post(`${API}/achat/commandes/${c.id}/valider`); toast.success('Bon validé ✓'); recharger(); } catch (e) { toast.error(msg(e)); }
   };
   const refuserBon = async c => {
-    const motif = window.prompt(`Motif du refus du bon ${c.numero_commande} :`);
+    const motif = (await saisir(`Motif du refus du bon ${c.numero_commande} :`));
     if (!motif || !motif.trim()) return toast.error('Le motif est obligatoire');
     try { await axios.post(`${API}/achat/commandes/${c.id}/refuser`, { motif }); toast.success('Bon refusé'); recharger(); } catch (e) { toast.error(msg(e)); }
   };

@@ -578,7 +578,7 @@ export function ModuleReceptionDBM() {
   };
 
   const demanderException = async (i, l, choisi, plusAncien) => {
-    const motif = window.prompt(`Pourquoi sortir le lot ${choisi.numero_lot} avant le lot ${plusAncien.numero_lot} ?`);
+    const motif = (await saisir(`Pourquoi sortir le lot ${choisi.numero_lot} avant le lot ${plusAncien.numero_lot} ?`));
     if (!motif || !motif.trim()) return toast.error('Le motif est obligatoire');
     const qte = parseFloat(l.qte_livree || 0);
     if (!(qte > 0)) return toast.error('Indiquez d\'abord la quantité à sortir');
