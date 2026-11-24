@@ -37,9 +37,9 @@ router.put('/fournisseurs/:id', auth, async (req, res) => {
   try {
     const d = req.body;
     const { rows } = await db.query(`
-      UPDATE fournisseurs SET raison_sociale=$1,contact_nom=$2,telephone=$3,email=$4,adresse=$5,condition_paiement=$6,delai_paiement_jours=$7,notes=$8,actif=$9
-      WHERE id=$10 RETURNING *
-    `,[d.raison_sociale,d.contact_nom||null,d.telephone||null,d.email||null,d.adresse||null,d.condition_paiement||'30_jours',numD(d.delai_paiement_jours,30),d.notes||null,d.actif!==false,req.params.id]);
+      UPDATE fournisseurs SET raison_sociale=$1,contact_nom=$2,telephone=$3,email=$4,adresse=$5,ville=$6,nif=$7,condition_paiement=$8,delai_paiement_jours=$9,notes=$10,actif=$11
+      WHERE id=$12 RETURNING *
+    `,[d.raison_sociale,d.contact_nom||null,d.telephone||null,d.email||null,d.adresse||null,d.ville||null,d.nif||null,d.condition_paiement||'30_jours',numD(d.delai_paiement_jours,30),d.notes||null,d.actif!==false,req.params.id]);
     res.json(rows[0]);
   } catch(e) { res.status(500).json({ error:e.message }); }
 });

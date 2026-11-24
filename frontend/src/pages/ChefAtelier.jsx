@@ -9012,7 +9012,7 @@ function Fournisseurs() {
             <button onClick={()=>setShowForm(false)} style={{background:'rgba(255,255,255,0.2)',border:'none',color:'#fff',borderRadius:6,padding:'4px 12px',cursor:'pointer'}}>✕</button>
           </div>
           <div style={{padding:20,display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:12}}>
-            {[['Code *','code'],['Raison sociale *','raison_sociale'],['Contact','contact_nom'],['Téléphone','telephone'],['Email','email'],['Adresse','adresse'],['Ville','ville'],['NIF','nif'],['Notes','notes']].map(([label,key])=>(
+            {[['Code *','code'],['Raison sociale *','raison_sociale'],['Contact','contact_nom'],['Téléphone','telephone'],['Email','email'],['Adresse','adresse'],['Ville','ville'],['NCC','nif'],['Notes','notes']].map(([label,key])=>(
               <div key={key}>
                 <label style={{fontSize:11,fontWeight:600,display:'block',marginBottom:3}}>{label}</label>
                 <input value={form[key]||''} onChange={e=>setForm({...form,[key]:e.target.value})}
