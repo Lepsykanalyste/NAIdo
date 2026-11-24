@@ -95,6 +95,7 @@ app.use('/api/ol', require('./routes/ordres_livraison'));
 app.use('/api/ticket-prod',      require('./routes/ticket_prod'));
 app.use('/api/df',                require('./routes/demandes_fab'));
 app.use('/api/notifications',     require('./routes/notifications'));
+app.use('/api/assistant',         require('./routes/assistant'));
 app.use('/api/mail', require('./routes/mail'));
 app.use('/api/profil', require('./routes/profil'));
 app.use('/api/lots-prod',          require('./routes/lots_prod'));

@@ -34,7 +34,8 @@ const correspond = (motif, chemin) => {              // motif = debut du chemin,
   return m.length <= c.length && m.every((s, i) => s === '*' || s === c[i]);
 };
 // Fixe dans le code (ne depend pas de la base) : ouvert a tout utilisateur connecte
-const PERSONNELS = ['/api/notifications', '/api/profil', '/api/mail'];
+// L'assistant filtre lui-meme chaque sujet avec decider() : il est ouvert a tout connecte
+const PERSONNELS = ['/api/notifications', '/api/profil', '/api/mail', '/api/assistant'];
 const estLecture = (m) => ['GET', 'HEAD', 'OPTIONS'].includes(String(m).toUpperCase());
 const methodeOk = (regle, m) => !regle.methodes || regle.methodes.includes(String(m).toUpperCase());
 const normaliserRole = (r) => { r = String(r || '').toLowerCase().trim(); return (POLITIQUE.alias || {})[r] || r; };

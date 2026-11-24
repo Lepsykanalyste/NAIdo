@@ -5942,7 +5942,7 @@ function AssistantIA() {
   });
   const [convActuelle, setConvActuelle] = React.useState(null);
   const [messages, setMessages] = React.useState([
-    { role:'assistant', content:"Bonjour ! Je suis l'assistant IA de NAI. J'ai accès à toutes les données de l'application en temps réel. Posez-moi votre question !" }
+    { role:'assistant', content:"Bonjour ! Je suis l'assistant de NAI. Je réponds à partir des données de l'entreprise, uniquement dans les domaines auxquels votre rôle donne accès. Calcul local : aucun service externe. Posez votre question, ou tapez « mes droits »." }
   ]);
   const [input, setInput] = React.useState('');
   const [loading, setLoading] = React.useState(false);
@@ -5971,16 +5971,17 @@ function AssistantIA() {
     });
   };
 
+  // Questions rapides : calculees dans la base, filtrees selon les droits de la personne
   const ACTIONS_RAPIDES = [
-    { label:'📊 Rapport journalier', endpoint:'/ia/rapport-journalier', payload:{} },
-    { label:'📦 Analyse stock',       endpoint:'/ia/analyser-stock',     payload:{} },
-    { label:'🏭 État production',     endpoint:'/ia/chat', payload:{message:"Donne-moi un bilan complet de la production AT3 aujourd'hui avec les KPIs."} },
-    { label:'⚠ Risques QHSE',        endpoint:'/ia/chat', payload:{message:"Quels sont les risques QHSE prioritaires à traiter selon nos données actuelles ?"} },
-    { label:'🔧 Maintenance',         endpoint:'/ia/chat', payload:{message:"Quelles maintenances préventives sont urgentes cette semaine ?"} },
-    { label:'📈 Améliorer TRS',       endpoint:'/ia/chat', payload:{message:"Comment améliorer notre TRS sur les extrudeuses AT3 ?"} },
+    { label:'📦 Bons à envoyer',      question:'Combien de bons à envoyer au fournisseur ?' },
+    { label:'📥 À réceptionner',      question:'Commandes à réceptionner' },
+    { label:'💰 Achats du mois',      question:'Montant des achats du mois' },
+    { label:'🔔 Alertes non lues',    question:'Alertes non lues' },
+    { label:'🧪 Non-conformités',     question:'Non-conformités ouvertes' },
+    { label:'🧾 Mes droits',          question:'Mes droits' },
   ];
 
-  const envoyer = async (msgText=null, endpoint='/ia/chat', payload=null) => {
+  const envoyer = async (msgText=null, endpoint='/assistant/ask', payload=null) => {
     const texte = msgText || input.trim();
     if (!texte && !payload) return;
     setLoading(true);
@@ -5989,20 +5990,14 @@ function AssistantIA() {
     setMessages(newMessages);
     setInput('');
     try {
-      const body = payload || { 
-        message: texte, 
-        historique: messages.slice(-8),  // Envoyer les 8 derniers pour la mémoire
-        avec_contexte_production: true 
-      };
+      const body = payload || { question: texte };
       const { data } = await axios.post(`${API}${endpoint}`, body);
       if (data.erreur) {
-        const errMsg = { role:'assistant', content:`❌ ${data.erreur}
-
-💡 Configurez les clés API dans ⚙ Paramètres Système.` };
+        const errMsg = { role:'assistant', content:`❌ ${data.erreur}` };
         const finalMsgs = [...newMessages, errMsg];
         setMessages(finalMsgs);
       } else {
-        const assistantMsg = { role:'assistant', content: data.reponse || data };
+        const assistantMsg = { role:'assistant', content: data.text || data.reponse || data };
         const finalMsgs = [...newMessages, assistantMsg];
         setMessages(finalMsgs);
         sauvegarderConv(finalMsgs);
@@ -6083,7 +6078,7 @@ function AssistantIA() {
         {/* Actions rapides */}
         <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8}}>
           {ACTIONS_RAPIDES.map((a,i)=>(
-            <button key={i} onClick={()=>envoyer(a.label.replace(/^[^\s]+\s/,''), a.endpoint, a.payload)}
+            <button key={i} onClick={()=>envoyer(a.question)}
               style={{background:'#f0f4ff',color:'#4338ca',border:'1px solid #c7d2fe',padding:'5px 10px',borderRadius:20,cursor:'pointer',fontSize:11,fontWeight:600,whiteSpace:'nowrap'}}>
               {a.label}
             </button>
