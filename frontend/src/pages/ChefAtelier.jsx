@@ -2571,6 +2571,23 @@ function MonEmail({ onClose, photo, onPhotoChange }) {
     } catch (err) { toast.error(err.response?.data?.error || 'Envoi de la photo impossible'); }
     finally { e.target.value = ''; }
   };
+  // Signature : image importee par la personne, redimensionnee et placee automatiquement sur les documents
+  const [signature, setSignature] = useState(null);
+  useEffect(() => {
+    axios.get(`${API}/profil/signature/moi`).then(r => setSignature(r.data.signature || null)).catch(() => {});
+  }, []);
+  const envoyerSignature = async (e) => {
+    const fichier = e.target.files && e.target.files[0];
+    if (!fichier) return;
+    const fd = new FormData();
+    fd.append('signature', fichier);
+    try {
+      const { data } = await axios.post(`${API}/profil/signature`, fd);
+      setSignature(data.signature);
+      toast.success('Signature enregistrée');
+    } catch (err) { toast.error(err.response?.data?.error || 'Envoi de la signature impossible'); }
+    finally { e.target.value = ''; }
+  };
   const [f, setF] = useState({ host: '', port: '587', user: '', expediteur: '', pass: '' });
   const [configure, setConfigure] = useState(false);
   const [occupe, setOccupe] = useState(false);
@@ -2611,6 +2628,17 @@ function MonEmail({ onClose, photo, onPhotoChange }) {
           <label style={{ padding: '8px 14px', border: '1px solid #d1d5db', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
             Changer la photo
             <input type="file" accept="image/jpeg,image/png,image/webp" onChange={envoyerPhoto} style={{ display: 'none' }} />
+          </label>
+        </div>
+        <div style={{ fontWeight: 700, marginBottom: 6 }}>Ma signature</div>
+        <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 8 }}>Image (png, jpg ou webp, 1 Mo maximum), idéalement sur fond blanc. Elle est redimensionnée et placée automatiquement sur les bons que vous établissez ou validez.</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
+          <div style={{ width: 160, height: 60, border: '1px dashed #d1d5db', borderRadius: 8, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af', fontSize: 12, background: '#fff' }}>
+            {signature ? <ImageFichier chemin={signature} alt="Signature" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} /> : 'Aucune signature'}
+          </div>
+          <label style={{ padding: '8px 14px', border: '1px solid #d1d5db', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+            {signature ? 'Remplacer' : 'Importer'}
+            <input type="file" accept="image/png,image/jpeg,image/webp" onChange={envoyerSignature} style={{ display: 'none' }} />
           </label>
         </div>
         <div style={{ fontWeight: 700, marginBottom: 6 }}>✉ Messagerie (envoi des bons)</div>

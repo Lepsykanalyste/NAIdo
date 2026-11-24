@@ -9,8 +9,14 @@ const GRIS = '#6b7280';
 const LIGNE = '#d1d5db';
 const ZEBRA = '#f3f4f6';
 
-const nombre = (n, d = 0) => (n === null || n === undefined || n === '' || isNaN(parseFloat(n)))
-  ? '—' : parseFloat(n).toLocaleString('fr-FR', { minimumFractionDigits: d, maximumFractionDigits: d });
+// Montants lisibles : 5 000 000 (espaces simples, virgule pour les decimales)
+const nombre = (n, d = 0) => {
+  if (n === null || n === undefined || n === '' || isNaN(parseFloat(n))) return '—';
+  const v = Math.round(parseFloat(n) * Math.pow(10, d)) / Math.pow(10, d);
+  const [entier, dec] = Math.abs(v).toFixed(d).split('.');
+  const groupes = entier.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  return (v < 0 ? '-' : '') + groupes + (d > 0 ? ',' + dec : '');
+};
 const date = d => d ? new Date(d).toLocaleDateString('fr-FR') : '—';
 
 // Totaux recalcules a partir des lignes : HT = quantite x prix unitaire ; TVA au taux du bon
@@ -25,7 +31,8 @@ function calculer(cmd, lignes) {
   return { ht, tva, ttc: ht + tva };
 }
 
-function pdfBonAchat(cmd, lignes, urlQr) {
+// sign = { achat: Buffer|null, direction: Buffer|null } : signatures image de chaque personne (importees dans son compte)
+function pdfBonAchat(cmd, lignes, urlQr, sign = {}) {
   return new Promise(async (resolve, reject) => {
     try {
       const qr = urlQr ? await QRCode.toBuffer(urlQr, { type: 'png', width: 240, margin: 1 }) : null;
@@ -137,13 +144,17 @@ function pdfBonAchat(cmd, lignes, urlQr) {
       // ----- Signatures (en bas de la page) -----
       const ySig = Math.max(y + 8, 668);
       const sigW = (largeur - 16) / 2;
-      [[G, 'SERVICE ACHAT', cmd.cree_par_nom || ''],
-       [G + sigW + 16, 'DIRECTION', (cmd.validee_at || cmd.confirme_at) ? 'Validé le ' + date(cmd.validee_at || cmd.confirme_at) : 'En attente de validation']]
-        .forEach(([x, titre, sous]) => {
+      [[G, 'SERVICE ACHAT', cmd.cree_par_nom || '', sign.achat],
+       [G + sigW + 16, 'DIRECTION', (cmd.validee_at || cmd.confirme_at) ? 'Validé le ' + date(cmd.validee_at || cmd.confirme_at) : 'En attente de validation', sign.direction]]
+        .forEach(([x, titre, sous, image]) => {
           doc.rect(x, ySig, sigW, 76).lineWidth(0.8).strokeColor(LIGNE).stroke();
           doc.font('Helvetica-Bold').fontSize(corps).fillColor(BLEU).text(titre, x + 10, ySig + 7);
           doc.font('Helvetica').fontSize(corps).fillColor('#111827').text(sous, x + 10, ySig + 22, { width: sigW - 20 });
-          doc.fillColor(GRIS).fontSize(8).text('Signature :', x + 10, ySig + 58);
+          if (image) {
+            // Signature importee par la personne : redimensionnee pour tenir dans la case
+            try { doc.image(image, x + 10, ySig + 34, { fit: [sigW - 20, 26] }); } catch (e) { /* image illisible : case vide */ }
+          }
+          doc.fillColor(GRIS).fontSize(7).text('Signature', x + 10, ySig + 63);
         });
 
       doc.font('Helvetica').fontSize(7.5).fillColor(GRIS)

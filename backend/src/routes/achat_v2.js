@@ -20,6 +20,8 @@ const router  = express.Router();
 const db      = require('../config/db');
 const { auth } = require('../middleware/auth');
 const { envoyerDepuisCompte } = require('../utils/mailcompte');
+const fs = require('fs');
+const path = require('path');
 const lienSigne = require('../utils/lienSigne');
 const { pdfBonAchat } = require('../utils/pdfBonAchat');
 const { peutVoirPrix, retirerPrix } = require('../middleware/prix');
@@ -258,6 +260,14 @@ router.get('/commandes/:id/receptions', auth, async (req, res, next) => {
 });
 
 // GET /commandes/:id/pdf — bon de commande
+// Signature image d'une personne (importee dans son compte), ou null
+async function signatureDe(userId) {
+  if (!userId) return null;
+  const { rows } = await db.query('SELECT signature_path FROM utilisateurs WHERE id = $1', [userId]);
+  const p = rows[0] && rows[0].signature_path;
+  if (!p || !p.startsWith('/uploads/signatures/')) return null;
+  try { return fs.readFileSync(path.join(__dirname, '../..', p)); } catch (e) { return null; }
+}
 // Bon de commande en PDF. Le QR code pointe vers un lien signe (lisible sans connexion, valable 30 jours).
 const authOuLien = (req, res, next) => {
   if (req.query.t && lienSigne.verifier(req.params.id, req.query.t)) { req.lienSigne = true; return next(); }
@@ -278,7 +288,8 @@ router.get('/commandes/:id/pdf', authOuLien, async (req, res, next) => {
       'SELECT l.*, a.code AS article_code FROM lignes_achat l LEFT JOIN articles a ON a.id = l.article_id WHERE l.commande_id = $1 ORDER BY l.created_at', [cmd.id]);
     const base = process.env.APP_BASE_URL || `${req.protocol}://${req.get('host')}`;
     const urlQr = `${base}/api/achat/commandes/${cmd.id}/pdf?t=${lienSigne.signer(cmd.id)}`;
-    const pdf = await pdfBonAchat(cmd, lignes, urlQr);
+    const sign = { achat: await signatureDe(cmd.cree_par), direction: await signatureDe(cmd.validee_par) };
+    const pdf = await pdfBonAchat(cmd, lignes, urlQr, sign);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${cmd.numero_commande}.pdf"`);
     res.setHeader('Cache-Control', 'no-store');
@@ -503,7 +514,8 @@ const lignes = (await db.query(
         + `<table style="border-collapse:collapse;width:100%" border="1" cellpadding="6"><thead><tr><th>Designation</th><th>Quantite</th><th>P.U. HT</th><th>Montant TTC</th></tr></thead><tbody>${lignesHtml}</tbody></table>`
         + `<p><b>Total HT : ${esc(cmd.montant_ht)} FCFA &mdash; Total TTC : ${esc(cmd.montant_ttc)} FCFA</b></p><p>NAI &mdash; Service achats</p></div>`;
       const baseEnvoi = process.env.APP_BASE_URL || `${req.protocol}://${req.get('host')}`;
-      const pdfBon = await pdfBonAchat(cmd, lignes, `${baseEnvoi}/api/achat/commandes/${cmd.id}/pdf?t=${lienSigne.signer(cmd.id)}`);
+      const sign = { achat: await signatureDe(cmd.cree_par), direction: await signatureDe(cmd.validee_par) };
+      const pdfBon = await pdfBonAchat(cmd, lignes, `${baseEnvoi}/api/achat/commandes/${cmd.id}/pdf?t=${lienSigne.signer(cmd.id)}`, sign);
       await envoyerDepuisCompte(req.user.id, { to: adresse, subject: 'Bon de commande ' + cmd.numero_commande + ' - NAI', html, attachments: [{ filename: cmd.numero_commande + '.pdf', content: pdfBon, contentType: 'application/pdf' }] });
     }
     // Un bon envoye est deja valide par la direction : il passe a « confirme », pret a etre receptionne

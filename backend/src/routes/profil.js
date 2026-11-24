@@ -42,4 +42,36 @@ router.post('/photo', auth, (req, res) => {
   });
 });
 
+
+// Signature de la personne : image (png, jpg, webp), 1 Mo maximum ; utilisee sur les bons et documents
+const uploadSignature = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => { const d = path.join(__dirname, '../../uploads/signatures'); fs.mkdirSync(d, { recursive: true }); cb(null, d); },
+    filename: (req, file, cb) => cb(null, crypto.randomBytes(12).toString('hex') + path.extname(file.originalname).toLowerCase()),
+  }),
+  limits: { fileSize: 1024 * 1024, files: 1 },
+  fileFilter: (req, file, cb) => cb(null, EXT.includes(path.extname(file.originalname).toLowerCase())),
+});
+
+router.post('/signature', auth, (req, res) => {
+  uploadSignature.single('signature')(req, res, async (e) => {
+    if (e) return res.status(400).json({ error: e.code === 'LIMIT_FILE_SIZE' ? 'Signature trop lourde (1 Mo maximum)' : e.message });
+    if (!req.file) return res.status(400).json({ error: 'Image manquante ou format non accepté (png, jpg, webp)' });
+    try {
+      const chemin = '/uploads/signatures/' + req.file.filename;
+      const { rows } = await db.query('SELECT signature_path FROM utilisateurs WHERE id = $1', [req.user.id]);
+      await db.query('UPDATE utilisateurs SET signature_path = $1 WHERE id = $2', [chemin, req.user.id]);
+      const ancienne = rows[0]?.signature_path;
+      if (ancienne && ancienne.startsWith('/uploads/signatures/')) fs.unlink(path.join(__dirname, '../..', ancienne), () => {});
+      res.json({ ok: true, signature: chemin });
+    } catch (err) { console.error('[PROFIL]', err.message); res.status(500).json({ error: 'Enregistrement impossible' }); }
+  });
+});
+
+router.get('/signature/moi', auth, async (req, res) => {
+  try {
+    const { rows } = await db.query('SELECT signature_path FROM utilisateurs WHERE id = $1', [req.user.id]);
+    res.json({ signature: rows[0]?.signature_path || null });
+  } catch (e) { res.status(500).json({ error: 'Lecture impossible' }); }
+});
 module.exports = router;
