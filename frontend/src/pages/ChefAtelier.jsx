@@ -2556,34 +2556,53 @@ const pctOF = (o) => {
   return cible > 0 ? Math.min(100, Math.round(prod / cible * 100)) : 0;
 };
 
+// Bloc repliable : le contenu (tableaux, filtres) ne s'affiche qu'Ã  l'ouverture
+function Section({ titre, badge, defaultOuvert = false, children }) {
+  const [ouvert, setOuvert] = useState(defaultOuvert);
+  return (
+    <div style={{ background:'#fff', borderRadius:14, border:'1px solid #e5e7eb', overflow:'hidden', marginBottom:16 }}>
+      <button onClick={() => setOuvert(o => !o)} style={{ width:'100%', display:'flex', alignItems:'center', gap:10, padding:'14px 20px', background:'#fff', border:'none', borderBottom: ouvert ? '1px solid #e5e7eb' : 'none', cursor:'pointer', textAlign:'left', fontWeight:700, fontSize:14 }}>
+        <span style={{ fontSize:12, color:'#6b7280' }}>{ouvert ? 'â–¾' : 'â–¸'}</span>
+        <span>{titre}</span>
+        {badge !== undefined && <span style={{ marginLeft:'auto', fontSize:12, fontWeight:600, color:'#6b7280', background:'#f3f4f6', borderRadius:12, padding:'2px 10px' }}>{badge}</span>}
+      </button>
+      {ouvert && children}
+    </div>
+  );
+}
+
 // Tableau des OF : recherche, filtre par statut, tri et pages de 15 (direction, commercial, atelier AT3)
-function TableauOF({ ofs }) {
+function TableauOF() {
+  const PAR_PAGE = 15;
   const [recherche, setRecherche] = useState('');
   const [filtreStatut, setFiltreStatut] = useState('');
   const [tri, setTri] = useState('livraison');
   const [page, setPage] = useState(0);
-  const PAR_PAGE = 15;
+  const [data, setData] = useState({ items: [], total: 0 });
+  const [chargement, setChargement] = useState(true);
 
-  const q = recherche.trim().toLowerCase();
-  const filtres = ofs.filter(o => {
-    const texte = [o.numero_of, o.article_nom, o.client_nom].filter(Boolean).join(' ').toLowerCase();
-    return (!q || texte.includes(q)) && (!filtreStatut || o.statut === filtreStatut);
-  });
-  const liste = [...filtres].sort((a, b) => {
-    if (tri === 'avancement') return pctOF(b) - pctOF(a);
-    if (tri === 'numero') return String(a.numero_of || '').localeCompare(String(b.numero_of || ''));
-    return String(a.date_livraison_prevue || '9999').localeCompare(String(b.date_livraison_prevue || '9999'));
-  });
-  const pages = Math.max(1, Math.ceil(liste.length / PAR_PAGE));
+  // Recherche, filtre, tri et pagination faits par le serveur : seule une page est chargée
+  useEffect(() => {
+    let annule = false;
+    setChargement(true);
+    const t = setTimeout(() => {
+      const params = { limit: PAR_PAGE, offset: page * PAR_PAGE, tri };
+      if (recherche.trim()) params.q = recherche.trim();
+      if (filtreStatut) params.statut = filtreStatut;
+      axios.get(`${API}/of`, { params })
+        .then(r => { if (!annule) setData({ items: r.data.items || [], total: r.data.total || 0 }); })
+        .catch(() => { if (!annule) setData({ items: [], total: 0 }); })
+        .finally(() => { if (!annule) setChargement(false); });
+    }, 250);
+    return () => { annule = true; clearTimeout(t); };
+  }, [recherche, filtreStatut, tri, page]);
+
+  const pages = Math.max(1, Math.ceil(data.total / PAR_PAGE));
   const pageCourante = Math.min(page, pages - 1);
-  const visibles = liste.slice(pageCourante * PAR_PAGE, pageCourante * PAR_PAGE + PAR_PAGE);
-  const statutsPresents = [...new Set(ofs.map(o => o.statut).filter(Boolean))];
-
   const champ = { padding: '7px 10px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13, background: '#fff' };
 
   return (
-    <div style={{ background: '#fff', borderRadius: 14, border: '1px solid #e5e7eb', overflow: 'hidden', marginBottom: 16 }}>
-      <div style={{ padding: '14px 20px', borderBottom: '1px solid #e5e7eb', fontWeight: 700, fontSize: 14 }}>🏭 Ordres de fabrication : avancement</div>
+    <div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '10px 16px', borderBottom: '1px solid #f3f4f6', alignItems: 'center' }}>
         <input
           placeholder="Rechercher un N° OF, un article, un client..."
@@ -2593,16 +2612,18 @@ function TableauOF({ ofs }) {
         />
         <select value={filtreStatut} onChange={e => { setFiltreStatut(e.target.value); setPage(0); }} style={champ}>
           <option value="">Tous les statuts</option>
-          {statutsPresents.map(s => (<option key={s} value={s}>{LIBELLE_STATUT_OF_GLOBAL[s] || s}</option>))}
+          {Object.keys(LIBELLE_STATUT_OF_GLOBAL).map(s => (<option key={s} value={s}>{LIBELLE_STATUT_OF_GLOBAL[s]}</option>))}
         </select>
-        <select value={tri} onChange={e => setTri(e.target.value)} style={champ}>
+        <select value={tri} onChange={e => { setTri(e.target.value); setPage(0); }} style={champ}>
           <option value="livraison">Tri : livraison prévue</option>
           <option value="avancement">Tri : avancement</option>
           <option value="numero">Tri : N° OF</option>
         </select>
-        <span style={{ fontSize: 12, color: '#6b7280' }}>{liste.length} OF sur {ofs.length}</span>
+        <span style={{ fontSize: 12, color: '#6b7280' }}>{chargement ? 'Chargement...' : `${data.total} OF`}</span>
       </div>
-      {liste.length === 0 ? <div style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Aucun ordre de fabrication ne correspond</div> :
+      {!chargement && data.items.length === 0 ? <div style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>
+        {data.total === 0 && !recherche && !filtreStatut ? 'Aucun ordre de fabrication pour le moment' : 'Aucun ordre de fabrication ne correspond aux filtres'}
+      </div> :
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
         <thead><tr style={{ background: '#f0f9ff' }}>
           {['N° OF', 'Article', 'Client', 'Avancement', 'Livraison prévue', 'Statut'].map(h => (
@@ -2610,7 +2631,7 @@ function TableauOF({ ofs }) {
           ))}
         </tr></thead>
         <tbody>
-          {visibles.map((o, i) => {
+          {data.items.map((o, i) => {
             const cible = parseFloat(o.quantite_cible) || 0;
             const prod = parseFloat(o.quantite_produite) || 0;
             const pct = pctOF(o);
@@ -2683,9 +2704,8 @@ function DashboardCommercial() {
           </div>
         ))}
       </div>
-      <TableauOF ofs={ofs} />
-      <div style={{background:'#fff',borderRadius:14,border:'1px solid #e5e7eb',overflow:'hidden'}}>
-        <div style={{padding:'14px 20px',borderBottom:'1px solid #e5e7eb',fontWeight:700,fontSize:14}}>📝 Mes demandes de fabrication</div>
+      <Section titre="ðŸ­ Ordres de fabrication" badge={ofs.length}><TableauOF /></Section>
+      <Section titre="ðŸ“ Mes demandes de fabrication" badge={dfs.length}>
         {loading ? <div style={{padding:20,textAlign:'center',color:'#6b7280'}}>Chargement...</div> :
         dfs.length===0 ? <div style={{padding:30,textAlign:'center',color:'#6b7280'}}>Aucune demande — créez la première via le menu</div> :
         <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
@@ -2712,7 +2732,7 @@ function DashboardCommercial() {
             ))}
           </tbody>
         </table>}
-      </div>
+      </Section>
     </div>
   );
 }
@@ -2756,7 +2776,7 @@ function DashboardAT3() {
   const machinesEX=Array.from({length:9},(_,i)=>{const code=`EX${String(i+1).padStart(2,"0")}`;const m=trs.find(t=>(t.machine_code||"").includes(code));return{code,v:m?parseFloat(m.trs||0):null};});
   const machinesSOU=Array.from({length:5},(_,i)=>{const code=`SOU${String(i+1).padStart(2,"0")}`;const m=trs.find(t=>(t.machine_code||"").includes(code));return{code,v:m?parseFloat(m.trs||0):null};});
   return (<div>
-      <TableauOF ofs={ofs.filter(o => !o.atelier_id || String(o.atelier_id).toUpperCase().includes('AT3') || String(o.atelier_libelle||'').toUpperCase().includes('AT3'))} />
+      <Section titre="ðŸ­ Ordres de fabrication" badge={ofs.length}><TableauOF /></Section>
     <div style={{background:"linear-gradient(135deg,#14532d,#166534)",borderRadius:14,padding:"16px 20px",marginBottom:16,color:"#fff",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
       <div><div style={{fontWeight:800,fontSize:17}}>🏭 Atelier 3 — Tableau de Bord</div><div style={{fontSize:12,opacity:0.8}}>{user?.prenom} {user?.nom} · {new Date().toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"})}</div></div>
       <button onClick={charger} style={{background:"rgba(255,255,255,0.2)",border:"none",color:"#fff",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:12}}>🔄</button>
@@ -2821,7 +2841,7 @@ function Dashboard() {
 
   return (
     <div>
-      {['directeur','super_admin'].includes(user?.role||'') && <TableauOF ofs={ofs} />}
+      {['directeur','super_admin'].includes(user?.role||'') && <Section titre="ðŸ­ Ordres de fabrication" badge={ofs.length}><TableauOF /></Section>}
 {/* Navigation en dossiers ateliers */}
       {!['commercial','vente','achat','rh','qhse'].includes(user?.role||'') && (<div style={{marginBottom:20,display:'flex',gap:12,flexWrap:'wrap',alignItems:'flex-start'}}>
         {/* Vue générale */}

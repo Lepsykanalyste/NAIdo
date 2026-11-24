@@ -6,7 +6,7 @@ const { auth } = require('../middleware/auth');
 // GET /api/of
 router.get('/', auth, async (req, res) => {
   try {
-    const { statut, machine_id, atelier_id, article_id } = req.query;
+    const { statut, machine_id, atelier_id, article_id, q, tri, limit, offset } = req.query;
     let query = `
       SELECT o.*, 
              c.raison_sociale AS client_nom,
@@ -31,14 +31,31 @@ router.get('/', auth, async (req, res) => {
     if (machine_id) { params.push(parseInt(machine_id)); query += ` AND o.machine_id = $${params.length}`; }
     if (atelier_id) { params.push(atelier_id); query += ` AND o.atelier_id = $${params.length}`; }
     if (article_id) { params.push(article_id); query += ` AND o.article_id = $${params.length}`; }
+    // Recherche : N° OF, article ou client (ILIKE, sur la base)
+    if (q && String(q).trim()) { params.push(`%${String(q).trim()}%`); const n = params.length; query += ` AND (o.numero_of ILIKE $${n} OR a.designation ILIKE $${n} OR c.raison_sociale ILIKE $${n})`; }
     // Régleur et opérateurs : seulement les OF lancés par le chef AT3 (composition validée).
     const roleU = String(req.user?.role || '');
     if (['regleur', 'technicien_regleur'].includes(roleU) || roleU.startsWith('operateur')) {
       query += ` AND NOT (COALESCE(o.at3_composition_validee, false) = false AND o.statut IN ('planifie','lance','en_attente_regleur'))`;
     }
-    query += ' ORDER BY o.priorite DESC, o.date_livraison_prevue ASC';
-    const { rows } = await db.query(query, params);
-    res.json(rows);
+    // Mode paginé (?limit=&offset=) : renvoie { items, total } ; sans limit, comportement d'origine (tableau)
+    const ordre = tri === 'avancement'
+      ? 'ORDER BY (o.quantite_produite / NULLIF(o.quantite_cible, 0)) DESC NULLS LAST, o.numero_of'
+      : tri === 'numero'
+        ? 'ORDER BY o.numero_of'
+        : tri === 'livraison'
+          ? 'ORDER BY o.date_livraison_prevue ASC NULLS LAST, o.numero_of'
+          : 'ORDER BY o.priorite DESC, o.date_livraison_prevue ASC';
+    if (limit === undefined) {
+      const { rows } = await db.query(`${query} ${ordre}`, params);
+      return res.json(rows);
+    }
+    const total = (await db.query(`SELECT COUNT(*)::int AS n FROM (${query}) x`, params)).rows[0].n;
+    const lim = Math.min(Math.max(parseInt(limit, 10) || 15, 1), 200);
+    const off = Math.max(parseInt(offset, 10) || 0, 0);
+    params.push(lim, off);
+    const { rows } = await db.query(`${query} ${ordre} LIMIT $${params.length - 1} OFFSET $${params.length}`, params);
+    res.json({ items: rows, total });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
