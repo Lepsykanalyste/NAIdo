@@ -128,11 +128,10 @@ async function serieGraphique(source, periode) {
 }
 
 // Indicateurs du panneau de gauche : seulement ce que la personne peut voir
-router.get('/kpis', auth, async (req, res) => {
-  try {
-    const role = String(req.user?.role || '');
+// Calcule les indicateurs pour une personne (role) et une periode (p) : sert au panneau et au PDF
+async function kpisPour(role, p) {
     const periodes = { month: 'ce mois', last_month: 'mois dernier', days30: '30 derniers jours', year: 'cette annee' };
-    const periode = periodeDe(norm(periodes[req.query.p] || 'ce mois'));
+    const periode = periodeDe(norm(periodes[p] || 'ce mois'));
     const out = { periode: periode.libelle, ca: null, ventes: null, achats: null, commandes: null, graph: null,
       produits: null, paiements: null, points: null };
     if (accesA(role, '/api/vente')) {
@@ -165,10 +164,120 @@ router.get('/kpis', auth, async (req, res) => {
       out.achats = Math.round(rows[0].m); out.commandes = rows[0].n;
       if (!out.graph) out.graph = await serieGraphique('achats', periode);
     }
-    res.json(out);
+    return out;
+}
+
+router.get('/kpis', auth, async (req, res) => {
+  try {
+    res.json(await kpisPour(String(req.user?.role || ''), req.query.p));
   } catch (e) {
     console.error('[ASSISTANT kpis]', e.message);
     res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Export PDF du rapport d'activite : memes droits que le panneau
+router.get('/export', auth, async (req, res) => {
+  try {
+    const role = String(req.user?.role || '');
+    const k = await kpisPour(role, req.query.p);
+    const PDFDocument = require('pdfkit');
+    const doc = new PDFDocument({ size: 'A4', margin: 40, bufferPages: true });
+    const nomFichier = `rapport-activite-${k.periode.replace(/[^a-z0-9]+/gi, '-').replace(/^-+|-+$/g, '').toLowerCase()}.pdf`;
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${nomFichier}"`);
+    doc.pipe(res);
+
+    const VERT = '#1a8f5c', G = 40, W = 595 - 80;
+    const acces = (v, f) => (v === null || v === undefined ? 'Accès limité' : f(v));
+    const titre = (t) => {
+      if (doc.y > 740) doc.addPage();
+      doc.moveDown(0.8);
+      doc.fillColor(VERT).font('Helvetica-Bold').fontSize(12).text(t, G, doc.y, { width: W });
+      doc.moveTo(G, doc.y + 2).lineTo(G + W, doc.y + 2).strokeColor('#e5e7eb').lineWidth(0.8).stroke();
+      doc.moveDown(0.6);
+      doc.fillColor('#111827');
+    };
+    const tableau = (entetes, lignes, poids) => {
+      const total = poids.reduce((a, b) => a + b, 0);
+      const largeurs = poids.map((p) => (W * p) / total);
+      const ligne = (cellules, fond, gras) => {
+        if (doc.y > 770) doc.addPage();
+        const y0 = doc.y;
+        if (fond) doc.rect(G, y0 - 2, W, 17).fill(fond);
+        let x = G;
+        cellules.forEach((c, i) => {
+          doc.fillColor(gras ? '#ffffff' : '#111827').font(gras ? 'Helvetica-Bold' : 'Helvetica').fontSize(9)
+            .text(String(c), x + 5, y0, { width: largeurs[i] - 10, align: i === 0 ? 'left' : 'right', lineBreak: false });
+          x += largeurs[i];
+        });
+        doc.y = y0 + 17;
+      };
+      ligne(entetes, VERT, true);
+      lignes.forEach((l, i) => ligne(l, i % 2 ? '#f3f4f6' : null, false));
+      doc.moveDown(0.4);
+    };
+
+    // Entete
+    doc.rect(0, 0, 595, 80).fill(VERT);
+    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(18).text("Rapport d'activité", G, 24);
+    doc.font('Helvetica').fontSize(10).text(`Période : ${k.periode}`, G, 50);
+    doc.text(`Édité le ${new Date().toLocaleDateString('fr-FR')}`, 300, 50, { width: 255, align: 'right' });
+    doc.fillColor('#111827');
+    doc.y = 100;
+
+    // Indicateurs
+    const cartes = [
+      ["Chiffre d'affaires TTC", acces(k.ca, (v) => `${fcfa(v)} FCFA`)],
+      ['Ventes', acces(k.ventes, (v) => String(v))],
+      ['Achats TTC', acces(k.achats, (v) => `${fcfa(v)} FCFA`)],
+      ["Commandes d'achat", acces(k.commandes, (v) => String(v))],
+    ];
+    const bw = (W - 18) / 4, yc = doc.y;
+    cartes.forEach(([t, v], i) => {
+      const x = G + i * (bw + 6);
+      doc.roundedRect(x, yc, bw, 50, 6).lineWidth(0.8).strokeColor('#e5e7eb').stroke();
+      doc.fillColor('#6b7280').font('Helvetica').fontSize(8).text(t, x + 8, yc + 8, { width: bw - 16 });
+      doc.fillColor('#111827').font('Helvetica-Bold').fontSize(11).text(v, x + 8, yc + 26, { width: bw - 16 });
+    });
+    doc.y = yc + 60;
+
+    // Points cles
+    titre('Points clés de la période');
+    if (k.points === null) doc.fillColor('#6b7280').font('Helvetica').fontSize(10).text('Accès limité');
+    else k.points.forEach((p) => doc.font('Helvetica').fontSize(10).fillColor('#111827').text(`•  ${p}`, G, doc.y, { width: W }));
+
+    // Produits
+    titre('Produits les plus vendus');
+    if (k.produits === null) doc.font('Helvetica').fontSize(10).fillColor('#6b7280').text('Accès limité');
+    else if (!k.produits.length) doc.font('Helvetica').fontSize(10).fillColor('#6b7280').text('Aucune vente sur la période.');
+    else tableau(['Produit', 'Montant TTC (FCFA)'], k.produits.map((p) => [p.nom, fcfa(p.valeur)]), [3, 1.2]);
+
+    // Modes de paiement
+    titre('Modes de paiement');
+    if (k.paiements === null) doc.font('Helvetica').fontSize(10).fillColor('#6b7280').text('Accès limité');
+    else if (!k.paiements.length) doc.font('Helvetica').fontSize(10).fillColor('#6b7280').text('Aucune vente sur la période.');
+    else {
+      const tot = k.paiements.reduce((a, b) => a + b.valeur, 0) || 1;
+      tableau(['Mode', 'Montant TTC (FCFA)', 'Part'], k.paiements.map((p) => [p.nom, fcfa(p.valeur), `${Math.round((p.valeur / tot) * 100)} %`]), [2.4, 1.6, 0.8]);
+    }
+
+    // Evolution
+    titre('Évolution des ventes');
+    if (!k.graph) doc.font('Helvetica').fontSize(10).fillColor('#6b7280').text('Accès limité ou aucune donnée sur la période.');
+    else tableau(['Période', 'Montant TTC (FCFA)'], k.graph.labels.map((l, i) => [l, fcfa(k.graph.values[i])]), [2, 1.5]);
+
+    // Pied de page sur chaque page
+    const range = doc.bufferedPageRange();
+    for (let i = range.start; i < range.start + range.count; i++) {
+      doc.switchToPage(i);
+      doc.font('Helvetica').fontSize(8).fillColor('#9ca3af')
+        .text(`NAIdo — rapport d'activité · page ${i + 1} / ${range.count}`, G, 800, { width: W, align: 'center', lineBreak: false });
+    }
+    doc.end();
+  } catch (e) {
+    console.error('[ASSISTANT export]', e.message);
+    if (!res.headersSent) res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 

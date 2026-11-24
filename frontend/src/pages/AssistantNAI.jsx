@@ -4,8 +4,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 
 const API = '/api';
-const VERT = '#1a8f5c';
-const VERT_FONCE = '#0d5c39';
+// Couleurs de NAI (logo et site nai-ci.com) : bleu principal, rouge d'accent, bleu marine pour les titres
+const VERT = '#1e73be';          // bleu NAI (boutons, courbe, barres)
+const VERT_FONCE = '#011627';    // bleu marine NAI (titres, textes forts)
+const ROUGE = '#d94948';         // rouge NAI (second axe, alertes)
 const PERIODES = [
   { id: 'month', label: 'Ce mois' },
   { id: 'last_month', label: 'Mois précédent' },
@@ -35,28 +37,49 @@ function Graphique({ graph }) {
   );
 }
 
-const COULEURS = [VERT, '#0369a1', '#d97706', '#7c3aed', '#dc2626', '#0d9488'];
+const COULEURS = [VERT, ROUGE, VERT_FONCE, '#f59e0b', '#0d9488', '#7c3aed'];
 
-// Courbe d'evolution (SVG) : meme rendu que le graphique « Évolution » de LEINAD
+// Courbe d'evolution (SVG) : ligne, zone colorée, axe des valeurs et des dates, comme le graphique LEINAD
 function Courbe({ graph }) {
-  const W = 600, H = 180, P = 28;
-  const max = Math.max(1, ...graph.values);
+  const W = 640, H = 230, PG = 58, PD = 14, PH = 16, PB = 28;
+  const max0 = Math.max(1, ...graph.values);
+  const pas = Math.pow(10, Math.floor(Math.log10(max0)));
+  const max = Math.ceil(max0 / pas) * pas;
   const n = graph.values.length;
-  const x = (i) => (n <= 1 ? W / 2 : P + (i * (W - 2 * P)) / (n - 1));
-  const y = (v) => H - P - (v / max) * (H - 2 * P);
-  const points = graph.values.map((v, i) => `${x(i)},${y(v)}`).join(' ');
+  const x = (i) => (n <= 1 ? (PG + W - PD) / 2 : PG + (i * (W - PG - PD)) / (n - 1));
+  const y = (v) => H - PB - (v / max) * (H - PB - PH);
+  const pts = graph.values.map((v, i) => [x(i), y(v)]);
+  const ligne = pts.map(([a, b], i) => `${i ? 'L' : 'M'}${a.toFixed(1)},${b.toFixed(1)}`).join(' ');
+  const zone = `${ligne} L${x(n - 1).toFixed(1)},${H - PB} L${x(0).toFixed(1)},${H - PB} Z`;
+  const pasX = Math.ceil(n / 8);
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto' }} role="img" aria-label={graph.title}>
-      {[0, 0.5, 1].map((f) => (
-        <line key={f} x1={P} x2={W - P} y1={y(max * f)} y2={y(max * f)} stroke="#f3f4f6" />
+      <defs>
+        <linearGradient id="zoneNAI" x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor={VERT} stopOpacity="0.28" />
+          <stop offset="100%" stopColor={VERT} stopOpacity="0.02" />
+        </linearGradient>
+      </defs>
+      {[0, 0.25, 0.5, 0.75, 1].map((f) => (
+        <g key={f}>
+          <line x1={PG} x2={W - PD} y1={y(max * f)} y2={y(max * f)} stroke="#eef2f6" />
+          <text x={PG - 6} y={y(max * f) + 3} fontSize="10" fill="#6b7280" textAnchor="end">{fcfa(max * f)}</text>
+        </g>
       ))}
-      <polyline fill="none" stroke={VERT} strokeWidth="2.5" points={points} />
-      {graph.values.map((v, i) => (
-        <circle key={i} cx={x(i)} cy={y(v)} r="3" fill={VERT}><title>{`${graph.labels[i]} : ${fcfa(v)} FCFA`}</title></circle>
+      <path d={zone} fill="url(#zoneNAI)" />
+      <path d={ligne} fill="none" stroke={VERT} strokeWidth="2.5" strokeLinejoin="round" />
+      {pts.map(([a, b], i) => (
+        <circle key={i} cx={a} cy={b} r="3.2" fill="#fff" stroke={VERT} strokeWidth="2">
+          <title>{`${graph.labels[i]} : ${fcfa(graph.values[i])} FCFA`}</title>
+        </circle>
       ))}
-      {graph.labels.map((l, i) => (i % Math.ceil(n / 8) === 0 ? (
-        <text key={i} x={x(i)} y={H - 6} fontSize="10" fill="#6b7280" textAnchor="middle">{l}</text>
+      {graph.labels.map((l, i) => (i % pasX === 0 ? (
+        <text key={i} x={x(i)} y={H - 8} fontSize="10" fill="#6b7280" textAnchor="middle">{l}</text>
       ) : null))}
+      <g transform={`translate(${PG},4)`}>
+        <rect width="10" height="10" rx="2" fill={VERT} />
+        <text x="16" y="9" fontSize="10" fill="#374151">Ventes (TTC)</text>
+      </g>
     </svg>
   );
 }
@@ -168,12 +191,20 @@ export default function AssistantNAI() {
 
   const nouvelle = () => setMessages([MESSAGE_ACCUEIL]);
 
-  const exporter = () => {
-    const texte = messages.map((m) => `${m.role === 'user' ? 'Vous' : 'Assistant'} : ${m.content}`).join('\n\n');
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([texte], { type: 'text/plain;charset=utf-8' }));
-    a.download = 'conversation-assistant.txt';
-    a.click();
+  // Export PDF du rapport (memes droits que le panneau), telecharge avec le jeton de connexion
+  const exporter = async () => {
+    try {
+      const { data, headers } = await axios.get(`${API}/assistant/export`, { params: { p: periode }, responseType: 'blob' });
+      const nom = /filename="([^"]+)"/.exec(headers['content-disposition'] || '')?.[1] || 'rapport-activite.pdf';
+      const url = URL.createObjectURL(new Blob([data], { type: 'application/pdf' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = nom;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 10000);
+    } catch (e) {
+      setMessages((m) => [...m, { role: 'assistant', content: `Export impossible : ${e.response?.data?.error || e.message}` }]);
+    }
   };
 
   const k = kpis || {};
@@ -235,7 +266,10 @@ export default function AssistantNAI() {
       <section style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, display: 'flex', flexDirection: 'column', minHeight: 560, overflow: 'hidden' }}>
         <header style={{ padding: 14, borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
           <div>
-            <h1 style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>Assistant IA</h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <img src="/logo-nai.jpg" alt="NAI" style={{ height: 38, width: 'auto', borderRadius: 4 }} />
+              <h1 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: VERT_FONCE }}>Assistant IA</h1>
+            </div>
             <p style={{ margin: '2px 0 0', fontSize: 12, color: '#6b7280' }}>Calculé sur votre serveur, à partir des données de votre entreprise uniquement.</p>
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'flex-start' }}>
