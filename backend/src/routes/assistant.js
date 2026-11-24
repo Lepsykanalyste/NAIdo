@@ -133,11 +133,32 @@ router.get('/kpis', auth, async (req, res) => {
     const role = String(req.user?.role || '');
     const periodes = { month: 'ce mois', last_month: 'mois dernier', days30: '30 derniers jours', year: 'cette annee' };
     const periode = periodeDe(norm(periodes[req.query.p] || 'ce mois'));
-    const out = { periode: periode.libelle, ca: null, ventes: null, achats: null, commandes: null, graph: null };
+    const out = { periode: periode.libelle, ca: null, ventes: null, achats: null, commandes: null, graph: null,
+      produits: null, paiements: null, points: null };
     if (accesA(role, '/api/vente')) {
       const { rows } = await db.query("SELECT COUNT(*)::int AS n, COALESCE(SUM(montant_ttc),0)::float AS m FROM ventes WHERE date_vente::date BETWEEN $1 AND $2 AND statut <> 'annule'", [periode.debut, periode.fin]);
       out.ca = Math.round(rows[0].m); out.ventes = rows[0].n;
       out.graph = await serieGraphique('ventes', periode);
+      // Produits les plus vendus (chiffre d'affaires TTC par designation)
+      const top = await db.query(`SELECT l.designation AS nom, COALESCE(SUM(l.montant_ttc),0)::float AS v
+        FROM lignes_vente l JOIN ventes v ON v.id = l.vente_id
+        WHERE v.date_vente::date BETWEEN $1 AND $2 AND v.statut <> 'annule'
+        GROUP BY l.designation ORDER BY 2 DESC LIMIT 5`, [periode.debut, periode.fin]);
+      out.produits = top.rows.map((r) => ({ nom: r.nom, valeur: Math.round(r.v) }));
+      // Modes de paiement
+      const pay = await db.query(`SELECT COALESCE(mode_paiement, 'non renseigné') AS nom, COALESCE(SUM(montant_ttc),0)::float AS v
+        FROM ventes WHERE date_vente::date BETWEEN $1 AND $2 AND statut <> 'annule'
+        GROUP BY 1 ORDER BY 2 DESC`, [periode.debut, periode.fin]);
+      out.paiements = pay.rows.map((r) => ({ nom: r.nom, valeur: Math.round(r.v) }));
+      // Points clés
+      const meilleur = out.graph && out.graph.values.length
+        ? out.graph.labels[out.graph.values.indexOf(Math.max(...out.graph.values))] : null;
+      out.points = [
+        `Chiffre d'affaires TTC : ${fcfa(out.ca)} FCFA sur ${out.ventes} vente(s).`,
+        out.ventes ? `Panier moyen : ${fcfa(out.ca / out.ventes)} FCFA.` : 'Panier moyen : —.',
+        meilleur ? `Meilleur jour : ${meilleur}.` : null,
+        out.produits && out.produits.length ? `Produit en tête : ${out.produits[0].nom}.` : null,
+      ].filter(Boolean);
     }
     if (accesA(role, '/api/achat')) {
       const { rows } = await db.query("SELECT COUNT(*)::int AS n, COALESCE(SUM(montant_ttc),0)::float AS m FROM commandes_achat WHERE date_commande::date BETWEEN $1 AND $2 AND statut <> 'annule'", [periode.debut, periode.fin]);

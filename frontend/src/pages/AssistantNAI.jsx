@@ -35,6 +35,84 @@ function Graphique({ graph }) {
   );
 }
 
+const COULEURS = [VERT, '#0369a1', '#d97706', '#7c3aed', '#dc2626', '#0d9488'];
+
+// Courbe d'evolution (SVG) : meme rendu que le graphique « Évolution » de LEINAD
+function Courbe({ graph }) {
+  const W = 600, H = 180, P = 28;
+  const max = Math.max(1, ...graph.values);
+  const n = graph.values.length;
+  const x = (i) => (n <= 1 ? W / 2 : P + (i * (W - 2 * P)) / (n - 1));
+  const y = (v) => H - P - (v / max) * (H - 2 * P);
+  const points = graph.values.map((v, i) => `${x(i)},${y(v)}`).join(' ');
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto' }} role="img" aria-label={graph.title}>
+      {[0, 0.5, 1].map((f) => (
+        <line key={f} x1={P} x2={W - P} y1={y(max * f)} y2={y(max * f)} stroke="#f3f4f6" />
+      ))}
+      <polyline fill="none" stroke={VERT} strokeWidth="2.5" points={points} />
+      {graph.values.map((v, i) => (
+        <circle key={i} cx={x(i)} cy={y(v)} r="3" fill={VERT}><title>{`${graph.labels[i]} : ${fcfa(v)} FCFA`}</title></circle>
+      ))}
+      {graph.labels.map((l, i) => (i % Math.ceil(n / 8) === 0 ? (
+        <text key={i} x={x(i)} y={H - 6} fontSize="10" fill="#6b7280" textAnchor="middle">{l}</text>
+      ) : null))}
+    </svg>
+  );
+}
+
+// Barres horizontales : produits les plus vendus
+function BarresH({ items }) {
+  const max = Math.max(1, ...items.map((i) => i.valeur));
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {items.map((it, i) => (
+        <div key={i}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '70%' }}>{it.nom}</span>
+            <span style={{ fontVariantNumeric: 'tabular-nums' }}>{fcfa(it.valeur)}</span>
+          </div>
+          <div style={{ background: '#f3f4f6', borderRadius: 6, height: 8, marginTop: 3 }}>
+            <div style={{ width: `${(it.valeur / max) * 100}%`, background: COULEURS[i % COULEURS.length], height: 8, borderRadius: 6 }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// Anneau : modes de paiement
+function Anneau({ items }) {
+  const total = items.reduce((a, b) => a + b.valeur, 0) || 1;
+  let cumul = 0;
+  const R = 40, C = 2 * Math.PI * R;
+  return (
+    <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+      <svg viewBox="0 0 100 100" width="120" height="120" role="img" aria-label="Modes de paiement">
+        <circle cx="50" cy="50" r={R} fill="none" stroke="#f3f4f6" strokeWidth="14" />
+        {items.map((it, i) => {
+          const longueur = (it.valeur / total) * C;
+          const decalage = -(cumul / total) * C;
+          cumul += it.valeur;
+          return (
+            <circle key={i} cx="50" cy="50" r={R} fill="none" stroke={COULEURS[i % COULEURS.length]} strokeWidth="14"
+              strokeDasharray={`${longueur} ${C - longueur}`} strokeDashoffset={decalage} transform="rotate(-90 50 50)" />
+          );
+        })}
+      </svg>
+      <div style={{ fontSize: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        {items.map((it, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 10, height: 10, borderRadius: 2, background: COULEURS[i % COULEURS.length] }} />
+            <span>{it.nom}</span>
+            <span style={{ color: '#6b7280', fontVariantNumeric: 'tabular-nums' }}>{Math.round((it.valeur / total) * 100)} %</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function Carte({ titre, valeur, sous }) {
   return (
     <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 14 }}>
@@ -125,9 +203,31 @@ export default function AssistantNAI() {
           <Carte titre="Commandes d'achat" valeur={k.commandes === undefined || k.commandes === null ? sansAcces : k.commandes} />
         </div>
 
+        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 14, marginBottom: 12 }}>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>Évolution des ventes</div>
+          {k.graph ? <Courbe graph={k.graph} /> : <div style={{ fontSize: 13, color: '#9ca3af', padding: '40px 0', textAlign: 'center' }}>Aucune donnée accessible pour cette période.</div>}
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 12, marginBottom: 12 }}>
+          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 14 }}>
+            <div style={{ fontWeight: 700, marginBottom: 10 }}>Produits les plus vendus</div>
+            {k.produits === null || k.produits === undefined
+              ? <div style={{ fontSize: 12, color: '#9ca3af' }}>Accès limité</div>
+              : k.produits.length ? <BarresH items={k.produits} /> : <div style={{ fontSize: 12, color: '#9ca3af' }}>Aucune vente sur la période.</div>}
+          </div>
+          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 14 }}>
+            <div style={{ fontWeight: 700, marginBottom: 10 }}>Modes de paiement</div>
+            {k.paiements === null || k.paiements === undefined
+              ? <div style={{ fontSize: 12, color: '#9ca3af' }}>Accès limité</div>
+              : k.paiements.length ? <Anneau items={k.paiements} /> : <div style={{ fontSize: 12, color: '#9ca3af' }}>Aucune vente sur la période.</div>}
+          </div>
+        </div>
+
         <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 14 }}>
-          <div style={{ fontWeight: 700, marginBottom: 4 }}>Évolution par jour</div>
-          {k.graph ? <Graphique graph={k.graph} /> : <div style={{ fontSize: 13, color: '#9ca3af', padding: '40px 0', textAlign: 'center' }}>Aucune donnée accessible pour cette période.</div>}
+          <div style={{ fontWeight: 700, marginBottom: 8 }}>Points clés de la période</div>
+          {k.points === null || k.points === undefined
+            ? <div style={{ fontSize: 12, color: '#9ca3af' }}>Accès limité</div>
+            : <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.7 }}>{k.points.map((p, i) => <li key={i}>{p}</li>)}</ul>}
         </div>
       </section>
 
