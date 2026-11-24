@@ -275,7 +275,7 @@ function DetailCommande({ id, role, onClose, onChange, onReceptionner, onHistori
         ))}
       </div>
       <div style={{ marginBottom: 12, display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-        <Badge s={c.statut} />
+        <Badge s={c.validation === 'validee' && c.statut === 'brouillon' ? 'valide' : c.statut} />
         {c.confirme_at && <span style={{ fontSize: 12, color: '#15803d' }}>✓ Validée par la direction le {jour(c.confirme_at)}</span>}
         {c.statut === 'envoye' && <span style={{ fontSize: 12, color: '#92400e' }}>En attente de validation de la direction</span>}
       </div>
@@ -738,7 +738,7 @@ export default function AchatsV2() {
                     <td style={tdStyle}>{jour(c.date_commande)}</td>
                     <td style={tdStyle}>{jour(c.date_livraison_prevue)}</td>
                     <td style={{ ...tdStyle, fontWeight: 700 }}>{fcfa(c.montant_ttc)}</td>
-                    <td style={tdStyle}><Badge s={c.statut} /></td>
+                    <td style={tdStyle}><Badge s={c.validation === 'validee' && c.statut === 'brouillon' ? 'valide' : c.statut} /></td>
                     <td style={tdStyle}>
                       <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
                         <Btn onClick={() => setDetail(c.id)}>👁 Voir</Btn>
