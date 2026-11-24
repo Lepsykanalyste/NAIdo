@@ -17,6 +17,14 @@ const nombre = (n, d = 0) => {
   const groupes = entier.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
   return (v < 0 ? '-' : '') + groupes + (d > 0 ? ',' + dec : '');
 };
+// Quantites : pas de decimales si entier (1 000) ; sinon les decimales utiles seulement (1 000,1)
+const quantite = q => {
+  const v = parseFloat(q);
+  if (!Number.isFinite(v)) return '—';
+  const r = Math.round(v * 1000) / 1000;
+  const dec = Number.isInteger(r) ? 0 : (String(r).split('.')[1] || '').length;
+  return nombre(r, dec);
+};
 const date = d => d ? new Date(d).toLocaleDateString('fr-FR') : '—';
 
 // Totaux recalcules a partir des lignes : HT = quantite x prix unitaire ; TVA au taux du bon
@@ -87,9 +95,10 @@ function pdfBonAchat(cmd, lignes, urlQr, sign = {}) {
       // ----- Tableau des lignes -----
       let y = 200;
       const cols = [
-        { t: 'Code', x: G, w: 70, al: 'left' },
-        { t: 'Désignation', x: G + 70, w: 215, al: 'left' },
-        { t: 'Quantité', x: G + 285, w: 60, al: 'right' },
+        { t: 'Code', x: G, w: 62, al: 'left' },
+        { t: 'Désignation', x: G + 62, w: 175, al: 'left' },
+        { t: 'Unité', x: G + 237, w: 50, al: 'center' },
+        { t: 'Quantité', x: G + 287, w: 58, al: 'right' },
         { t: 'Prix HT', x: G + 345, w: 70, al: 'right' },
         { t: 'Total HT', x: G + 415, w: largeur - 415, al: 'right' },
       ];
@@ -103,7 +112,8 @@ function pdfBonAchat(cmd, lignes, urlQr, sign = {}) {
         const vals = [
           l.article_code || '',
           l.designation || '',
-          nombre(l.quantite_commandee, 3),
+          l.unite_code || '',
+          quantite(l.quantite_commandee),
           nombre(l.prix_unitaire_ht),
           nombre((parseFloat(l.quantite_commandee) || 0) * (parseFloat(l.prix_unitaire_ht) || 0)),
         ];

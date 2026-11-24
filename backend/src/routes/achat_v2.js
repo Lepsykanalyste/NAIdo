@@ -285,7 +285,7 @@ router.get('/commandes/:id/pdf', authOuLien, async (req, res, next) => {
        WHERE ca.id = $1`, [req.params.id]);
     if (!cmd) return res.status(404).json({ error: 'Commande introuvable' });
     const { rows: lignes } = await db.query(
-      'SELECT l.*, a.code AS article_code FROM lignes_achat l LEFT JOIN articles a ON a.id = l.article_id WHERE l.commande_id = $1 ORDER BY l.created_at', [cmd.id]);
+      'SELECT l.*, a.code AS article_code, um.code AS unite_code FROM lignes_achat l LEFT JOIN articles a ON a.id = l.article_id LEFT JOIN unites_mesure um ON um.id = l.unite_id WHERE l.commande_id = $1 ORDER BY l.created_at', [cmd.id]);
     const base = process.env.APP_BASE_URL || `${req.protocol}://${req.get('host')}`;
     const urlQr = `${base}/api/achat/commandes/${cmd.id}/pdf?t=${lienSigne.signer(cmd.id)}`;
     const sign = { achat: await signatureDe(cmd.cree_par), direction: await signatureDe(cmd.validee_par) };
@@ -506,8 +506,8 @@ router.post('/commandes/:id/envoyer', auth, async (req, res) => {
     if (mode === 'mail') {
       const adresse = String(req.body?.email || cmd.fournisseur_email || '').trim();
       if (!adresse) return res.status(400).json({ error: 'Adresse e-mail du fournisseur manquante' });
-const lignes = (await db.query(
-        'SELECT designation, quantite_commandee, prix_unitaire_ht, montant_ttc FROM lignes_achat WHERE commande_id = $1 ORDER BY created_at', [cmd.id])).rows;
+      const lignes = (await db.query(
+        'SELECT l.*, a.code AS article_code, um.code AS unite_code FROM lignes_achat l LEFT JOIN articles a ON a.id = l.article_id LEFT JOIN unites_mesure um ON um.id = l.unite_id WHERE l.commande_id = $1 ORDER BY l.created_at', [cmd.id])).rows;
       const lignesHtml = lignes.map(l => `<tr><td>${esc(l.designation)}</td><td style="text-align:right">${esc(l.quantite_commandee)}</td><td style="text-align:right">${esc(l.prix_unitaire_ht)}</td><td style="text-align:right">${esc(l.montant_ttc)}</td></tr>`).join('');
       const html = `<div style="font-family:Arial,sans-serif"><p>Bonjour ${esc(cmd.raison_sociale || '')},</p>`
         + `<p>Veuillez trouver ci-dessous notre bon de commande <b>${esc(cmd.numero_commande)}</b>.</p>`
