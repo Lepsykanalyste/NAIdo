@@ -2430,8 +2430,9 @@ async def update_parametre(cle: str, payload: dict, user=Depends(get_current_use
                 """UPDATE articles a
                       SET poids_theorique_kg = ROUND(((a.longueur_mm / 100) * (a.largeur_mm / 100) * a.epaisseur_mm * $1::float8
                             * (CASE WHEN LOWER(um.code) = 'kg' THEN 1 ELSE 2 END))::numeric, 4)
-                     FROM unites_mesure um
+                     FROM unites_mesure um, ateliers at
                     WHERE um.id = a.unite_mesure_id
+                      AND at.id = a.atelier_production_id AND UPPER(at.code) = 'AT3'
                       AND LOWER(um.code) IN ('pce', 'pc', 'piece', 'pièce', 'kg')
                       AND a.longueur_mm > 0 AND a.largeur_mm > 0 AND a.epaisseur_mm > 0""",
                 float(valeur)

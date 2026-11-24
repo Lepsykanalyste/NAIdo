@@ -3792,8 +3792,10 @@ function Articles() {
                   const u = unites.find((x) => String(x.id) === String(form.unite_mesure_id));
                   const code = (u?.code || '').toLowerCase();
                   const facteur = code === 'kg' ? 1 : (code === 'pce' || code === 'pc' || code === 'piece' || code === 'pièce') ? 2 : null;
+                  // Calcul réservé à l'atelier AT3 : pour les autres ateliers, le poids reste saisi à la main
+                  const atelierAT3 = (ateliers.find((x) => String(x.id) === String(form.atelier_production_id))?.code || '').toUpperCase() === 'AT3';
                   const L = parseFloat(form.longueur_mm), l = parseFloat(form.largeur_mm), e = parseFloat(form.epaisseur_mm);
-                  const calcule = facteur && L > 0 && l > 0 && e > 0 ? Math.round((L / 100) * (l / 100) * e * densiteAtelier * facteur * 10000) / 10000 : null;
+                  const calcule = atelierAT3 && facteur && L > 0 && l > 0 && e > 0 ? Math.round((L / 100) * (l / 100) * e * densiteAtelier * facteur * 10000) / 10000 : null;
                   return (
                     <>
                       <InputField label="Poids théorique (kg)" value={calcule !== null ? String(calcule) : form.poids_theorique_kg}
@@ -3801,7 +3803,9 @@ function Articles() {
                       <div style={{ gridColumn:'1 / -1', fontSize:11, color: calcule !== null ? '#15803d' : '#6b7280', marginTop:-4, marginBottom:8 }}>
                         {calcule !== null
                           ? `Calculé : longueur/100 × largeur/100 × épaisseur × densité ${densiteAtelier} × ${facteur} (unité ${u?.code}).`
-                          : 'Se calcule automatiquement dès que longueur, largeur, épaisseur et une unité pièce ou Kg sont renseignées.'}
+                          : atelierAT3
+                            ? 'Se calcule automatiquement dès que longueur, largeur, épaisseur et une unité pièce ou Kg sont renseignées.'
+                            : 'Poids saisi à la main (calcul automatique réservé à l\'atelier AT3).'}
                       </div>
                     </>
                   );
