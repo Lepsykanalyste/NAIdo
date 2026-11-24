@@ -33,6 +33,8 @@ const correspond = (motif, chemin) => {              // motif = debut du chemin,
   const m = segs(motif), c = segs(chemin);
   return m.length <= c.length && m.every((s, i) => s === '*' || s === c[i]);
 };
+// Fixe dans le code (ne depend pas de la base) : ouvert a tout utilisateur connecte
+const PERSONNELS = ['/api/notifications', '/api/profil', '/api/mail'];
 const estLecture = (m) => ['GET', 'HEAD', 'OPTIONS'].includes(String(m).toUpperCase());
 const methodeOk = (regle, m) => !regle.methodes || regle.methodes.includes(String(m).toUpperCase());
 const normaliserRole = (r) => { r = String(r || '').toLowerCase().trim(); return (POLITIQUE.alias || {})[r] || r; };
@@ -46,6 +48,8 @@ function decider(roleBrut, methode, chemin) {
   if (role === 'super_admin') return { autorise: true, raison: 'super_admin' };
   if (POLITIQUE.super_admin_seulement.some((r) => methodeOk(r, methode) && correspond(r.motif, chemin))) return { autorise: false, raison: 'reserve au super_admin' };
   if (POLITIQUE.tous_connectes.some((r) => methodeOk(r, methode) && correspond(r.motif, chemin))) return { autorise: true, raison: 'tous connectes' };
+  // Espaces personnels : chaque utilisateur connecte ne voit que ses propres donnees (notifications de son role, photo, signature, compte mail)
+  if (PERSONNELS.some((m) => correspond(m, chemin))) return { autorise: true, raison: 'espace personnel' };
   if (role === 'directeur') return { autorise: true, raison: 'directeur' };
   let meilleure = null;                                // regle la plus precise = celle qui a le plus de segments
   for (const r of POLITIQUE.regles) {
