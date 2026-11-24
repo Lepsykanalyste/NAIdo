@@ -30,6 +30,10 @@ router.get('/', auth, async (req, res) => {
       await compter("SELECT COUNT(*)::int AS n FROM non_conformites WHERE statut NOT IN ('clos','annule') AND gravite IN ('critique','bloquante')"));
   }
   if (['achat', ...ROLES_DIRECTION].includes(role)) {
+    ajouter('achat', 'Bons validés à envoyer au fournisseur',
+      await compter("SELECT COUNT(*)::int AS n FROM commandes_achat WHERE validation = 'validee' AND statut = 'brouillon'"));
+  }
+  if (['achat', ...ROLES_DIRECTION].includes(role)) {
     ajouter('achat', 'Commandes à réceptionner',
       await compter("SELECT COUNT(*)::int AS n FROM commandes_achat WHERE statut IN ('confirme','receptionne_partiel')"));
     ajouter('achat', "Demandes d'achat en attente",

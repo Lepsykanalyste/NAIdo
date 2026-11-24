@@ -52,7 +52,7 @@ async function enregistrerCompte(userId, { host, port, user, pass, expediteur })
 }
 
 // Envoi depuis le compte de l'utilisateur connecte
-async function envoyerDepuisCompte(userId, { to, subject, html }) {
+async function envoyerDepuisCompte(userId, { to, subject, html, attachments }) {
   const { rows } = await db.query('SELECT * FROM comptes_mail WHERE user_id = $1', [userId]);
   const c = rows[0];
   if (!c) throw new Error("Aucun compte e-mail configure : renseignez-le dans « Mon e-mail »");
@@ -61,7 +61,7 @@ async function envoyerDepuisCompte(userId, { to, subject, html }) {
     host: c.smtp_host, port, secure: port === 465,
     auth: { user: c.smtp_user, pass: dechiffrer(c.smtp_pass_chiffre) },
   });
-  await transport.sendMail({ from: c.adresse_expediteur, to, subject, html });
+  await transport.sendMail({ from: c.adresse_expediteur, to, subject, html, attachments });
 }
 
 module.exports = { lireCompte, enregistrerCompte, envoyerDepuisCompte };

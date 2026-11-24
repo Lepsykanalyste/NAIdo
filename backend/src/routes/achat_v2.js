@@ -20,6 +20,8 @@ const router  = express.Router();
 const db      = require('../config/db');
 const { auth } = require('../middleware/auth');
 const { envoyerDepuisCompte } = require('../utils/mailcompte');
+const lienSigne = require('../utils/lienSigne');
+const { pdfBonAchat } = require('../utils/pdfBonAchat');
 const { peutVoirPrix, retirerPrix } = require('../middleware/prix');
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -256,52 +258,32 @@ router.get('/commandes/:id/receptions', auth, async (req, res, next) => {
 });
 
 // GET /commandes/:id/pdf — bon de commande
-router.get('/commandes/:id/pdf', auth, async (req, res, next) => {
-  if (!peutVoirPrix(req.user)) return res.status(403).json({ error: 'Impression réservée aux rôles autorisés à voir les prix' });
+// Bon de commande en PDF. Le QR code pointe vers un lien signe (lisible sans connexion, valable 30 jours).
+const authOuLien = (req, res, next) => {
+  if (req.query.t && lienSigne.verifier(req.params.id, req.query.t)) { req.lienSigne = true; return next(); }
+  return auth(req, res, next);
+};
+router.get('/commandes/:id/pdf', authOuLien, async (req, res, next) => {
+  if (!req.lienSigne && !peutVoirPrix(req.user)) return res.status(403).json({ error: 'Impression réservée aux rôles autorisés à voir les prix' });
   if (!UUID.test(req.params.id)) return next();
   try {
-    const c = await db.query(`
-      SELECT ca.*, f.raison_sociale, f.adresse, f.telephone, f.email, f.ville,
-             (u.prenom || ' ' || u.nom) AS cree_par_nom, (d.prenom || ' ' || d.nom) AS confirme_par_nom
-      FROM commandes_achat ca
-      LEFT JOIN fournisseurs f ON f.id = ca.fournisseur_id
-      LEFT JOIN utilisateurs u ON u.id = ca.cree_par
-      LEFT JOIN utilisateurs d ON d.id = ca.confirme_par
-      WHERE ca.id = $1`, [req.params.id]);
-    if (!c.rows.length) return res.status(404).send('<h1>Commande introuvable</h1>');
-    const cmd = c.rows[0];
-    const { rows: lg } = await db.query(`SELECT l.*, a.code AS article_code FROM lignes_achat l LEFT JOIN articles a ON a.id=l.article_id WHERE l.commande_id=$1 ORDER BY l.created_at, l.id`, [cmd.id]);
-    const rowsHtml = lg.map(l => `<tr><td class="b">${esc(l.article_code || '')}</td><td>${esc(l.designation)}</td>
-      <td class="r">${fmt(l.quantite_commandee, 3)}</td><td class="r">${fmt(l.prix_unitaire_ht)}</td><td class="r b">${fmt(l.montant_ht)}</td></tr>`).join('');
-    const valide = cmd.confirme_at
-      ? `Valide par ${esc(cmd.confirme_par_nom || 'la direction')} le ${dateFr(cmd.confirme_at)}`
-      : (cmd.statut === 'envoye' ? 'En attente de validation de la direction' : '');
-    const body = `
-      <div class="header"><div><div class="company">NAI</div><div style="font-size:7pt;color:#6b7280">Service Achats</div></div>
-        <div style="text-align:right;font-size:7.5pt;color:#6b7280">Date : ${dateFr(cmd.date_commande)}</div></div>
-      <div class="banner">Bon de commande</div>
-      <div class="num">${esc(cmd.numero_commande || '')}</div>
-      <div class="grid">
-        <div class="sec"><div class="sec-h">Fournisseur</div><div class="sec-b">
-          <div class="row"><span class="val">${esc(cmd.raison_sociale || '—')}</span></div>
-          <div class="row"><span class="lbl">Adresse</span><span class="val">${esc([cmd.adresse, cmd.ville].filter(Boolean).join(', ') || '—')}</span></div>
-          <div class="row"><span class="lbl">Contact</span><span class="val">${esc([cmd.telephone, cmd.email].filter(Boolean).join(' / ') || '—')}</span></div></div></div>
-        <div class="sec"><div class="sec-h">Commande</div><div class="sec-b">
-          <div class="row"><span class="lbl">Livraison prevue</span><span class="val">${dateFr(cmd.date_livraison_prevue)}</span></div>
-          <div class="row"><span class="lbl">Ref. fournisseur</span><span class="val">${esc(cmd.reference_fournisseur || '—')}</span></div>
-          <div class="row"><span class="lbl">Statut</span><span class="val">${esc(cmd.statut)}</span></div></div></div>
-      </div>
-      <table><thead><tr><th>Code</th><th>Designation</th><th class="r">Quantite</th><th class="r">Prix HT</th><th class="r">Total HT</th></tr></thead><tbody>${rowsHtml}</tbody></table>
-      <div class="tots"><div><span>Total HT</span><span>${fmt(cmd.montant_ht)} FCFA</span></div>
-        <div><span>TVA (${fmt(cmd.taux_tva, 0)} %)</span><span>${fmt(cmd.montant_tva)} FCFA</span></div>
-        <div class="ttc"><span>Total TTC</span><span>${fmt(cmd.montant_ttc)} FCFA</span></div></div>
-      ${cmd.notes ? `<div class="sec" style="margin-top:8px"><div class="sec-h">Notes</div><div class="sec-b">${esc(cmd.notes)}</div></div>` : ''}
-      <div class="sigs">
-        <div class="sig"><b>SERVICE ACHAT</b><br>${esc(cmd.cree_par_nom || '')}<br><br>Signature :</div>
-        <div class="sig"><b>DIRECTION</b><br>${valide}<br><br>Signature :</div>
-      </div>`;
-    sendHtml(res, page(`BC ${cmd.numero_commande}`, body));
-  } catch (e) { console.error('[ACHAT-V2] pdf bc', e); res.status(500).send('<h1>Erreur PDF : ' + esc(e.message) + '</h1>'); }
+    const { rows: [cmd] } = await db.query(
+      `SELECT ca.*, f.raison_sociale, f.adresse, f.telephone, f.email, f.ville, (u.prenom || ' ' || u.nom) AS cree_par_nom
+       FROM commandes_achat ca
+       LEFT JOIN fournisseurs f ON f.id = ca.fournisseur_id
+       LEFT JOIN utilisateurs u ON u.id = ca.cree_par
+       WHERE ca.id = $1`, [req.params.id]);
+    if (!cmd) return res.status(404).json({ error: 'Commande introuvable' });
+    const { rows: lignes } = await db.query(
+      'SELECT l.*, a.code AS article_code FROM lignes_achat l LEFT JOIN articles a ON a.id = l.article_id WHERE l.commande_id = $1 ORDER BY l.created_at', [cmd.id]);
+    const base = process.env.APP_BASE_URL || `${req.protocol}://${req.get('host')}`;
+    const urlQr = `${base}/api/achat/commandes/${cmd.id}/pdf?t=${lienSigne.signer(cmd.id)}`;
+    const pdf = await pdfBonAchat(cmd, lignes, urlQr);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${cmd.numero_commande}.pdf"`);
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(pdf);
+  } catch (e) { console.error('[ACHAT-V2] pdf bc', e.message); res.status(500).json({ error: 'Erreur PDF' }); }
 });
 
 // GET /receptions/:id/pdf — bordereau de reception
@@ -520,7 +502,9 @@ const lignes = (await db.query(
         + `<p>Veuillez trouver ci-dessous notre bon de commande <b>${esc(cmd.numero_commande)}</b>.</p>`
         + `<table style="border-collapse:collapse;width:100%" border="1" cellpadding="6"><thead><tr><th>Designation</th><th>Quantite</th><th>P.U. HT</th><th>Montant TTC</th></tr></thead><tbody>${lignesHtml}</tbody></table>`
         + `<p><b>Total HT : ${esc(cmd.montant_ht)} FCFA &mdash; Total TTC : ${esc(cmd.montant_ttc)} FCFA</b></p><p>NAI &mdash; Service achats</p></div>`;
-      await envoyerDepuisCompte(req.user.id, { to: adresse, subject: 'Bon de commande ' + cmd.numero_commande + ' - NAI', html });
+      const baseEnvoi = process.env.APP_BASE_URL || `${req.protocol}://${req.get('host')}`;
+      const pdfBon = await pdfBonAchat(cmd, lignes, `${baseEnvoi}/api/achat/commandes/${cmd.id}/pdf?t=${lienSigne.signer(cmd.id)}`);
+      await envoyerDepuisCompte(req.user.id, { to: adresse, subject: 'Bon de commande ' + cmd.numero_commande + ' - NAI', html, attachments: [{ filename: cmd.numero_commande + '.pdf', content: pdfBon, contentType: 'application/pdf' }] });
     }
     // Un bon envoye est deja valide par la direction : il passe a « confirme », pret a etre receptionne
     await db.query("UPDATE commandes_achat SET statut = 'confirme' WHERE id = $1 AND statut = 'brouillon'", [cmd.id]);
