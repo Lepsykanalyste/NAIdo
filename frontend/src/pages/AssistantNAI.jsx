@@ -42,7 +42,7 @@ const COULEURS = [VERT, ROUGE, VERT_FONCE, '#f59e0b', '#0d9488', '#7c3aed'];
 // Courbe d'evolution (SVG) : ligne, zone colorée, axe des valeurs et des dates, comme le graphique LEINAD
 function Courbe({ graph }) {
   const W = 640, H = 230, PG = 58, PD = 14, PH = 16, PB = 28;
-  const max0 = Math.max(1, ...graph.values);
+  const max0 = Math.max(1, ...graph.values, ...(graph.encaisse || [0]));
   const pas = Math.pow(10, Math.floor(Math.log10(max0)));
   const max = Math.ceil(max0 / pas) * pas;
   const n = graph.values.length;
@@ -51,6 +51,10 @@ function Courbe({ graph }) {
   const pts = graph.values.map((v, i) => [x(i), y(v)]);
   const ligne = pts.map(([a, b], i) => `${i ? 'L' : 'M'}${a.toFixed(1)},${b.toFixed(1)}`).join(' ');
   const zone = `${ligne} L${x(n - 1).toFixed(1)},${H - PB} L${x(0).toFixed(1)},${H - PB} Z`;
+  // Deuxieme courbe : montants encaisses (pointillés rouges), comme la courbe des avoirs de LEINAD
+  const ligneE = graph.encaisse
+    ? graph.encaisse.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ')
+    : null;
   const pasX = Math.ceil(n / 8);
   return (
     <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 'auto' }} role="img" aria-label={graph.title}>
@@ -68,6 +72,7 @@ function Courbe({ graph }) {
       ))}
       <path d={zone} fill="url(#zoneNAI)" />
       <path d={ligne} fill="none" stroke={VERT} strokeWidth="2.5" strokeLinejoin="round" />
+      {ligneE && <path d={ligneE} fill="none" stroke={ROUGE} strokeWidth="2" strokeDasharray="6 4" strokeLinejoin="round" />}
       {pts.map(([a, b], i) => (
         <circle key={i} cx={a} cy={b} r="3.2" fill="#fff" stroke={VERT} strokeWidth="2">
           <title>{`${graph.labels[i]} : ${fcfa(graph.values[i])} FCFA`}</title>
@@ -79,6 +84,10 @@ function Courbe({ graph }) {
       <g transform={`translate(${PG},4)`}>
         <rect width="10" height="10" rx="2" fill={VERT} />
         <text x="16" y="9" fontSize="10" fill="#374151">Ventes (TTC)</text>
+        {graph.encaisse && (<g transform="translate(110,0)">
+          <rect width="10" height="10" rx="2" fill={ROUGE} />
+          <text x="16" y="9" fontSize="10" fill="#374151">Encaissé</text>
+        </g>)}
       </g>
     </svg>
   );
@@ -235,7 +244,7 @@ export default function AssistantNAI() {
         </div>
 
         <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 14, marginBottom: 12 }}>
-          <div style={{ fontWeight: 700, marginBottom: 4 }}>Évolution des ventes</div>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>Évolution des ventes et des encaissements</div>
           {k.graph ? <Courbe graph={k.graph} /> : <div style={{ fontSize: 13, color: '#9ca3af', padding: '40px 0', textAlign: 'center' }}>Aucune donnée accessible pour cette période.</div>}
         </div>
 
@@ -254,11 +263,19 @@ export default function AssistantNAI() {
           </div>
         </div>
 
-        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 14 }}>
-          <div style={{ fontWeight: 700, marginBottom: 8 }}>Points clés de la période</div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 12, marginBottom: 12 }}>
+          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 14 }}>
+            <div style={{ fontWeight: 700, marginBottom: 10 }}>Statut des ventes</div>
+            {k.statuts === null || k.statuts === undefined
+              ? <div style={{ fontSize: 12, color: '#9ca3af' }}>Accès limité</div>
+              : k.statuts.length ? <BarresH items={k.statuts} /> : <div style={{ fontSize: 12, color: '#9ca3af' }}>Aucune vente sur la période.</div>}
+          </div>
+          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 14 }}>
+            <div style={{ fontWeight: 700, marginBottom: 8 }}>Points clés de la période</div>
           {k.points === null || k.points === undefined
             ? <div style={{ fontSize: 12, color: '#9ca3af' }}>Accès limité</div>
             : <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, lineHeight: 1.7 }}>{k.points.map((p, i) => <li key={i}>{p}</li>)}</ul>}
+          </div>
         </div>
       </section>
 

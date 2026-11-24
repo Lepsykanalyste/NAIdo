@@ -117,14 +117,18 @@ async function serieGraphique(source, periode) {
   const jours = (new Date(periode.fin) - new Date(periode.debut)) / 86400000 + 1;
   const parMois = jours > 62;
   const regroupement = parMois ? `to_char(${colDate}::date, 'YYYY-MM')` : `${colDate}::date`;
-  const sql = `SELECT ${regroupement} AS cle, COALESCE(SUM(montant_ttc),0)::float AS v FROM ${table}
+  // Pour les ventes, on ajoute le montant encaisse (deuxieme courbe, comme les avoirs dans LEINAD)
+  const encaisse = source === 'ventes' ? ', COALESCE(SUM(montant_paye),0)::float AS e' : '';
+  const sql = `SELECT ${regroupement} AS cle, COALESCE(SUM(montant_ttc),0)::float AS v${encaisse} FROM ${table}
                WHERE ${colDate}::date BETWEEN $1 AND $2 AND statut <> 'annule'
                GROUP BY 1 ORDER BY 1`;
   const { rows } = await db.query(sql, [periode.debut, periode.fin]);
   const title = `${source === 'achats' ? 'Achats' : 'Ventes'} (TTC) — ${periode.libelle}`;
   const labels = rows.map((r) => (parMois ? String(r.cle) : String(r.cle).slice(8, 10) + '/' + String(r.cle).slice(5, 7)));
   const values = rows.map((r) => Math.round(r.v));
-  return { type: 'bar', title, labels, values, total: values.reduce((a, b) => a + b, 0) };
+  const serie = { type: 'bar', title, labels, values, total: values.reduce((a, b) => a + b, 0) };
+  if (source === 'ventes') serie.encaisse = rows.map((r) => Math.round(r.e));
+  return serie;
 }
 
 // Indicateurs du panneau de gauche : seulement ce que la personne peut voir
@@ -133,7 +137,7 @@ async function kpisPour(role, p) {
     const periodes = { month: 'ce mois', last_month: 'mois dernier', days30: '30 derniers jours', year: 'cette annee' };
     const periode = periodeDe(norm(periodes[p] || 'ce mois'));
     const out = { periode: periode.libelle, ca: null, ventes: null, achats: null, commandes: null, graph: null,
-      produits: null, paiements: null, points: null };
+      produits: null, paiements: null, statuts: null, encaisse: null, points: null };
     if (accesA(role, '/api/vente')) {
       const { rows } = await db.query("SELECT COUNT(*)::int AS n, COALESCE(SUM(montant_ttc),0)::float AS m FROM ventes WHERE date_vente::date BETWEEN $1 AND $2 AND statut <> 'annule'", [periode.debut, periode.fin]);
       out.ca = Math.round(rows[0].m); out.ventes = rows[0].n;
@@ -149,12 +153,22 @@ async function kpisPour(role, p) {
         FROM ventes WHERE date_vente::date BETWEEN $1 AND $2 AND statut <> 'annule'
         GROUP BY 1 ORDER BY 2 DESC`, [periode.debut, periode.fin]);
       out.paiements = pay.rows.map((r) => ({ nom: r.nom, valeur: Math.round(r.v) }));
+      // Statut des ventes (nombre de ventes par statut), comme la carte « Certification FNE » de LEINAD
+      const etats = { brouillon: 'Brouillon', confirme: 'Confirmées', livre: 'Livrées', facture: 'Facturées', paye: 'Payées', annule: 'Annulées' };
+      const st = await db.query(`SELECT statut, COUNT(*)::int AS n FROM ventes
+        WHERE date_vente::date BETWEEN $1 AND $2 GROUP BY statut ORDER BY 2 DESC`, [periode.debut, periode.fin]);
+      out.statuts = st.rows.map((r) => ({ nom: etats[r.statut] || r.statut, valeur: r.n }));
+      // Montant encaisse, en plus du chiffre d'affaires
+      const enc = await db.query(`SELECT COALESCE(SUM(montant_paye),0)::float AS e FROM ventes
+        WHERE date_vente::date BETWEEN $1 AND $2 AND statut <> 'annule'`, [periode.debut, periode.fin]);
+      out.encaisse = Math.round(enc.rows[0].e);
       // Points clés
       const meilleur = out.graph && out.graph.values.length
         ? out.graph.labels[out.graph.values.indexOf(Math.max(...out.graph.values))] : null;
       out.points = [
         `Chiffre d'affaires TTC : ${fcfa(out.ca)} FCFA sur ${out.ventes} vente(s).`,
         out.ventes ? `Panier moyen : ${fcfa(out.ca / out.ventes)} FCFA.` : 'Panier moyen : —.',
+        out.ca ? `Montant encaissé : ${fcfa(out.encaisse)} FCFA, soit ${Math.round((out.encaisse / out.ca) * 100)} % du chiffre d'affaires.` : null,
         meilleur ? `Meilleur jour : ${meilleur}.` : null,
         out.produits && out.produits.length ? `Produit en tête : ${out.produits[0].nom}.` : null,
       ].filter(Boolean);
