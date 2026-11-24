@@ -7861,15 +7861,24 @@ function Alertes({ onOuvrir }) {
     return () => clearInterval(iv);
   }, []);
 
+  // Recharge « À traiter » ici et le compteur du menu (les deux viennent du serveur)
+  const rafraichir = () => {
+    axios.get(`${API}/notifications`).then(r => setNotifs((r.data && r.data.items) || [])).catch(() => {});
+    axios.get(`${API}/alertes`).then(({data}) => setAlertes(data)).catch(() => {});
+    window.dispatchEvent(new Event('naido:alertes'));
+  };
+
   const lire = async (id) => {
     await axios.put(`${API}/alertes/${id}/lire`);
     setAlertes(prev => prev.map(a => a.id===id ? {...a,lue:true} : a));
+    rafraichir();
   };
 
   const lireTout = async () => {
     await axios.put(`${API}/alertes/lire-tout`);
     setAlertes(prev => prev.map(a => ({...a,lue:true})));
     toast.success('Toutes les alertes marquées comme lues');
+    rafraichir();
   };
 
   const TYPE_CONFIG = {
@@ -8362,8 +8371,10 @@ export default function ChefAtelier() {
     };
     chargerAlertes();
     chargerPerms();
+    // Une action (bon valide, alerte lue...) recharge tout de suite le menu, sans attendre 30 s
+    window.addEventListener('naido:alertes', chargerAlertes);
     const iv = setInterval(chargerAlertes, 30000);
-    return () => clearInterval(iv);
+    return () => { clearInterval(iv); window.removeEventListener('naido:alertes', chargerAlertes); };
   }, []);
 
   const canAccess = (module) => {

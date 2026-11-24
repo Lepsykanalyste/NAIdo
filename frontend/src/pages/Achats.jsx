@@ -683,7 +683,8 @@ export default function AchatsV2() {
 
   const charger = () => axios.get(`${API}/achat/commandes${filtre ? `?statut=${filtre}` : ''}`).then(r => setCommandes(Array.isArray(r.data) ? r.data : [])).catch(() => {});
   useEffect(() => { charger(); }, [filtre, rafraichir]);
-  const recharger = () => setRafraichir(n => n + 1);
+  // Une action (validation, refus, envoi, reception) met aussi a jour les alertes et le menu
+  const recharger = () => { setRafraichir(n => n + 1); window.dispatchEvent(new Event('naido:alertes')); };
   const [envoi, setEnvoi] = useState(null);
 
   const validerBon = async c => {
