@@ -23,17 +23,19 @@ router.get('/', auth, async (req, res) => {
   const items = [];
   const ajouter = (ecran, titre, nombre) => { if (nombre > 0) items.push({ ecran, titre, nombre }); };
 
+  // Direction : seulement ce qui attend SA validation
   if (ROLES_DIRECTION.includes(role)) {
     ajouter('achat', 'Commandes à valider par la direction',
       await compter("SELECT COUNT(*)::int AS n FROM commandes_achat WHERE validation = 'en_attente_direction'"));
+    ajouter('achat', 'Bons envoyés à confirmer par la direction',
+      await compter("SELECT COUNT(*)::int AS n FROM commandes_achat WHERE statut = 'envoye'"));
     ajouter('nc', 'Non-conformités critiques ou bloquantes ouvertes',
       await compter("SELECT COUNT(*)::int AS n FROM non_conformites WHERE statut NOT IN ('clos','annule') AND gravite IN ('critique','bloquante')"));
   }
-  if (['achat', ...ROLES_DIRECTION].includes(role)) {
+  // Achat : envoi et reception des bons (les alertes sont dans Achats, pas chez la direction)
+  if (['achat', 'super_admin'].includes(role)) {
     ajouter('achat', 'Bons validés à envoyer au fournisseur',
       await compter("SELECT COUNT(*)::int AS n FROM commandes_achat WHERE validation = 'validee' AND statut = 'brouillon'"));
-  }
-  if (['achat', ...ROLES_DIRECTION].includes(role)) {
     ajouter('achat', 'Commandes à réceptionner',
       await compter("SELECT COUNT(*)::int AS n FROM commandes_achat WHERE statut IN ('confirme','receptionne_partiel')"));
     ajouter('achat', "Demandes d'achat en attente",
