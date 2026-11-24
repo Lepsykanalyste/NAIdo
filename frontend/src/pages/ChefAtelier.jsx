@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { ouvrirFichier } from '../utils/fichiers.jsx';
+import { ouvrirFichier, ImageFichier } from '../utils/fichiers.jsx';
 import { useAuth } from '../hooks/useAuth.jsx';
 import { useNavigate } from 'react-router-dom';
 
@@ -2558,7 +2558,19 @@ const pctOF = (o) => {
 };
 
 // Mon e-mail : chaque personne renseigne son propre compte professionnel (envoi des bons aux fournisseurs)
-function MonEmail({ onClose }) {
+function MonEmail({ onClose, photo, onPhotoChange }) {
+  const envoyerPhoto = async (e) => {
+    const fichier = e.target.files && e.target.files[0];
+    if (!fichier) return;
+    const fd = new FormData();
+    fd.append('photo', fichier);
+    try {
+      const { data } = await axios.post(`${API}/profil/photo`, fd);
+      onPhotoChange(data.photo);
+      toast.success('Photo de profil mise à jour');
+    } catch (err) { toast.error(err.response?.data?.error || 'Envoi de la photo impossible'); }
+    finally { e.target.value = ''; }
+  };
   const [f, setF] = useState({ host: '', port: '587', user: '', expediteur: '', pass: '' });
   const [configure, setConfigure] = useState(false);
   const [occupe, setOccupe] = useState(false);
@@ -2591,7 +2603,17 @@ function MonEmail({ onClose }) {
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000 }}>
       <div style={{ background: '#fff', borderRadius: 14, padding: 24, width: '90%', maxWidth: 460, boxShadow: '0 10px 30px rgba(0,0,0,0.2)' }}>
-        <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4 }}>✉ Mon e-mail</div>
+        <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4 }}>Mon compte</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
+          <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#e5e7eb', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6b7280', fontWeight: 700 }}>
+            {photo ? <ImageFichier chemin={photo} alt="" style={{ width: 64, height: 64, objectFit: 'cover' }} /> : '👤'}
+          </div>
+          <label style={{ padding: '8px 14px', border: '1px solid #d1d5db', borderRadius: 8, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}>
+            Changer la photo
+            <input type="file" accept="image/jpeg,image/png,image/webp" onChange={envoyerPhoto} style={{ display: 'none' }} />
+          </label>
+        </div>
+        <div style={{ fontWeight: 700, marginBottom: 6 }}>✉ Messagerie (envoi des bons)</div>
         <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 14 }}>Votre compte professionnel, utilisé pour envoyer les bons aux fournisseurs. Le mot de passe est chiffré et n'est jamais réaffiché.</div>
         <label style={etiquette}>Serveur SMTP</label>
         <input style={champ} value={f.host} onChange={set('host')} placeholder="ex. smtp.mon-domaine.com" />
@@ -7794,7 +7816,9 @@ function Stock() {
 }
 
 
-function Alertes() {
+function Alertes({ onOuvrir }) {
+  const [notifs, setNotifs] = useState([]);
+  useEffect(() => { axios.get(`${API}/notifications`).then(r => setNotifs((r.data && r.data.items) || [])).catch(() => {}); }, []);
   const [alertes, setAlertes] = useState([]);
   const [count, setCount] = useState(0);
 
@@ -7832,6 +7856,16 @@ function Alertes() {
 
   return (
     <div>
+      {notifs.length > 0 && (<div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', padding: 14, marginBottom: 16 }}>
+        <div style={{ fontWeight: 700, marginBottom: 10 }}>🔔 À traiter maintenant</div>
+        {notifs.map((n, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderTop: i ? '1px solid #f3f4f6' : 'none' }}>
+            <span style={{ background: '#dc2626', color: '#fff', borderRadius: 999, minWidth: 24, height: 24, padding: '0 7px', fontSize: 12, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>{n.nombre}</span>
+            <span style={{ flex: 1, fontSize: 13 }}>{n.titre}</span>
+            {onOuvrir && <button onClick={() => onOuvrir(n.ecran)} style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', fontSize: 12, fontWeight: 600 }}>Ouvrir</button>}
+          </div>
+        ))}
+      </div>)}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
         <h3 style={{ margin:0, fontSize:15, fontWeight:700 }}>
           Alertes {nonLues > 0 && <span style={{ background:'#dc2626', color:'#fff', padding:'2px 8px', borderRadius:20, fontSize:12, marginLeft:8 }}>{nonLues}</span>}
@@ -8271,6 +8305,8 @@ export default function ChefAtelier() {
   const [nbAlertes, setNbAlertes] = useState(0);
   const [notifs, setNotifs] = useState({ total: 0, items: [] });
   const [monEmailOuvert, setMonEmailOuvert] = useState(false);
+  const [photoProfil, setPhotoProfil] = useState(null);
+  useEffect(() => { axios.get(`${API}/profil/moi`).then(r => setPhotoProfil(r.data.photo || null)).catch(() => {}); }, []);
   // Pastille du menu : notifications calculees par le serveur ; les alertes gardent leur compteur
   const badgeMenu = (ecran) => {
     const parEcran = (notifs.items || []).filter(i => i.ecran === ecran).reduce((s, i) => s + i.nombre, 0);
@@ -8644,7 +8680,7 @@ function OrdresLivraison() {
       case 'ia': return <AssistantIA />;
       case 'users': return <Utilisateurs />;
       case 'import': return <ImportSage />;
-      case 'alertes': return <Alertes />;
+      case 'alertes': return <Alertes onOuvrir={setOngletActif} />;
       case 'at3flux': return <Atelier3Flux />;
       case 'dbm': return <DBM_StockAT3 />;
       case 'stock_at3': return <ModuleStockAT3 />;
@@ -8724,7 +8760,7 @@ function OrdresLivraison() {
         {/* User info */}
         <div style={{ padding:'12px 14px', borderTop:'1px solid #1f2937', display:'flex', alignItems:'center', gap:10, flexShrink:0 }}>
           <div style={{ width:30, height:30, background:'#374151', borderRadius:'50%', display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:700, flexShrink:0 }}>
-            {user?.prenom?.[0]}{user?.nom?.[0]}
+            {photoProfil ? <ImageFichier chemin={photoProfil} alt="" style={{ width: 30, height: 30, borderRadius: '50%', objectFit: 'cover' }} /> : <>{user?.prenom?.[0]}{user?.nom?.[0]}</>}
           </div>
           {sidebarOuverte && (
             <>
@@ -8739,7 +8775,7 @@ function OrdresLivraison() {
                   </select>
                 )}
               </div>
-              {monEmailOuvert && <MonEmail onClose={() => setMonEmailOuvert(false)} />}
+              {monEmailOuvert && <MonEmail onClose={() => setMonEmailOuvert(false)} photo={photoProfil} onPhotoChange={setPhotoProfil} />}
       <button onClick={() => setMonEmailOuvert(true)} title="Mon e-mail" style={{ background:'none', border:'none', color:'#6b7280', cursor:'pointer', padding:4, fontSize:14 }}>✉</button>
       <button onClick={handleLogout} title="Déconnexion" style={{ background:'none', border:'none', color:'#6b7280', cursor:'pointer', padding:4 }}>
                 <Icon d={ICONS.logout} size={16}/>
