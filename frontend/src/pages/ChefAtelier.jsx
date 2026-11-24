@@ -2557,6 +2557,62 @@ const pctOF = (o) => {
   return cible > 0 ? Math.min(100, Math.round(prod / cible * 100)) : 0;
 };
 
+// Mon e-mail : chaque personne renseigne son propre compte professionnel (envoi des bons aux fournisseurs)
+function MonEmail({ onClose }) {
+  const [f, setF] = useState({ host: '', port: '587', user: '', expediteur: '', pass: '' });
+  const [configure, setConfigure] = useState(false);
+  const [occupe, setOccupe] = useState(false);
+  useEffect(() => {
+    axios.get(`${API}/mail/moi`).then(r => {
+      setConfigure(!!r.data.configure);
+      if (r.data.configure) setF(x => ({ ...x, host: r.data.host || '', port: String(r.data.port || 587), user: r.data.user || '', expediteur: r.data.expediteur || '' }));
+    }).catch(() => {});
+  }, []);
+  const set = k => e => setF(x => ({ ...x, [k]: e.target.value }));
+  const enregistrer = async () => {
+    setOccupe(true);
+    try {
+      await axios.put(`${API}/mail/moi`, f);
+      toast.success('Compte e-mail enregistré');
+      setConfigure(true);
+      setF(x => ({ ...x, pass: '' }));
+    } catch (e) { toast.error(e.response?.data?.error || 'Enregistrement impossible'); }
+    finally { setOccupe(false); }
+  };
+  const tester = async () => {
+    setOccupe(true);
+    try { await axios.post(`${API}/mail/moi/test`); toast.success('Message de test envoyé à votre adresse'); }
+    catch (e) { toast.error(e.response?.data?.error || 'Test impossible'); }
+    finally { setOccupe(false); }
+  };
+  const champ = { width: '100%', boxSizing: 'border-box', padding: '8px 10px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13, marginBottom: 10 };
+  const etiquette = { fontSize: 12, fontWeight: 600, display: 'block', marginBottom: 3 };
+  const bouton = { padding: '9px 16px', borderRadius: 8, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer', fontWeight: 600 };
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000 }}>
+      <div style={{ background: '#fff', borderRadius: 14, padding: 24, width: '90%', maxWidth: 460, boxShadow: '0 10px 30px rgba(0,0,0,0.2)' }}>
+        <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4 }}>✉ Mon e-mail</div>
+        <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 14 }}>Votre compte professionnel, utilisé pour envoyer les bons aux fournisseurs. Le mot de passe est chiffré et n'est jamais réaffiché.</div>
+        <label style={etiquette}>Serveur SMTP</label>
+        <input style={champ} value={f.host} onChange={set('host')} placeholder="ex. smtp.mon-domaine.com" />
+        <label style={etiquette}>Port</label>
+        <input style={champ} value={f.port} onChange={set('port')} placeholder="587 ou 465" />
+        <label style={etiquette}>Identifiant (adresse e-mail complète)</label>
+        <input style={champ} value={f.user} onChange={set('user')} />
+        <label style={etiquette}>Adresse d'expédition</label>
+        <input style={champ} value={f.expediteur} onChange={set('expediteur')} placeholder="Par défaut : l'identifiant" />
+        <label style={etiquette}>Mot de passe {configure && <span style={{ fontWeight: 400, color: '#6b7280' }}>(laisser vide pour ne pas le changer)</span>}</label>
+        <input type="password" autoComplete="new-password" style={champ} value={f.pass} onChange={set('pass')} />
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 6, flexWrap: 'wrap' }}>
+          <button onClick={onClose} style={bouton}>Fermer</button>
+          {configure && <button disabled={occupe} onClick={tester} style={bouton}>Envoyer un test</button>}
+          <button disabled={occupe} onClick={enregistrer} style={{ ...bouton, background: '#0369a1', color: '#fff', border: 'none' }}>Enregistrer</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Bloc repliable : le contenu (tableaux, filtres) ne s'affiche qu'à l'ouverture
 function Section({ titre, badge, defaultOuvert = false, children }) {
   const [ouvert, setOuvert] = useState(defaultOuvert);
@@ -8214,6 +8270,7 @@ export default function ChefAtelier() {
   const [sidebarOuverte, setSidebarOuverte] = useState(true);
   const [nbAlertes, setNbAlertes] = useState(0);
   const [notifs, setNotifs] = useState({ total: 0, items: [] });
+  const [monEmailOuvert, setMonEmailOuvert] = useState(false);
   // Pastille du menu : notifications calculees par le serveur ; les alertes gardent leur compteur
   const badgeMenu = (ecran) => {
     const parEcran = (notifs.items || []).filter(i => i.ecran === ecran).reduce((s, i) => s + i.nombre, 0);
@@ -8682,7 +8739,9 @@ function OrdresLivraison() {
                   </select>
                 )}
               </div>
-              <button onClick={handleLogout} title="Déconnexion" style={{ background:'none', border:'none', color:'#6b7280', cursor:'pointer', padding:4 }}>
+              {monEmailOuvert && <MonEmail onClose={() => setMonEmailOuvert(false)} />}
+      <button onClick={() => setMonEmailOuvert(true)} title="Mon e-mail" style={{ background:'none', border:'none', color:'#6b7280', cursor:'pointer', padding:4, fontSize:14 }}>✉</button>
+      <button onClick={handleLogout} title="Déconnexion" style={{ background:'none', border:'none', color:'#6b7280', cursor:'pointer', padding:4 }}>
                 <Icon d={ICONS.logout} size={16}/>
               </button>
             </>

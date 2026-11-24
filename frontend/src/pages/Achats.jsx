@@ -27,9 +27,10 @@ const msg = e => e?.response?.data?.error || e?.response?.data?.detail || 'Erreu
 const aujourdhui = () => new Date().toISOString().slice(0, 10);
 
 const STATUTS = {
+  valide: { label: 'Validé', bg: '#dcfce7', color: '#15803d' },
   brouillon:           { label: 'Brouillon',            bg: '#f3f4f6', color: '#374151' },
   envoye:              { label: 'En attente direction', bg: '#fef3c7', color: '#92400e' },
-  confirme:            { label: 'Confirmée',            bg: '#dbeafe', color: '#1d4ed8' },
+  confirme:            { label: 'Envoyé au fournisseur',            bg: '#dbeafe', color: '#1d4ed8' },
   receptionne_partiel: { label: 'Réception partielle',  bg: '#ede9fe', color: '#6d28d9' },
   receptionne:         { label: 'Réceptionnée',         bg: '#dcfce7', color: '#15803d' },
   annule:              { label: 'Annulée',              bg: '#fee2e2', color: '#dc2626' },
@@ -40,6 +41,43 @@ const STATUTS = {
 const inputStyle = { width: '100%', border: '1px solid #d1d5db', borderRadius: 8, padding: '8px 10px', fontSize: 13, boxSizing: 'border-box' };
 const thStyle = { padding: '9px 12px', textAlign: 'left', fontWeight: 700, color: '#6d28d9', borderBottom: '2px solid #ede9fe', whiteSpace: 'nowrap', fontSize: 12 };
 const tdStyle = { padding: '9px 12px', fontSize: 13, borderBottom: '1px solid #f3f4f6' };
+
+// Choix de l'envoi d'un bon au fournisseur : par e-mail ou physique
+function ChoixEnvoi({ commande, onClose, onEnvoye }) {
+  const [email, setEmail] = useState('');
+  const [occupe, setOccupe] = useState(false);
+  useEffect(() => {
+    axios.get(`${API}/achat/fournisseurs`).then(r => {
+      const f = (Array.isArray(r.data) ? r.data : []).find(x => x.id === commande.fournisseur_id);
+      setEmail((f && f.email) || '');
+    }).catch(() => {});
+  }, [commande.fournisseur_id]);
+  const envoyer = async mode => {
+    setOccupe(true);
+    try {
+      await axios.post(`${API}/achat/commandes/${commande.id}/envoyer`, { mode, email });
+      toast.success(mode === 'mail' ? 'Bon envoyé par e-mail' : 'Bon marqué comme envoyé');
+      onEnvoye();
+    } catch (e) { toast.error(e.response?.data?.error || 'Envoi impossible'); }
+    finally { setOccupe(false); }
+  };
+  const bloc = { border: '1px solid #e5e7eb', borderRadius: 12, padding: 14, marginBottom: 12 };
+  return (
+    <Modal titre={`Envoi du bon ${commande.numero_commande}`} onClose={onClose} largeur={520}>
+      <div style={bloc}>
+        <div style={{ fontWeight: 700, marginBottom: 6 }}>📧 Par e-mail</div>
+        <input value={email} onChange={e => setEmail(e.target.value)} placeholder="Adresse e-mail du fournisseur" style={{ ...inputStyle, marginBottom: 8 }} />
+        <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 8 }}>Le détail du bon est envoyé à cette adresse.</div>
+        <Btn plein disabled={occupe || !email.trim()} onClick={() => envoyer('mail')}>Envoyer par e-mail</Btn>
+      </div>
+      <div style={bloc}>
+        <div style={{ fontWeight: 700, marginBottom: 6 }}>📄 Physique</div>
+        <div style={{ fontSize: 11, color: '#6b7280', marginBottom: 8 }}>Le bon est remis en main propre ou envoyé par courrier. Il est marqué comme envoyé.</div>
+        <Btn plein bg="#f3f4f6" color="#374151" disabled={occupe} onClick={() => envoyer('physique')}>Marquer comme envoyé</Btn>
+      </div>
+    </Modal>
+  );
+}
 
 const Badge = ({ s }) => {
   const c = STATUTS[s] || { label: s, bg: '#f3f4f6', color: '#374151' };
@@ -646,6 +684,7 @@ export default function AchatsV2() {
   const charger = () => axios.get(`${API}/achat/commandes${filtre ? `?statut=${filtre}` : ''}`).then(r => setCommandes(Array.isArray(r.data) ? r.data : [])).catch(() => {});
   useEffect(() => { charger(); }, [filtre, rafraichir]);
   const recharger = () => setRafraichir(n => n + 1);
+  const [envoi, setEnvoi] = useState(null);
 
   const validerBon = async c => {
     if (!(await confirmer(`Valider le bon ${c.numero_commande} ?`))) return;
@@ -707,7 +746,7 @@ export default function AchatsV2() {
                         {c.validation === 'en_attente_direction' && direction && <Btn bg="#dcfce7" color="#15803d" onClick={() => validerBon(c)}>✓ Valider</Btn>}
                         {c.validation === 'en_attente_direction' && direction && <Btn bg="#fee2e2" color="#dc2626" onClick={() => refuserBon(c)}>✕ Refuser</Btn>}
                         {c.validation === 'en_attente_direction' && !direction && <span style={{ fontSize: 10, color: '#9ca3af', fontStyle: 'italic', alignSelf: 'center' }}>En attente de la direction</span>}
-                        {c.validation === 'validee' && c.statut === 'brouillon' && achat && <Btn bg="#e0f2fe" color="#0369a1" onClick={() => statut(c, 'envoye')}>📤 Envoyer au fournisseur</Btn>}
+                        {c.validation === 'validee' && c.statut === 'brouillon' && achat && <Btn bg="#e0f2fe" color="#0369a1" onClick={() => setEnvoi(c)}>📤 Envoyer au fournisseur</Btn>}
                         {c.validation === 'refusee' && <span title={c.motif_refus || ''} style={{ fontSize: 10, color: '#dc2626', alignSelf: 'center' }}>Refusé</span>}
                         {c.statut === 'envoye' && direction && <Btn bg="#dcfce7" color="#15803d" onClick={() => statut(c, 'confirme')}>✓ Confirmer</Btn>}
                         {c.statut === 'envoye' && !direction && <span style={{ fontSize: 10, color: '#9ca3af', fontStyle: 'italic', alignSelf: 'center' }}>Validation direction</span>}
@@ -834,6 +873,7 @@ export function ArticlesDivers() {
 
   return (
     <div>
+{envoi && <ChoixEnvoi commande={envoi} onClose={() => setEnvoi(null)} onEnvoye={() => { setEnvoi(null); recharger(); }} />}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8, flexWrap: 'wrap' }}>
         <input placeholder="🔍 Code, désignation, fournisseur..." value={recherche} onChange={e => setRecherche(e.target.value)} style={{ ...inputStyle, maxWidth: 340 }} />
         <Btn plein onClick={() => ouvrir(null)}>+ Nouvel article divers</Btn>

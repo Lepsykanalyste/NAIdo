@@ -19,6 +19,7 @@ const express = require('express');
 const router  = express.Router();
 const db      = require('../config/db');
 const { auth } = require('../middleware/auth');
+const { envoyerDepuisCompte } = require('../utils/mailcompte');
 const { peutVoirPrix, retirerPrix } = require('../middleware/prix');
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -497,6 +498,35 @@ router.post('/demandes/:id/transformer', auth, async (req, res, next) => {
 
 // ---------- Lot 3 : validation par la direction et libelles de frais ----------
 const EST_DIRECTION = (u) => ['directeur', 'super_admin'].includes(String(u?.role || ''));
+
+// POST /commandes/:id/envoyer : envoi au fournisseur. mode 'mail' = e-mail avec le detail du bon ; mode 'physique' = remis en main propre ou par courrier.
+router.post('/commandes/:id/envoyer', auth, async (req, res) => {
+  if (!UUID.test(req.params.id)) return res.status(400).json({ error: 'Identifiant invalide' });
+  try {
+    const mode = req.body?.mode === 'mail' ? 'mail' : 'physique';
+    const { rows: [cmd] } = await db.query(
+      `SELECT ca.*, f.raison_sociale, f.email AS fournisseur_email
+       FROM commandes_achat ca LEFT JOIN fournisseurs f ON f.id = ca.fournisseur_id WHERE ca.id = $1`, [req.params.id]);
+    if (!cmd) return res.status(404).json({ error: 'Commande introuvable' });
+    if (cmd.validation !== 'validee' || cmd.statut !== 'brouillon')
+      return res.status(400).json({ error: 'Seul un bon valide et pas encore envoye peut etre envoye' });
+    if (mode === 'mail') {
+      const adresse = String(req.body?.email || cmd.fournisseur_email || '').trim();
+      if (!adresse) return res.status(400).json({ error: 'Adresse e-mail du fournisseur manquante' });
+const lignes = (await db.query(
+        'SELECT designation, quantite_commandee, prix_unitaire_ht, montant_ttc FROM lignes_achat WHERE commande_id = $1 ORDER BY created_at', [cmd.id])).rows;
+      const lignesHtml = lignes.map(l => `<tr><td>${esc(l.designation)}</td><td style="text-align:right">${esc(l.quantite_commandee)}</td><td style="text-align:right">${esc(l.prix_unitaire_ht)}</td><td style="text-align:right">${esc(l.montant_ttc)}</td></tr>`).join('');
+      const html = `<div style="font-family:Arial,sans-serif"><p>Bonjour ${esc(cmd.raison_sociale || '')},</p>`
+        + `<p>Veuillez trouver ci-dessous notre bon de commande <b>${esc(cmd.numero_commande)}</b>.</p>`
+        + `<table style="border-collapse:collapse;width:100%" border="1" cellpadding="6"><thead><tr><th>Designation</th><th>Quantite</th><th>P.U. HT</th><th>Montant TTC</th></tr></thead><tbody>${lignesHtml}</tbody></table>`
+        + `<p><b>Total HT : ${esc(cmd.montant_ht)} FCFA &mdash; Total TTC : ${esc(cmd.montant_ttc)} FCFA</b></p><p>NAI &mdash; Service achats</p></div>`;
+      await envoyerDepuisCompte(req.user.id, { to: adresse, subject: 'Bon de commande ' + cmd.numero_commande + ' - NAI', html });
+    }
+    // Un bon envoye est deja valide par la direction : il passe a « confirme », pret a etre receptionne
+    await db.query("UPDATE commandes_achat SET statut = 'confirme' WHERE id = $1 AND statut = 'brouillon'", [cmd.id]);
+    res.json({ ok: true, mode });
+  } catch (err) { console.error('[ENVOI-BON]', err.message); res.status(500).json({ error: 'Envoi impossible' }); }
+});
 
 router.post('/commandes/:id/valider', auth, async (req, res, next) => {
   if (!UUID.test(req.params.id)) return next();
