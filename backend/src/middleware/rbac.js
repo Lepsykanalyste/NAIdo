@@ -67,7 +67,7 @@ function middleware(req, res, next) {
   const chemin = req.originalUrl.split('?')[0];
   if (estPublique(req.method, chemin)) return next();
   const h = req.headers.authorization;
-  if (!h && estOuvertureNavigateurPdf(req.method, chemin, req.headers.accept)) return res.set('Cache-Control', 'no-store').type('html').send(PAGE_PDF);
+  if (!h && !/[?&]t=/.test(req.originalUrl) && estOuvertureNavigateurPdf(req.method, chemin, req.headers.accept)) return res.set('Cache-Control', 'no-store').type('html').send(PAGE_PDF);
   if (!h || !h.startsWith('Bearer ')) return next();   // sans jeton : la route repond 401
   let payload;
   try { payload = jwt.verify(h.split(' ')[1], process.env.JWT_SECRET); } catch { return next(); }
