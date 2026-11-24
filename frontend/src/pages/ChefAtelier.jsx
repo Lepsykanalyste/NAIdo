@@ -3497,10 +3497,21 @@ function RapportsJournaliers() {
   );
 }
 
+const COULEURS_ARTICLE = ['Naturel', 'Blanc', 'Noir', 'Bleu', 'Rouge', 'Vert', 'Jaune', 'Gris', 'Transparent', 'Imprimé multicolore'];
+
 function Articles() {
   const [articles, setArticles] = useState([]);
   const [familles, setFamilles] = useState([]);
   const [unites, setUnites] = useState([]);
+  // Densité atelier 3 (paramètre admin) : sert au poids théorique affiché en direct
+  const [densiteAtelier, setDensiteAtelier] = useState(0.92);
+  useEffect(() => {
+    axios.get(`${API}/parametres`).then(({ data }) => {
+      const p = (Array.isArray(data) ? data : []).find((x) => x.cle === 'densite_atelier3');
+      const v = parseFloat(String(p?.valeur ?? '').replace(',', '.'));
+      if (Number.isFinite(v) && v > 0) setDensiteAtelier(v);
+    }).catch(() => {});
+  }, []);
   const [ateliers, setAteliers] = useState([]);
   const [matieresPremiers, setMatieresPremiers] = useState([]);
   const [groupesMp, setGroupesMp] = useState([]);
@@ -3772,15 +3783,30 @@ function Articles() {
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:12 }}>
                 <InputField label="Longueur (mm)" value={form.longueur_mm} onChange={e => setForm({...form,longueur_mm:e.target.value})} type="number" placeholder="0"/>
                 <InputField label="Largeur (mm)" value={form.largeur_mm} onChange={e => setForm({...form,largeur_mm:e.target.value})} type="number" placeholder="0"/>
-                <InputField label="Hauteur (mm)" value={form.hauteur_mm} onChange={e => setForm({...form,hauteur_mm:e.target.value})} type="number" placeholder="0"/>
                 <InputField label="Épaisseur (mm)" value={form.epaisseur_mm} onChange={e => setForm({...form,epaisseur_mm:e.target.value})} type="number" placeholder="0.08"/>
-                <InputField label="Poids théorique (kg)" value={form.poids_theorique_kg} onChange={e => setForm({...form,poids_theorique_kg:e.target.value})} type="number" placeholder="0.000"/>
-                <div style={{ gridColumn:'1 / -1', fontSize:11, color:'#6b7280', marginTop:-4, marginBottom:8 }}>
-                  Calculé automatiquement si longueur, largeur et épaisseur sont renseignées : longueur/100 × largeur/100 × épaisseur × densité atelier 3 × 2 (unité pièce) ou × 1 (unité Kg). La densité se règle dans Paramètres système.
-                </div>
-                <InputField label="Poids moyen réel (kg)" value={form.poids_reel_kg} onChange={e => setForm({...form,poids_reel_kg:e.target.value})} type="number" placeholder="0.000"/>
+                {(() => {
+                  // Poids théorique calculé en direct : L/100 × l/100 × e × densité × facteur (2 pièce, 1 Kg)
+                  const u = unites.find((x) => String(x.id) === String(form.unite_mesure_id));
+                  const code = (u?.code || '').toLowerCase();
+                  const facteur = code === 'kg' ? 1 : (code === 'pce' || code === 'pc' || code === 'piece' || code === 'pièce') ? 2 : null;
+                  const L = parseFloat(form.longueur_mm), l = parseFloat(form.largeur_mm), e = parseFloat(form.epaisseur_mm);
+                  const calcule = facteur && L > 0 && l > 0 && e > 0 ? Math.round((L / 100) * (l / 100) * e * densiteAtelier * facteur * 10000) / 10000 : null;
+                  return (
+                    <>
+                      <InputField label="Poids théorique (kg)" value={calcule !== null ? String(calcule) : form.poids_theorique_kg}
+                        onChange={e => setForm({...form,poids_theorique_kg:e.target.value})} type="number" placeholder="0.000"/>
+                      <div style={{ gridColumn:'1 / -1', fontSize:11, color: calcule !== null ? '#15803d' : '#6b7280', marginTop:-4, marginBottom:8 }}>
+                        {calcule !== null
+                          ? `Calculé : longueur/100 × largeur/100 × épaisseur × densité ${densiteAtelier} × ${facteur} (unité ${u?.code}).`
+                          : 'Se calcule automatiquement dès que longueur, largeur, épaisseur et une unité pièce ou Kg sont renseignées.'}
+                      </div>
+                    </>
+                  );
+                })()}
+                <InputField label="Poids MOYEN réel (kg)" value={form.poids_reel_kg} onChange={e => setForm({...form,poids_reel_kg:e.target.value})} type="number" placeholder="0.000"/>
                 <InputField label="Poids mandrin (kg)" value={form.poids_mandrin_kg} onChange={e => setForm({...form,poids_mandrin_kg:e.target.value})} type="number" placeholder="0.000"/>
-                <InputField label="Couleur" value={form.couleur} onChange={e => setForm({...form,couleur:e.target.value})} placeholder="Naturel, Blanc, Noir..."/>
+                <SelectField label="Couleur" value={form.couleur} onChange={e => setForm({...form,couleur:e.target.value})}
+                  options={[{v:'', l:'— Choisir —'}, ...COULEURS_ARTICLE.map(c => ({ v:c, l:c }))]}/>
                 <InputField label="Cadence théorique (kg/h)" value={form.cadence_theorique_kg_h} onChange={e => setForm({...form,cadence_theorique_kg_h:e.target.value})} type="number" placeholder="0"/>
                 <InputField label="Temps réglage (min)" value={form.temps_reglage_min} onChange={e => setForm({...form,temps_reglage_min:e.target.value})} type="number" placeholder="30"/>
               </div>
