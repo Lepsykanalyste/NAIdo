@@ -12,6 +12,7 @@ import ControleAvantCession from './ControleAvantCession';
 import { CompositionFicheArticle, CompositionOF } from './CompositionArticle';
 import AchatsV2, { ArticlesDivers, DashboardAchat, DemandesAchatAtelier, SectionStockBas } from './Achats';
 import toast from 'react-hot-toast';
+import { confirmer } from '../utils/confirmer.jsx';
 import { ouvrirPdfSecurise, telechargerSecurise } from '../utils/pdf';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 
@@ -3839,7 +3840,7 @@ function Articles() {
                       </button>
                       <button onClick={async e => {
                           e.stopPropagation();
-                          if (!window.confirm('Supprimer "'+a.designation+'" ?')) return;
+                          if (!(await confirmer('Supprimer "'+a.designation+'" ?'))) return;
                           try { await axios.delete(`${API}/articles/${a.id}`); toast.success('Supprimé'); setDetail(null); chargerArticles(); }
                           catch { toast.error('Erreur suppression'); }
                         }}
@@ -4293,7 +4294,7 @@ function MatieresPremières() {
                     </button>
                     <button onClick={async e => {
                         e.stopPropagation();
-                        if (!window.confirm('Supprimer "'+m.designation+'" ?')) return;
+                        if (!(await confirmer('Supprimer "'+m.designation+'" ?'))) return;
                         try { await axios.delete(`${API}/articles/${m.id}`); toast.success('Supprimé'); setDetail(null); charger(); }
                         catch { toast.error('Erreur suppression'); }
                       }}
@@ -6207,7 +6208,7 @@ function Utilisateurs() {
     catch(e) { toast.error(messageErreur(e)); }
   };
   const supprimerPoste = async (p) => {
-    if (!window.confirm(`Supprimer le poste « ${p.libelle} » ?`)) return;
+    if (!(await confirmer(`Supprimer le poste « ${p.libelle} » ?`))) return;
     try { await axios.delete(`${API}/utilisateurs/postes/${p.code}`); toast.success('Poste supprimé ✓'); chargerPostesAdmin(); charger(); }
     catch(e) { toast.error(messageErreur(e)); }
   };
@@ -6234,7 +6235,7 @@ function Utilisateurs() {
     catch(e) { toast.error(messageErreur(e)); }
   };
   const revenirDroits = async () => {
-    if (!window.confirm('Revenir à la politique précédente ?')) return;
+    if (!(await confirmer('Revenir à la politique précédente ?'))) return;
     try { await axios.post(`${API}/utilisateurs/droits/annuler`); toast.success('Droits restaurés ✓'); chargerDroits(); }
     catch(e) { toast.error(messageErreur(e)); }
   };
@@ -7633,7 +7634,7 @@ function Stock() {
                             </button>
                           )}
                           <button onClick={async () => {
-                            if (!window.confirm('Bloquer ce lot ?')) return;
+                            if (!(await confirmer('Bloquer ce lot ?'))) return;
                             try { await axios.put(`${API}/stock/lots/${l.id}`, { statut:'bloque' }); toast.success('Lot bloqué'); charger(); }
                             catch { toast.error('Erreur'); }
                           }} style={{ background:'#fee2e2', color:'#dc2626', border:'none', padding:'3px 8px', borderRadius:6, cursor:'pointer', fontSize:10 }}>
@@ -8212,11 +8213,18 @@ export default function ChefAtelier() {
   const [ongletActif, setOngletActif] = useState('dashboard');
   const [sidebarOuverte, setSidebarOuverte] = useState(true);
   const [nbAlertes, setNbAlertes] = useState(0);
+  const [notifs, setNotifs] = useState({ total: 0, items: [] });
+  // Pastille du menu : notifications calculees par le serveur ; les alertes gardent leur compteur
+  const badgeMenu = (ecran) => {
+    const parEcran = (notifs.items || []).filter(i => i.ecran === ecran).reduce((s, i) => s + i.nombre, 0);
+    return ecran === 'alertes' ? nbAlertes + (notifs.total || 0) : parEcran;
+  };
   const [perms, setPerms] = useState({ permissions:{}, is_super_admin:false, has_finance:false, role:'' });
 
   useEffect(() => {
     const chargerAlertes = () => {
       axios.get(`${API}/alertes/count`).then(({data}) => setNbAlertes(data.count)).catch(() => {});
+      axios.get(`${API}/notifications`).then(({data}) => setNotifs(data || { total: 0, items: [] })).catch(() => {});
     };
     const chargerPerms = async () => {
       try {
@@ -8646,9 +8654,9 @@ function OrdresLivraison() {
                   <Icon d={ICONS[item.icon]} size={16}/>
                 </span>
                 {sidebarOuverte && <span style={{ whiteSpace:'nowrap', flex:1 }}>{item.label}</span>}
-                {item.id === 'alertes' && nbAlertes > 0 && (
+                {badgeMenu(item.id) > 0 && (
                   <span style={{ background:'#dc2626', color:'#fff', borderRadius:'50%', width:18, height:18, fontSize:10, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700, flexShrink:0 }}>
-                    {nbAlertes > 9 ? '9+' : nbAlertes}
+                    {badgeMenu(item.id) > 9 ? '9+' : badgeMenu(item.id)}
                   </span>
                 )}
               </button>

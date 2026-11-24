@@ -10,6 +10,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import toast from 'react-hot-toast';
+import { confirmer } from '../utils/confirmer.jsx';
 import { ImageFichier, ouvrirFichier } from '../utils/fichiers.jsx';
 import { useAuth } from '../hooks/useAuth.jsx';
 import { ouvrirPdfSecurise } from '../utils/pdf';
@@ -267,7 +268,7 @@ function DetailCommande({ id, role, onClose, onChange, onReceptionner, onHistori
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <Btn plein onClick={() => ouvrirPdfSecurise(`${API}/achat/commandes/${id}/pdf`)}>📄 PDF</Btn>
         {c.statut === 'envoye' && direction && <Btn plein color="#15803d" onClick={() => statut('confirme')}>✓ Confirmer (direction)</Btn>}
-        {['envoye', 'confirme', 'brouillon'].includes(c.statut) && achat && <Btn plein bg="#fee2e2" color="#dc2626" onClick={() => { if (window.confirm('Annuler cette commande ?')) statut('annule'); }}>Annuler la commande</Btn>}
+        {['envoye', 'confirme', 'brouillon'].includes(c.statut) && achat && <Btn plein bg="#fee2e2" color="#dc2626" onClick={async () => { if ((await confirmer('Annuler cette commande ?'))) statut('annule'); }}>Annuler la commande</Btn>}
         {['confirme', 'receptionne_partiel'].includes(c.statut) && achat && <Btn plein color="#0369a1" onClick={() => onReceptionner(c)}>📥 Réceptionner</Btn>}
         {['receptionne_partiel', 'receptionne'].includes(c.statut) && <Btn plein bg="#f3f4f6" color="#374151" onClick={() => onHistorique(c)}>📋 Historique des réceptions</Btn>}
       </div>
@@ -510,7 +511,7 @@ function PanneauDemandes({ peutTransformer, onBonCree }) {
   const charger = () => axios.get(`${API}/achat/demandes${filtre ? `?statut=${filtre}` : ''}`).then(r => setDemandes(Array.isArray(r.data) ? r.data : [])).catch(() => {});
   useEffect(() => { charger(); }, [filtre]);
   const annuler = async d => {
-    if (!window.confirm(`Annuler la demande ${d.numero_demande} ?`)) return;
+    if (!(await confirmer(`Annuler la demande ${d.numero_demande} ?`))) return;
     try { await axios.put(`${API}/achat/demandes/${d.id}/annuler`); toast.success('Demande annulée'); charger(); } catch (e) { toast.error(msg(e)); }
   };
   return (
@@ -604,7 +605,7 @@ function GestionLibelles({ onClose }) {
     try { await axios.put(`${API}/achat/libelles-frais/${l.id}`, { actif: !l.actif }); charger(); } catch (e) { toast.error(msg(e)); }
   };
   const supprimer = async l => {
-    if (!window.confirm(`Supprimer « ${l.libelle} » ?`)) return;
+    if (!(await confirmer(`Supprimer « ${l.libelle} » ?`))) return;
     try { const { data } = await axios.delete(`${API}/achat/libelles-frais/${l.id}`); toast.success(data.desactive ? 'Déjà utilisé : libellé désactivé' : 'Libellé supprimé'); charger(); } catch (e) { toast.error(msg(e)); }
   };
   return (
@@ -647,7 +648,7 @@ export default function AchatsV2() {
   const recharger = () => setRafraichir(n => n + 1);
 
   const validerBon = async c => {
-    if (!window.confirm(`Valider le bon ${c.numero_commande} ?`)) return;
+    if (!(await confirmer(`Valider le bon ${c.numero_commande} ?`))) return;
     try { await axios.post(`${API}/achat/commandes/${c.id}/valider`); toast.success('Bon validé ✓'); recharger(); } catch (e) { toast.error(msg(e)); }
   };
   const refuserBon = async c => {
@@ -656,7 +657,7 @@ export default function AchatsV2() {
     try { await axios.post(`${API}/achat/commandes/${c.id}/refuser`, { motif }); toast.success('Bon refusé'); recharger(); } catch (e) { toast.error(msg(e)); }
   };
   const statut = async (c, s, question) => {
-    if (question && !window.confirm(question)) return;
+    if (question && !(await confirmer(question))) return;
     try { await axios.put(`${API}/achat/commandes/${c.id}/statut`, { statut: s }); toast.success('Statut mis à jour'); recharger(); }
     catch (e) { toast.error(msg(e)); }
   };
@@ -813,7 +814,7 @@ export function ArticlesDivers() {
   };
 
   const supprimer = async it => {
-    if (!window.confirm(`Supprimer « ${it.designation} » ?`)) return;
+    if (!(await confirmer(`Supprimer « ${it.designation} » ?`))) return;
     try { await axios.put(`${API}/articles/${it.id}`, { actif: false }); toast.success('Article supprimé'); charger(); } catch (e) { toast.error(msg(e)); }
   };
 

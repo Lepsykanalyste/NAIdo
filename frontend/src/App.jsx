@@ -1,6 +1,7 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
+import { ConfirmHost } from './utils/confirmer.jsx';
 import { useAuth } from './hooks/useAuth.jsx';
 import Login       from './pages/Login';
 import Operateur   from './pages/Operateur';
@@ -53,6 +54,7 @@ export default function App() {
   return (
     <>
       <Toaster position="top-center" toastOptions={{ duration: 3000 }} />
+      <ConfirmHost />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/operateur/*" element={
