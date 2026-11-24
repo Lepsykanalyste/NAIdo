@@ -2550,37 +2550,93 @@ function DashboardMagasin() {
 
 // Tableau de l'avancement des OF (réutilisable : direction, commercial)
 const LIBELLE_STATUT_OF_GLOBAL = {planifie:'Planifié',lance:'Lancé',en_attente_regleur:'En attente régleur',en_cours:'En cours',en_attente_operateur:'En attente opérateur',termine:'Terminé',clos:'Clôturé',annule:'Annulé'};
+const pctOF = (o) => {
+  const cible = parseFloat(o.quantite_cible) || 0;
+  const prod = parseFloat(o.quantite_produite) || 0;
+  return cible > 0 ? Math.min(100, Math.round(prod / cible * 100)) : 0;
+};
+
+// Tableau des OF : recherche, filtre par statut, tri et pages de 15 (direction, commercial, atelier AT3)
 function TableauOF({ ofs }) {
+  const [recherche, setRecherche] = useState('');
+  const [filtreStatut, setFiltreStatut] = useState('');
+  const [tri, setTri] = useState('livraison');
+  const [page, setPage] = useState(0);
+  const PAR_PAGE = 15;
+
+  const q = recherche.trim().toLowerCase();
+  const filtres = ofs.filter(o => {
+    const texte = [o.numero_of, o.article_nom, o.client_nom].filter(Boolean).join(' ').toLowerCase();
+    return (!q || texte.includes(q)) && (!filtreStatut || o.statut === filtreStatut);
+  });
+  const liste = [...filtres].sort((a, b) => {
+    if (tri === 'avancement') return pctOF(b) - pctOF(a);
+    if (tri === 'numero') return String(a.numero_of || '').localeCompare(String(b.numero_of || ''));
+    return String(a.date_livraison_prevue || '9999').localeCompare(String(b.date_livraison_prevue || '9999'));
+  });
+  const pages = Math.max(1, Math.ceil(liste.length / PAR_PAGE));
+  const pageCourante = Math.min(page, pages - 1);
+  const visibles = liste.slice(pageCourante * PAR_PAGE, pageCourante * PAR_PAGE + PAR_PAGE);
+  const statutsPresents = [...new Set(ofs.map(o => o.statut).filter(Boolean))];
+
+  const champ = { padding: '7px 10px', border: '1px solid #d1d5db', borderRadius: 8, fontSize: 13, background: '#fff' };
+
   return (
-    <div style={{background:'#fff',borderRadius:14,border:'1px solid #e5e7eb',overflow:'hidden',marginBottom:16}}>
-      <div style={{padding:'14px 20px',borderBottom:'1px solid #e5e7eb',fontWeight:700,fontSize:14}}>🏭 Ordres de fabrication : avancement</div>
-      {ofs.length===0 ? <div style={{padding:24,textAlign:'center',color:'#6b7280'}}>Aucun ordre de fabrication</div> :
-      <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
-        <thead><tr style={{background:'#f0f9ff'}}>
-          {['N° OF','Article','Client','Avancement','Livraison prévue','Statut'].map(h=>(
-            <th key={h} style={{padding:'8px 12px',textAlign:'left',fontWeight:600,color:'#0369a1',borderBottom:'2px solid #bae6fd'}}>{h}</th>
+    <div style={{ background: '#fff', borderRadius: 14, border: '1px solid #e5e7eb', overflow: 'hidden', marginBottom: 16 }}>
+      <div style={{ padding: '14px 20px', borderBottom: '1px solid #e5e7eb', fontWeight: 700, fontSize: 14 }}>🏭 Ordres de fabrication : avancement</div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: '10px 16px', borderBottom: '1px solid #f3f4f6', alignItems: 'center' }}>
+        <input
+          placeholder="Rechercher un N° OF, un article, un client..."
+          value={recherche}
+          onChange={e => { setRecherche(e.target.value); setPage(0); }}
+          style={{ ...champ, flex: '1 1 220px' }}
+        />
+        <select value={filtreStatut} onChange={e => { setFiltreStatut(e.target.value); setPage(0); }} style={champ}>
+          <option value="">Tous les statuts</option>
+          {statutsPresents.map(s => (<option key={s} value={s}>{LIBELLE_STATUT_OF_GLOBAL[s] || s}</option>))}
+        </select>
+        <select value={tri} onChange={e => setTri(e.target.value)} style={champ}>
+          <option value="livraison">Tri : livraison prévue</option>
+          <option value="avancement">Tri : avancement</option>
+          <option value="numero">Tri : N° OF</option>
+        </select>
+        <span style={{ fontSize: 12, color: '#6b7280' }}>{liste.length} OF sur {ofs.length}</span>
+      </div>
+      {liste.length === 0 ? <div style={{ padding: 24, textAlign: 'center', color: '#6b7280' }}>Aucun ordre de fabrication ne correspond</div> :
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+        <thead><tr style={{ background: '#f0f9ff' }}>
+          {['N° OF', 'Article', 'Client', 'Avancement', 'Livraison prévue', 'Statut'].map(h => (
+            <th key={h} style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 600, color: '#0369a1', borderBottom: '2px solid #bae6fd' }}>{h}</th>
           ))}
         </tr></thead>
         <tbody>
-        {ofs.slice(0,20).map((o,i)=>{
-          const cible = parseFloat(o.quantite_cible)||0;
-          const prod = parseFloat(o.quantite_produite)||0;
-          const pct = cible>0 ? Math.min(100, Math.round(prod/cible*100)) : 0;
-          return (
-          <tr key={o.id} style={{borderBottom:'1px solid #f3f4f6',background:i%2===0?'#fff':'#fafafa'}}>
-            <td style={{padding:'8px 12px',fontWeight:700,color:'#0369a1'}}>{o.numero_of}</td>
-            <td style={{padding:'8px 12px'}}>{o.article_nom||'—'}</td>
-            <td style={{padding:'8px 12px',fontSize:12}}>{o.client_nom||'—'}</td>
-            <td style={{padding:'8px 12px',minWidth:150}}>
-              <div style={{background:'#e5e7eb',borderRadius:6,height:8,overflow:'hidden'}}><div style={{background:'#0369a1',width:pct+'%',height:'100%'}}></div></div>
-              <div style={{fontSize:11,color:'#6b7280',marginTop:2}}>{prod.toLocaleString('fr-FR')} / {cible.toLocaleString('fr-FR')} ({pct}%)</div>
-            </td>
-            <td style={{padding:'8px 12px',fontSize:12}}>{o.date_livraison_prevue?new Date(o.date_livraison_prevue).toLocaleDateString('fr-FR'):'—'}</td>
-            <td style={{padding:'8px 12px',fontSize:12}}>{LIBELLE_STATUT_OF_GLOBAL[o.statut]||o.statut}</td>
-          </tr>
-          ); })}
+          {visibles.map((o, i) => {
+            const cible = parseFloat(o.quantite_cible) || 0;
+            const prod = parseFloat(o.quantite_produite) || 0;
+            const pct = pctOF(o);
+            return (
+              <tr key={o.id} style={{ borderBottom: '1px solid #f3f4f6', background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
+                <td style={{ padding: '8px 12px', fontWeight: 700, color: '#0369a1' }}>{o.numero_of}</td>
+                <td style={{ padding: '8px 12px' }}>{o.article_nom || '—'}</td>
+                <td style={{ padding: '8px 12px', fontSize: 12 }}>{o.client_nom || '—'}</td>
+                <td style={{ padding: '8px 12px', minWidth: 150 }}>
+                  <div style={{ background: '#e5e7eb', borderRadius: 6, height: 8, overflow: 'hidden' }}><div style={{ background: '#0369a1', width: pct + '%', height: '100%' }}></div></div>
+                  <div style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>{prod.toLocaleString('fr-FR')} / {cible.toLocaleString('fr-FR')} ({pct}%)</div>
+                </td>
+                <td style={{ padding: '8px 12px', fontSize: 12 }}>{o.date_livraison_prevue ? new Date(o.date_livraison_prevue).toLocaleDateString('fr-FR') : '—'}</td>
+                <td style={{ padding: '8px 12px', fontSize: 12 }}>{LIBELLE_STATUT_OF_GLOBAL[o.statut] || o.statut}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>}
+      {pages > 1 && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, padding: 12, borderTop: '1px solid #f3f4f6' }}>
+          <button disabled={pageCourante === 0} onClick={() => setPage(pageCourante - 1)} style={{ ...champ, cursor: pageCourante === 0 ? 'default' : 'pointer' }}>◀ Précédent</button>
+          <span style={{ fontSize: 12, color: '#6b7280' }}>Page {pageCourante + 1} / {pages}</span>
+          <button disabled={pageCourante >= pages - 1} onClick={() => setPage(pageCourante + 1)} style={{ ...champ, cursor: pageCourante >= pages - 1 ? 'default' : 'pointer' }}>Suivant ▶</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -2627,36 +2683,7 @@ function DashboardCommercial() {
           </div>
         ))}
       </div>
-      <div style={{background:'#fff',borderRadius:14,border:'1px solid #e5e7eb',overflow:'hidden',marginBottom:16}}>
-        <div style={{padding:'14px 20px',borderBottom:'1px solid #e5e7eb',fontWeight:700,fontSize:14}}>🏭 Ordres de fabrication : avancement</div>
-        {ofs.length===0 ? <div style={{padding:24,textAlign:'center',color:'#6b7280'}}>Aucun ordre de fabrication</div> :
-        <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
-          <thead><tr style={{background:'#f0f9ff'}}>
-            {['N° OF','Article','Client','Avancement','Livraison prévue','Statut'].map(h=>(
-              <th key={h} style={{padding:'8px 12px',textAlign:'left',fontWeight:600,color:'#0369a1',borderBottom:'2px solid #bae6fd'}}>{h}</th>
-            ))}
-          </tr></thead>
-          <tbody>
-          {ofs.slice(0,20).map((o,i)=>{
-            const cible = parseFloat(o.quantite_cible)||0;
-            const prod = parseFloat(o.quantite_produite)||0;
-            const pct = cible>0 ? Math.min(100, Math.round(prod/cible*100)) : 0;
-            return (
-            <tr key={o.id} style={{borderBottom:'1px solid #f3f4f6',background:i%2===0?'#fff':'#fafafa'}}>
-              <td style={{padding:'8px 12px',fontWeight:700,color:'#0369a1'}}>{o.numero_of}</td>
-              <td style={{padding:'8px 12px'}}>{o.article_nom||'—'}</td>
-              <td style={{padding:'8px 12px',fontSize:12}}>{o.client_nom||'—'}</td>
-              <td style={{padding:'8px 12px',minWidth:150}}>
-                <div style={{background:'#e5e7eb',borderRadius:6,height:8,overflow:'hidden'}}><div style={{background:'#0369a1',width:pct+'%',height:'100%'}}></div></div>
-                <div style={{fontSize:11,color:'#6b7280',marginTop:2}}>{prod.toLocaleString('fr-FR')} / {cible.toLocaleString('fr-FR')} ({pct}%)</div>
-              </td>
-              <td style={{padding:'8px 12px',fontSize:12}}>{o.date_livraison_prevue?new Date(o.date_livraison_prevue).toLocaleDateString('fr-FR'):'—'}</td>
-              <td style={{padding:'8px 12px',fontSize:12}}>{LIBELLE_STATUT_OF[o.statut]||o.statut}</td>
-            </tr>
-            ); })}
-          </tbody>
-        </table>}
-      </div>
+      <TableauOF ofs={ofs} />
       <div style={{background:'#fff',borderRadius:14,border:'1px solid #e5e7eb',overflow:'hidden'}}>
         <div style={{padding:'14px 20px',borderBottom:'1px solid #e5e7eb',fontWeight:700,fontSize:14}}>📝 Mes demandes de fabrication</div>
         {loading ? <div style={{padding:20,textAlign:'center',color:'#6b7280'}}>Chargement...</div> :
