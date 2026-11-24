@@ -32,6 +32,9 @@ function periodeDe(s, today = new Date()) {
     const d = new Date(today); d.setDate(d.getDate() - 29);
     return { debut: iso(d), fin: iso(today), libelle: '30 derniers jours' };
   }
+  if (/cette annee|annee en cours/.test(s)) {
+    return { debut: iso(new Date(y, 0, 1)), fin: iso(today), libelle: `année ${y} (en cours)` };
+  }
   if (/mois dernier|mois precedent/.test(s)) {
     const d = new Date(y, m - 1, 1);
     return bornes(d.getFullYear(), d.getMonth());
@@ -103,23 +106,50 @@ async function graphique(role, s, periode) {
   if (!source) {
     return { text: "Vous n'avez pas accès aux données nécessaires à ce graphique avec votre rôle. Adressez-vous à un administrateur." };
   }
+  const serie = await serieGraphique(source, periode);
+  return { text: `Graphique : ${serie.title}.`, graph: serie };
+}
+
+// Serie pour un graphique : par jour, ou par mois si la periode depasse 62 jours
+async function serieGraphique(source, periode) {
   const table = source === 'achats' ? 'commandes_achat' : 'ventes';
   const colDate = source === 'achats' ? 'date_commande' : 'date_vente';
   const jours = (new Date(periode.fin) - new Date(periode.debut)) / 86400000 + 1;
   const parMois = jours > 62;
   const regroupement = parMois ? `to_char(${colDate}::date, 'YYYY-MM')` : `${colDate}::date`;
   const sql = `SELECT ${regroupement} AS cle, COALESCE(SUM(montant_ttc),0)::float AS v FROM ${table}
-               WHERE ${colDate}::date BETWEEN $1 AND $2 ${source === 'ventes' ? "AND statut <> 'annule'" : "AND statut <> 'annule'"}
+               WHERE ${colDate}::date BETWEEN $1 AND $2 AND statut <> 'annule'
                GROUP BY 1 ORDER BY 1`;
   const { rows } = await db.query(sql, [periode.debut, periode.fin]);
-  const titre = `${source === 'achats' ? 'Achats' : 'Ventes'} (TTC) — ${periode.libelle}`;
+  const title = `${source === 'achats' ? 'Achats' : 'Ventes'} (TTC) — ${periode.libelle}`;
   const labels = rows.map((r) => (parMois ? String(r.cle) : String(r.cle).slice(8, 10) + '/' + String(r.cle).slice(5, 7)));
   const values = rows.map((r) => Math.round(r.v));
-  return {
-    text: `Graphique : ${titre}.`,
-    graph: { type: 'bar', title: titre, labels, values, total: values.reduce((a, b) => a + b, 0) },
-  };
+  return { type: 'bar', title, labels, values, total: values.reduce((a, b) => a + b, 0) };
 }
+
+// Indicateurs du panneau de gauche : seulement ce que la personne peut voir
+router.get('/kpis', auth, async (req, res) => {
+  try {
+    const role = String(req.user?.role || '');
+    const periodes = { month: 'ce mois', last_month: 'mois dernier', days30: '30 derniers jours', year: 'cette annee' };
+    const periode = periodeDe(norm(periodes[req.query.p] || 'ce mois'));
+    const out = { periode: periode.libelle, ca: null, ventes: null, achats: null, commandes: null, graph: null };
+    if (accesA(role, '/api/vente')) {
+      const { rows } = await db.query("SELECT COUNT(*)::int AS n, COALESCE(SUM(montant_ttc),0)::float AS m FROM ventes WHERE date_vente::date BETWEEN $1 AND $2 AND statut <> 'annule'", [periode.debut, periode.fin]);
+      out.ca = Math.round(rows[0].m); out.ventes = rows[0].n;
+      out.graph = await serieGraphique('ventes', periode);
+    }
+    if (accesA(role, '/api/achat')) {
+      const { rows } = await db.query("SELECT COUNT(*)::int AS n, COALESCE(SUM(montant_ttc),0)::float AS m FROM commandes_achat WHERE date_commande::date BETWEEN $1 AND $2 AND statut <> 'annule'", [periode.debut, periode.fin]);
+      out.achats = Math.round(rows[0].m); out.commandes = rows[0].n;
+      if (!out.graph) out.graph = await serieGraphique('achats', periode);
+    }
+    res.json(out);
+  } catch (e) {
+    console.error('[ASSISTANT kpis]', e.message);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
 
 // ---------------------------------------------------------------- route
 router.post('/ask', auth, async (req, res) => {

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { ouvrirFichier, ImageFichier } from '../utils/fichiers.jsx';
+import AssistantNAI from './AssistantNAI.jsx';
 import { useAuth } from '../hooks/useAuth.jsx';
 import { useNavigate } from 'react-router-dom';
 
@@ -8687,7 +8688,7 @@ function OrdresLivraison() {
       case 'gmao': return <GMAO />;
       case 'kpi': return <KPIRapports />;
       case 'parametres': return <ParametresSysteme />;
-      case 'ia': return <AssistantIA />;
+      case 'ia': return <AssistantNAI />;
       case 'users': return <Utilisateurs />;
       case 'import': return <ImportSage />;
       case 'alertes': return <Alertes onOuvrir={setOngletActif} />;
