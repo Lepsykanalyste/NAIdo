@@ -3514,7 +3514,7 @@ function Articles() {
   const [form, setForm] = useState({
     code:'', designation:'', famille_id:'', unite_mesure_id:'',
     type_article:'produit_fini', tracabilite_type:'lot', format_lot:'LOT-YYYYMMDD-001', matieres_principales:[],
-    couleur:'', longueur_mm:'', largeur_mm:'', hauteur_mm:'',
+    couleur:'', longueur_mm:'', largeur_mm:'', hauteur_mm:'', epaisseur_mm:'',
     poids_theorique_kg:'', poids_reel_kg:'', poids_mandrin_kg:'',
     cadence_theorique_kg_h:'', temps_reglage_min:'30',
     prix_achat:'0', prix_vente:'0', prix_cession_interne:'0',
@@ -3588,6 +3588,7 @@ function Articles() {
       matieres_principales: a.matieres_principales || [],
       couleur: a.couleur || '',
       longueur_mm: a.longueur_mm || '',
+      epaisseur_mm: a.epaisseur_mm || '',
       largeur_mm: a.largeur_mm || '',
       hauteur_mm: a.hauteur_mm || '',
       poids_theorique_kg: a.poids_theorique_kg || '',
@@ -3646,7 +3647,7 @@ function Articles() {
         points_ccp: !!form.points_ccp,
       };
       // Convertir les champs numériques
-      ['longueur_mm','largeur_mm','hauteur_mm','poids_theorique_kg','poids_reel_kg',
+      ['longueur_mm','largeur_mm','hauteur_mm','epaisseur_mm','poids_theorique_kg','poids_reel_kg',
        'poids_mandrin_kg','cadence_theorique_kg_h','temps_reglage_min',
        'prix_achat','prix_vente','prix_cession_interne','stock_mini','dlc_jours'].forEach(k => {
         if (payload[k] === '') payload[k] = null;
@@ -3772,7 +3773,11 @@ function Articles() {
                 <InputField label="Longueur (mm)" value={form.longueur_mm} onChange={e => setForm({...form,longueur_mm:e.target.value})} type="number" placeholder="0"/>
                 <InputField label="Largeur (mm)" value={form.largeur_mm} onChange={e => setForm({...form,largeur_mm:e.target.value})} type="number" placeholder="0"/>
                 <InputField label="Hauteur (mm)" value={form.hauteur_mm} onChange={e => setForm({...form,hauteur_mm:e.target.value})} type="number" placeholder="0"/>
+                <InputField label="Épaisseur (mm)" value={form.epaisseur_mm} onChange={e => setForm({...form,epaisseur_mm:e.target.value})} type="number" placeholder="0.08"/>
                 <InputField label="Poids théorique (kg)" value={form.poids_theorique_kg} onChange={e => setForm({...form,poids_theorique_kg:e.target.value})} type="number" placeholder="0.000"/>
+                <div style={{ gridColumn:'1 / -1', fontSize:11, color:'#6b7280', marginTop:-4, marginBottom:8 }}>
+                  Calculé automatiquement si longueur, largeur et épaisseur sont renseignées : longueur/100 × largeur/100 × épaisseur × densité atelier 3 × 2 (unité pièce) ou × 1 (unité Kg). La densité se règle dans Paramètres système.
+                </div>
                 <InputField label="Poids moyen réel (kg)" value={form.poids_reel_kg} onChange={e => setForm({...form,poids_reel_kg:e.target.value})} type="number" placeholder="0.000"/>
                 <InputField label="Poids mandrin (kg)" value={form.poids_mandrin_kg} onChange={e => setForm({...form,poids_mandrin_kg:e.target.value})} type="number" placeholder="0.000"/>
                 <InputField label="Couleur" value={form.couleur} onChange={e => setForm({...form,couleur:e.target.value})} placeholder="Naturel, Blanc, Noir..."/>

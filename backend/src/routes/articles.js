@@ -157,6 +157,8 @@ router.post('/', auth, handleUploadOrJSON, async (req, res) => {
       fp(req,'fiche_technique'), fp(req,'fiche_securite'), fp(req,'plan'), fp(req,'photo'),
       true
     ]);
+    // Poids théorique recalculé à partir des dimensions (si l'article en a)
+    await require('../utils/poidsArticle').recalculerPoids(db, rows[0].id);
     res.status(201).json(rows[0]);
   } catch(err) {
     console.error('POST article ERROR:',err.message,'| composition type:',typeof req.body?.composition, '| val:',JSON.stringify(req.body?.composition)?.slice(0,50));
@@ -236,6 +238,11 @@ router.put('/:id', auth, handleUploadOrJSON, async (req, res) => {
     addIf('couleur',d.couleur,v=>v||null);
     addIf('fournisseur',d.fournisseur,v=>v||null);
     addIf('reference_fournisseur',d.reference_fournisseur,v=>v||null);
+    // Dimensions (utilisées pour le poids théorique)
+    addIf('longueur_mm',d.longueur_mm,num);
+    addIf('largeur_mm',d.largeur_mm,num);
+    addIf('hauteur_mm',d.hauteur_mm,num);
+    addIf('epaisseur_mm',d.epaisseur_mm,num);
     addIf('poids_theorique_kg',d.poids_theorique_kg,num);
     addIf('poids_reel_kg',d.poids_reel_kg,num);
     addIf('cadence_theorique_kg_h',d.cadence_theorique_kg_h,num);
@@ -271,6 +278,7 @@ router.put('/:id', auth, handleUploadOrJSON, async (req, res) => {
       vals
     );
     if (!rows.length) return res.status(404).json({ error:'Article introuvable' });
+    await require('../utils/poidsArticle').recalculerPoids(db, articleId);
     res.json(rows[0]);
   } catch(err) { console.error('PUT article ERROR:',err.message, '| body keys:', Object.keys(req.body||{})); res.status(500).json({ error:err.message }); }
 });

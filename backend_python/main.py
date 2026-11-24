@@ -2410,10 +2410,32 @@ async def update_parametre(cle: str, payload: dict, user=Depends(get_current_use
             raise HTTPException(403, "Réservé au super administrateur")
         if role_requis not in ("super_admin",) and role_user not in (role_requis, "super_admin", "directeur"):
             raise HTTPException(403, f"Rôle {role_requis} requis")
+        valeur = str(payload["valeur"])
+        if cle == "densite_atelier3":
+            # Densité : nombre entre 0,5 et 1,5 (ex. 0,91 ; 0,92 ; 0,93 ; 1)
+            try:
+                dens = float(valeur.replace(",", "."))
+            except ValueError:
+                raise HTTPException(400, "Densité invalide")
+            if not (0.5 <= dens <= 1.5):
+                raise HTTPException(400, "Densité hors plage (0,5 à 1,5)")
+            valeur = str(dens)
         row = await conn.fetchrow(
             "UPDATE parametres_systeme SET valeur=$1, updated_at=NOW() WHERE cle=$2 RETURNING *",
-            str(payload["valeur"]), cle
+            valeur, cle
         )
+        if cle == "densite_atelier3":
+            # Le poids théorique de chaque article à dimensions se recalcule avec la nouvelle densité
+            await conn.execute(
+                """UPDATE articles a
+                      SET poids_theorique_kg = ROUND(((a.longueur_mm / 100) * (a.largeur_mm / 100) * a.epaisseur_mm * $1::float8
+                            * (CASE WHEN LOWER(um.code) = 'kg' THEN 1 ELSE 2 END))::numeric, 4)
+                     FROM unites_mesure um
+                    WHERE um.id = a.unite_mesure_id
+                      AND LOWER(um.code) IN ('pce', 'pc', 'piece', 'pièce', 'kg')
+                      AND a.longueur_mm > 0 AND a.largeur_mm > 0 AND a.epaisseur_mm > 0""",
+                float(valeur)
+            )
         return dict(row)
 
 @app.get("/api/parametres/{cle}")
