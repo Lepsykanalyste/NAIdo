@@ -740,7 +740,17 @@ export default function AchatsV2() {
                     <td style={tdStyle}>{jour(c.date_commande)}</td>
                     <td style={tdStyle}>{jour(c.date_livraison_prevue)}</td>
                     <td style={{ ...tdStyle, fontWeight: 700 }}>{fcfa(c.montant_ttc)}</td>
-                    <td style={tdStyle}><Badge s={c.validation === 'validee' && c.statut === 'brouillon' ? 'valide' : c.statut} /></td>
+                    <td style={tdStyle}>
+                      <Badge s={c.validation === 'validee' && c.statut === 'brouillon' ? 'valide' : c.statut} />
+                      {/* Alerte posee sur la ligne : elle disparait des que l'action est faite (le statut change) */}
+                      {(() => {
+                        const a = (c.validation === 'en_attente_direction') ? 'À valider'
+                          : (c.validation === 'validee' && c.statut === 'brouillon') ? 'À envoyer au fournisseur'
+                          : (c.statut === 'envoye') ? 'À confirmer'
+                          : (['confirme', 'receptionne_partiel'].includes(c.statut)) ? 'À réceptionner' : null;
+                        return a ? <div style={{ marginTop: 4, display: 'inline-block', background: '#fee2e2', color: '#dc2626', borderRadius: 999, padding: '2px 8px', fontSize: 10, fontWeight: 700 }}>🔔 {a}</div> : null;
+                      })()}
+                    </td>
                     <td style={tdStyle}>
                       <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
                         <Btn onClick={() => setDetail(c.id)}>👁 Voir</Btn>
