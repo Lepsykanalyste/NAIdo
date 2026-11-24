@@ -186,6 +186,9 @@ const MENU_PAR_ROLE = {
   comptable:         ['dashboard','separator2','stock','separator2b','vente','achat','alertes'],
 };
 
+const btnMenuPerso = { width:'100%', padding:'6px 10px', borderRadius:6, border:'1px solid #374151', background:'#1f2937', color:'#e5e7eb', cursor:'pointer', fontSize:12, textAlign:'left' };
+const flechePerso = { background:'#1f2937', border:'1px solid #374151', color:'#e5e7eb', borderRadius:4, width:20, height:20, cursor:'pointer', fontSize:11, padding:0, lineHeight:1 };
+
 // Menu de la personne : seuls les ecrans coches dans la matrice restent (les separateurs vides sont retires)
 function menuPourMoi(menu, ecrans) {
   if (!ecrans || ecrans.tout) return menu;
@@ -8339,6 +8342,57 @@ export default function ChefAtelier() {
   const { user, logout, changerPoste } = useAuth();
   const [ecransMoi, setEcransMoi] = useState(null);
   useEffect(() => { axios.get(`${API}/droits/mon-menu`).then(r => setEcransMoi(r.data)).catch(() => setEcransMoi(null)); }, [user?.role]);
+
+  // ── Personnalisation du menu (par personne, enregistrée sur le serveur) ──
+  const [dispo, setDispo] = useState({ ordre: [], groupes: [] });
+  const [editionMenu, setEditionMenu] = useState(false);
+  const [groupesFermes, setGroupesFermes] = useState({});
+  useEffect(() => { axios.get(`${API}/preferences/menu`).then(r => setDispo(r.data || { ordre: [], groupes: [] })).catch(() => {}); }, []);
+  const sauverDispo = async (nouveau) => {
+    setDispo(nouveau);
+    try { await axios.put(`${API}/preferences/menu`, nouveau); }
+    catch { toast.error('Enregistrement du menu impossible'); }
+  };
+  // Menu de la personne : écrans visibles, dans l'ordre et les groupes qu'elle a choisis
+  const etatMenu = () => {
+    const base = menuPourMoi(ecransMoi ? MENU : getMenuFiltre(user?.role), ecransMoi);
+    const visibles = base.filter(i => !i.separator);
+    const ids = visibles.map(i => i.id);
+    const ordre = [...dispo.ordre.filter(id => ids.includes(id)), ...ids.filter(id => !dispo.ordre.includes(id))];
+    const dansGroupe = new Set(dispo.groupes.flatMap(g => g.ids));
+    const parId = (id) => visibles.find(i => i.id === id);
+    return {
+      base, visibles, ordre,
+      perso: dispo.ordre.length > 0 || dispo.groupes.length > 0,
+      top: ordre.filter(id => !dansGroupe.has(id)).map(parId).filter(Boolean),
+      groupes: dispo.groupes.map(g => ({ nom: g.nom, items: g.ids.filter(id => ids.includes(id)).map(parId).filter(Boolean) })),
+    };
+  };
+  const monterDescendre = (id, delta) => {
+    const { ordre } = etatMenu();
+    const i = ordre.indexOf(id), j = i + delta;
+    if (i < 0 || j < 0 || j >= ordre.length) return;
+    const n = [...ordre]; [n[i], n[j]] = [n[j], n[i]];
+    sauverDispo({ ...dispo, ordre: n });
+  };
+  const affecterGroupe = (id, nom) => {
+    const groupes = dispo.groupes.map(g => ({ ...g, ids: g.ids.filter(x => x !== id) }));
+    if (nom) { const g = groupes.find(x => x.nom === nom); if (g) g.ids = [...g.ids, id]; }
+    sauverDispo({ ...dispo, groupes, ordre: etatMenu().ordre });
+  };
+  const nouveauGroupeMenu = async () => {
+    const nom = await saisir('Nom du nouveau groupe (40 caractères max) :', '');
+    const n = (nom || '').trim().slice(0, 40);
+    if (!n) return;
+    if (dispo.groupes.some(g => g.nom === n)) return toast.error('Ce groupe existe déjà');
+    sauverDispo({ ...dispo, groupes: [...dispo.groupes, { nom: n, ids: [] }], ordre: etatMenu().ordre });
+  };
+  const supprimerGroupeMenu = (nom) => sauverDispo({ ...dispo, groupes: dispo.groupes.filter(g => g.nom !== nom), ordre: etatMenu().ordre });
+  const reinitialiserMenu = async () => {
+    if (!(await confirmer('Revenir au menu par défaut ?'))) return;
+    setEditionMenu(false);
+    sauverDispo({ ordre: [], groupes: [] });
+  };
   const navigate = useNavigate();
   const [ongletActif, setOngletActif] = useState('dashboard');
   // Mobile (moins de 768 px) : barre latérale fermée par défaut, en panneau par-dessus le contenu
@@ -8774,7 +8828,77 @@ function OrdresLivraison() {
 
         {/* Menu */}
         <nav style={{ flex:1, overflowY:'auto', padding:'8px 0' }}>
-          {menuPourMoi(ecransMoi ? MENU : getMenuFiltre(user?.role), ecransMoi).map(item => {
+          {sidebarOuverte && (
+            <div style={{ padding:'0 12px 8px', display:'flex', flexDirection:'column', gap:6 }}>
+              {!editionMenu ? (
+                <button onClick={() => setEditionMenu(true)} style={btnMenuPerso}>⚙ Personnaliser le menu</button>
+              ) : (
+                <>
+                  <button onClick={() => setEditionMenu(false)} style={{ ...btnMenuPerso, background:'#15803d', borderColor:'#15803d', color:'#fff', fontWeight:600 }}>✔ Terminer</button>
+                  <div style={{ display:'flex', gap:6 }}>
+                    <button onClick={nouveauGroupeMenu} style={{ ...btnMenuPerso, flex:1 }}>+ Nouveau groupe</button>
+                    <button onClick={reinitialiserMenu} style={{ ...btnMenuPerso, flex:1 }}>Réinitialiser</button>
+                  </div>
+                  <div style={{ fontSize:10, color:'#6b7280' }}>↑ ↓ : ordre · liste : groupe (vide = haut du menu)</div>
+                </>
+              )}
+            </div>
+          )}
+          {(editionMenu || etatMenu().perso) && (() => {
+            const e = etatMenu();
+            const ligne = (item) => {
+              if (!editionMenu) {
+                const actif = ongletActif === item.id;
+                const badge = badgeMenu(item.id);
+                return (
+                  <button key={item.id} onClick={() => { setOngletActif(item.id); if (mobile) setSidebarOuverte(false); }}
+                    title={!sidebarOuverte ? item.label : ''}
+                    style={{ width:'100%', display:'flex', alignItems:'center', gap:10, padding:'9px 14px', border:'none', background: actif ? '#1f2937' : 'none',
+                      borderLeft: actif ? `3px solid ${item.color}` : '3px solid transparent', color: actif ? '#fff' : '#9ca3af', cursor:'pointer',
+                      fontSize:13, fontWeight: actif ? 600 : 400, textAlign:'left' }}>
+                    <span style={{ color: actif ? item.color : '#6b7280', flexShrink:0 }}><Icon d={ICONS[item.icon]} size={16}/></span>
+                    {sidebarOuverte && <span style={{ whiteSpace:'nowrap', flex:1 }}>{item.label}</span>}
+                    {badge > 0 && (
+                      <span style={{ background:'#dc2626', color:'#fff', borderRadius:'50%', width:18, height:18, fontSize:10, display:'flex', alignItems:'center', justifyContent:'center', fontWeight:700, flexShrink:0 }}>
+                        {badge > 9 ? '9+' : badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              }
+              const groupe = dispo.groupes.find(g => g.ids.includes(item.id));
+              return (
+                <div key={item.id} style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 10px', color:'#e5e7eb', fontSize:12 }}>
+                  <span style={{ flex:1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{item.label}</span>
+                  <button onClick={() => monterDescendre(item.id, -1)} style={flechePerso} aria-label="Monter">↑</button>
+                  <button onClick={() => monterDescendre(item.id, 1)} style={flechePerso} aria-label="Descendre">↓</button>
+                  <select value={groupe?.nom || ''} onChange={ev => affecterGroupe(item.id, ev.target.value)}
+                    style={{ fontSize:10, maxWidth:96, background:'#1f2937', color:'#e5e7eb', border:'1px solid #374151', borderRadius:4 }}>
+                    <option value="">Haut du menu</option>
+                    {dispo.groupes.map(g => <option key={g.nom} value={g.nom}>{g.nom}</option>)}
+                  </select>
+                </div>
+              );
+            };
+            return (
+              <>
+                {e.top.map(ligne)}
+                {e.groupes.map(g => (
+                  <div key={'g-' + g.nom}>
+                    <div style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 14px 2px' }}>
+                      <button onClick={() => setGroupesFermes(s => ({ ...s, [g.nom]: !s[g.nom] }))}
+                        style={{ background:'none', border:'none', color:'#9ca3af', cursor:'pointer', padding:0, flex:1, textAlign:'left', fontSize:10, fontWeight:700, letterSpacing:1, textTransform:'uppercase' }}>
+                        {groupesFermes[g.nom] ? '▸' : '▾'} {g.nom}
+                      </button>
+                      {editionMenu && <button onClick={() => supprimerGroupeMenu(g.nom)} title="Supprimer le groupe" style={flechePerso}>✕</button>}
+                    </div>
+                    {!groupesFermes[g.nom] && g.items.map(ligne)}
+                  </div>
+                ))}
+              </>
+            );
+          })()}
+          {!(editionMenu || etatMenu().perso) && menuPourMoi(ecransMoi ? MENU : getMenuFiltre(user?.role), ecransMoi).map(item => {
             if (item.separator) {
               return sidebarOuverte ? (
                 <div key={item.id} style={{ padding:'12px 14px 4px', fontSize:10, fontWeight:700, color:'#4b5563', letterSpacing:1, textTransform:'uppercase', whiteSpace:'nowrap' }}>
