@@ -2556,13 +2556,13 @@ const pctOF = (o) => {
   return cible > 0 ? Math.min(100, Math.round(prod / cible * 100)) : 0;
 };
 
-// Bloc repliable : le contenu (tableaux, filtres) ne s'affiche qu'Ã  l'ouverture
+// Bloc repliable : le contenu (tableaux, filtres) ne s'affiche qu'à l'ouverture
 function Section({ titre, badge, defaultOuvert = false, children }) {
   const [ouvert, setOuvert] = useState(defaultOuvert);
   return (
     <div style={{ background:'#fff', borderRadius:14, border:'1px solid #e5e7eb', overflow:'hidden', marginBottom:16 }}>
       <button onClick={() => setOuvert(o => !o)} style={{ width:'100%', display:'flex', alignItems:'center', gap:10, padding:'14px 20px', background:'#fff', border:'none', borderBottom: ouvert ? '1px solid #e5e7eb' : 'none', cursor:'pointer', textAlign:'left', fontWeight:700, fontSize:14 }}>
-        <span style={{ fontSize:12, color:'#6b7280' }}>{ouvert ? 'â–¾' : 'â–¸'}</span>
+        <span style={{ fontSize:12, color:'#6b7280' }}>{ouvert ? '▾' : '▸'}</span>
         <span>{titre}</span>
         {badge !== undefined && <span style={{ marginLeft:'auto', fontSize:12, fontWeight:600, color:'#6b7280', background:'#f3f4f6', borderRadius:12, padding:'2px 10px' }}>{badge}</span>}
       </button>
@@ -2704,8 +2704,8 @@ function DashboardCommercial() {
           </div>
         ))}
       </div>
-      <Section titre="ðŸ­ Ordres de fabrication" badge={ofs.length}><TableauOF /></Section>
-      <Section titre="ðŸ“ Mes demandes de fabrication" badge={dfs.length}>
+      <Section titre="🏭 Ordres de fabrication" badge={ofs.length}><TableauOF /></Section>
+      <Section titre="📝 Mes demandes de fabrication" badge={dfs.length}>
         {loading ? <div style={{padding:20,textAlign:'center',color:'#6b7280'}}>Chargement...</div> :
         dfs.length===0 ? <div style={{padding:30,textAlign:'center',color:'#6b7280'}}>Aucune demande — créez la première via le menu</div> :
         <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
@@ -2776,7 +2776,7 @@ function DashboardAT3() {
   const machinesEX=Array.from({length:9},(_,i)=>{const code=`EX${String(i+1).padStart(2,"0")}`;const m=trs.find(t=>(t.machine_code||"").includes(code));return{code,v:m?parseFloat(m.trs||0):null};});
   const machinesSOU=Array.from({length:5},(_,i)=>{const code=`SOU${String(i+1).padStart(2,"0")}`;const m=trs.find(t=>(t.machine_code||"").includes(code));return{code,v:m?parseFloat(m.trs||0):null};});
   return (<div>
-      <Section titre="ðŸ­ Ordres de fabrication" badge={ofs.length}><TableauOF /></Section>
+      <Section titre="🏭 Ordres de fabrication" badge={ofs.length}><TableauOF /></Section>
     <div style={{background:"linear-gradient(135deg,#14532d,#166534)",borderRadius:14,padding:"16px 20px",marginBottom:16,color:"#fff",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
       <div><div style={{fontWeight:800,fontSize:17}}>🏭 Atelier 3 — Tableau de Bord</div><div style={{fontSize:12,opacity:0.8}}>{user?.prenom} {user?.nom} · {new Date().toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"})}</div></div>
       <button onClick={charger} style={{background:"rgba(255,255,255,0.2)",border:"none",color:"#fff",borderRadius:8,padding:"7px 14px",cursor:"pointer",fontSize:12}}>🔄</button>
@@ -2841,7 +2841,7 @@ function Dashboard() {
 
   return (
     <div>
-      {['directeur','super_admin'].includes(user?.role||'') && <Section titre="ðŸ­ Ordres de fabrication" badge={ofs.length}><TableauOF /></Section>}
+      {['directeur','super_admin'].includes(user?.role||'') && <Section titre="🏭 Ordres de fabrication" badge={ofs.length}><TableauOF /></Section>}
 {/* Navigation en dossiers ateliers */}
       {!['commercial','vente','achat','rh','qhse'].includes(user?.role||'') && (<div style={{marginBottom:20,display:'flex',gap:12,flexWrap:'wrap',alignItems:'flex-start'}}>
         {/* Vue générale */}
