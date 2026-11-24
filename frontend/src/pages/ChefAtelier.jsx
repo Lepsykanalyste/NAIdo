@@ -5977,6 +5977,7 @@ function AssistantIA() {
     { label:'📥 À réceptionner',      question:'Commandes à réceptionner' },
     { label:'💰 Achats du mois',      question:'Montant des achats du mois' },
     { label:'📈 CA du mois',          question:'CA du mois' },
+    { label:'📊 Graphique ventes',    question:'Graphique des ventes du mois' },
     { label:'🔔 Alertes non lues',    question:'Alertes non lues' },
     { label:'🧪 Non-conformités',     question:'Non-conformités ouvertes' },
     { label:'🧾 Mes droits',          question:'Mes droits' },
@@ -5998,7 +5999,7 @@ function AssistantIA() {
         const finalMsgs = [...newMessages, errMsg];
         setMessages(finalMsgs);
       } else {
-        const assistantMsg = { role:'assistant', content: data.text || data.reponse || data };
+        const assistantMsg = { role:'assistant', content: data.text || data.reponse || data, graph: data.graph || null };
         const finalMsgs = [...newMessages, assistantMsg];
         setMessages(finalMsgs);
         sauvegarderConv(finalMsgs);
@@ -6101,6 +6102,24 @@ function AssistantIA() {
                 fontSize:13, lineHeight:1.6
               }}>
                 <div dangerouslySetInnerHTML={{__html:formater(m.content)}}/>
+                {m.graph && (() => {
+                  const max = Math.max(1, ...m.graph.values);
+                  return (
+                    <div style={{marginTop:10}}>
+                      <div style={{fontWeight:700,fontSize:12,marginBottom:6}}>{m.graph.title}</div>
+                      <div style={{display:'flex',alignItems:'flex-end',gap:3,height:140,borderBottom:'1px solid #e5e7eb',overflowX:'auto'}}>
+                        {m.graph.values.map((v,k)=>(
+                          <div key={k} title={`${m.graph.labels[k]} : ${v.toLocaleString('fr-FR')} FCFA`}
+                            style={{flex:'1 0 14px',minWidth:14,background:'#4338ca',borderRadius:'3px 3px 0 0',height:`${Math.max(2,(v/max)*130)}px`}}/>
+                        ))}
+                      </div>
+                      <div style={{display:'flex',gap:3,overflowX:'auto',fontSize:9,color:'#6b7280',marginTop:3}}>
+                        {m.graph.labels.map((l,k)=>(<div key={k} style={{flex:'1 0 14px',minWidth:14,textAlign:'center'}}>{l}</div>))}
+                      </div>
+                      <div style={{fontSize:11,color:'#6b7280',marginTop:6}}>Total : {m.graph.values.reduce((a,b)=>a+b,0).toLocaleString('fr-FR')} FCFA</div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           ))}
