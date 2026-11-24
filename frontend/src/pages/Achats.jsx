@@ -703,6 +703,7 @@ export default function AchatsV2() {
 
   return (
     <div>
+{envoi && <ChoixEnvoi commande={envoi} onClose={() => setEnvoi(null)} onEnvoye={() => { setEnvoi(null); recharger(); }} />}
       <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
         {[['commandes', '🛒 Commandes'], ['demandes', "📝 Demandes d'achat"]].map(([v, l]) => (
           <button key={v} onClick={() => setOnglet(v)} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, background: onglet === v ? '#6d28d9' : '#f3f4f6', color: onglet === v ? '#fff' : '#374151' }}>{l}</button>
@@ -873,7 +874,6 @@ export function ArticlesDivers() {
 
   return (
     <div>
-{envoi && <ChoixEnvoi commande={envoi} onClose={() => setEnvoi(null)} onEnvoye={() => { setEnvoi(null); recharger(); }} />}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, gap: 8, flexWrap: 'wrap' }}>
         <input placeholder="🔍 Code, désignation, fournisseur..." value={recherche} onChange={e => setRecherche(e.target.value)} style={{ ...inputStyle, maxWidth: 340 }} />
         <Btn plein onClick={() => ouvrir(null)}>+ Nouvel article divers</Btn>
