@@ -8043,7 +8043,6 @@ function ParametresSysteme() {
         {[
           {id:'systeme',label:'⚙ Paramètres système'},
           {id:'permissions',label:'🔐 Permissions par rôle'},
-          {id:'ia',label:'🤖 IA & Assistant'},
           {id:'logs',label:'📋 Logs activité'},
         ].map(o=>(
           <button key={o.id} onClick={()=>setOnglet(o.id)} style={{
@@ -8144,49 +8143,6 @@ function ParametresSysteme() {
           </table>
           <div style={{marginTop:12,fontSize:11,color:'#9ca3af'}}>
             👁 = Voir le module | ✏± = Créer/Modifier | 💰± = Voir les données financières
-          </div>
-        </div>
-      )}
-
-      {/* ══ PARAMÈTRES IA ══ */}
-      {onglet==='ia' && (
-        <div style={{maxWidth:600}}>
-          <div style={{background:'#fff',borderRadius:12,border:'1px solid #e5e7eb',padding:20,marginBottom:16}}>
-            <div style={{fontWeight:700,color:'#4338ca',marginBottom:16,fontSize:15}}>🤖 Configuration Assistant IA</div>
-            {params.filter(p=>['ia_enabled','ia_modele','ia_contexte_entreprise'].includes(p.cle)).map(p=>(
-              <div key={p.cle} style={{marginBottom:16,paddingBottom:16,borderBottom:'1px solid #f3f4f6'}}>
-                <div style={{fontWeight:600,fontSize:13,marginBottom:4}}>{p.description}</div>
-                {editing[p.cle] ? (
-                  <div style={{display:'flex',gap:8}}>
-                    {p.type_valeur==='boolean' ? (
-                      <select id={`param-${p.cle}`} defaultValue={p.valeur}
-                        style={{flex:1,border:'2px solid #818cf8',borderRadius:6,padding:'7px',fontSize:13}}>
-                        <option value="true">Activé</option>
-                        <option value="false">Désactivé</option>
-                      </select>
-                    ) : p.cle==='ia_contexte_entreprise' ? (
-                      <textarea id={`param-${p.cle}`} defaultValue={p.valeur} rows={4}
-                        style={{flex:1,border:'2px solid #818cf8',borderRadius:6,padding:'7px',fontSize:13,resize:'vertical'}}/>
-                    ) : (
-                      <input id={`param-${p.cle}`} defaultValue={p.valeur}
-                        style={{flex:1,border:'2px solid #818cf8',borderRadius:6,padding:'7px',fontSize:13}}/>
-                    )}
-                    <button onClick={()=>sauverParam(p.cle, document.getElementById(`param-${p.cle}`).value)}
-                      style={{background:'#4338ca',color:'#fff',border:'none',padding:'7px 14px',borderRadius:6,cursor:'pointer',fontWeight:700}}>✓</button>
-                  </div>
-                ) : (
-                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',background:'#f8f9ff',borderRadius:8,padding:'10px 14px'}}>
-                    <span style={{fontSize:13,color:'#1e1b4b'}}>{p.valeur}</span>
-                    <button onClick={()=>setEditing(prev=>({...prev,[p.cle]:true}))}
-                      style={{background:'#e0e7ff',color:'#4338ca',border:'none',padding:'4px 10px',borderRadius:6,cursor:'pointer',fontSize:11,fontWeight:600}}>✏</button>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-          <div style={{background:'#fffbeb',borderRadius:12,border:'1px solid #fde68a',padding:16,fontSize:12,color:'#92400e'}}>
-            ⚠ L'assistant IA utilise l'API Anthropic Claude. Assurez-vous que la clé API est configurée côté serveur.
-            Le contexte entreprise aide l'IA à donner des réponses adaptées à NAI.
           </div>
         </div>
       )}

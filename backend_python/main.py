@@ -1636,111 +1636,12 @@ async def calcul_temps_production(
 
 
 # ══════════════════════════════════════════════════════════════
-# IA — GROQ + MISTRAL avec bascule automatique
+# IA : aucun service externe (pas de Groq, Mistral ni Anthropic, aucune clé API).
 # ══════════════════════════════════════════════════════════════
 
-import httpx
-
-GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
-MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions"
-
-async def get_ia_keys(pool):
-    """Récupère les clés API depuis les paramètres système"""
-    async with pool.acquire() as conn:
-        rows = await conn.fetch(
-            "SELECT cle, valeur FROM parametres_systeme WHERE cle IN ($1,$2,$3,$4)",
-            'groq_api_key', 'mistral_api_key', 'ia_enabled', 'ia_contexte_entreprise'
-        )
-        return {r['cle']: r['valeur'] for r in rows}
-
-async def call_groq(prompt: str, system: str, api_key: str, model="llama-3.3-70b-versatile") -> str:
-    """Appel Groq API"""
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(
-            GROQ_API_URL,
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={
-                "model": model,
-                "messages": [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": prompt}
-                ],
-                "temperature": 0.3,
-                "max_tokens": 2000,
-            }
-        )
-        resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"]
-
-async def call_mistral(prompt: str, system: str, api_key: str, model="mistral-large-latest") -> str:
-    """Appel Mistral API"""
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(
-            MISTRAL_API_URL,
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={
-                "model": model,
-                "messages": [
-                    {"role": "system", "content": system},
-                    {"role": "user", "content": prompt}
-                ],
-                "temperature": 0.3,
-                "max_tokens": 2000,
-            }
-        )
-        resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"]
-
 async def appel_ia(pool, prompt: str, contexte: str = "") -> dict:
-    """IA interne uniquement : aucun appel vers un service externe (Groq, Mistral, Anthropic) ; code externe conservé mais désactivé."""
+    """IA interne uniquement : aucun appel vers un service externe, aucune clé API à configurer."""
     return {"erreur": "IA externe désactivée : l'assistant de NAIdo fonctionne uniquement en interne"}
-    keys = await get_ia_keys(pool)
-    
-    if keys.get('ia_enabled') == 'false':
-        return {"erreur": "IA désactivée dans les paramètres"}
-    
-    ctx_entreprise = keys.get("ia_contexte_entreprise", "NAI — Usine de fabrication de sacs plastiques, Côte d'Ivoire")
-    system_prompt = f"""Tu es l'assistant IA de NAI (anciennement Green Industry), une usine de fabrication de sacs plastiques en Côte d'Ivoire.
-Contexte : {ctx_entreprise}
-{contexte}
-Tu réponds toujours en français, de manière concise et professionnelle.
-Tu as accès aux données de production, stock, QHSE, RH et maintenance de l'usine.
-Tu ne divulgues jamais les données financières sensibles sauf si autorisé.
-Date du jour : {datetime.utcnow().strftime('%d/%m/%Y')}"""
-
-    # 1. Essayer Groq
-    groq_key = keys.get('groq_api_key', '')
-    if groq_key and groq_key != '***':
-        try:
-            reponse = await call_groq(prompt, system_prompt, groq_key)
-            return {"reponse": reponse, "modele": "Groq llama-3.3-70b", "provider": "groq"}
-        except Exception as e:
-            print(f"Groq erreur: {e}")
-    
-    # 2. Basculer sur Mistral
-    mistral_key = keys.get('mistral_api_key', '')
-    if mistral_key and mistral_key != '***':
-        try:
-            reponse = await call_mistral(prompt, system_prompt, mistral_key)
-            return {"reponse": reponse, "modele": "Mistral large", "provider": "mistral"}
-        except Exception as e:
-            print(f"Mistral erreur: {e}")
-    
-    # 3. Essayer Anthropic si dispo
-    try:
-        import anthropic
-        client = anthropic.Anthropic()
-        msg = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=2000,
-            system=system_prompt,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return {"reponse": msg.content[0].text, "modele": "Claude Sonnet", "provider": "anthropic"}
-    except Exception as e:
-        print(f"Anthropic erreur: {e}")
-    
-    return {"erreur": "Aucun provider IA disponible. Configurez Groq ou Mistral dans les paramètres."}
 
 @app.post("/api/ia/chat")
 async def ia_chat(payload: dict, user=Depends(get_current_user)):
