@@ -2015,7 +2015,7 @@ function OrdresFabrication({ setOngletActif }) {
   const [form, setForm] = useState({
     article_id:'', client_id:'', machine_id:'', atelier_id:'AT3',
     quantite_cible:'', date_livraison_prevue:'', priorite:'3',
-    instructions:'', reference_sage:'', tracabilite_type:'lot', format_lot:''
+    instructions:'', reference_sage:''
   });
   const [tempsCalc, setTempsCalc] = useState(null);
 
@@ -2071,7 +2071,7 @@ function OrdresFabrication({ setOngletActif }) {
       });
       toast.success('OF créé !');
       setShowForm(false);
-      setForm({article_id:'',client_id:'',machine_id:'',atelier_id:'AT3',quantite_cible:'',date_livraison_prevue:'',priorite:'3',instructions:'',reference_sage:'',tracabilite_type:'lot',format_lot:''});
+      setForm({article_id:'',client_id:'',machine_id:'',atelier_id:'AT3',quantite_cible:'',date_livraison_prevue:'',priorite:'3',instructions:'',reference_sage:''});
       charger();
     } catch(e) { toast.error(e.response?.data?.error||'Erreur création'); }
   };
@@ -2191,18 +2191,6 @@ function OrdresFabrication({ setOngletActif }) {
                 style={{width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid #e5e7eb',fontSize:13}}
                 placeholder="Réf. commande Sage"
               />
-            </div>
-            <div style={{marginBottom:12}}>
-              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Type de traçabilité</div>
-              <select value={form.tracabilite_type||'lot'} onChange={e=>setForm({...form,tracabilite_type:e.target.value})} style={{width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid #e5e7eb',fontSize:13,background:'#fff'}}>
-                <option value="lot">Par numéro de lot (alimentaire, ISO)</option>
-                <option value="serie">Par numéro de série</option>
-                <option value="aucune">Aucune traçabilité</option>
-              </select>
-            </div>
-            <div style={{marginBottom:12}}>
-              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Format du numéro de lot / série</div>
-              <input value={form.format_lot||''} onChange={e=>setForm({...form,format_lot:e.target.value})} placeholder="ex. LOT-YYYYMMDD-001" style={{width:'100%',padding:'8px 10px',borderRadius:8,border:'1px solid #e5e7eb',fontSize:13,fontFamily:'monospace'}}/>
             </div>
             <div style={{marginBottom:12}}>
               <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:4}}>Instructions spéciales</div>

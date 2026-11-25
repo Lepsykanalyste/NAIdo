@@ -65,7 +65,7 @@ router.post('/', auth, async (req, res) => {
     const {
       client_id, article_id, quantite_cible, machine_id,
       atelier_id, date_livraison_prevue, priorite, instructions,
-      unite_id, reference_sage, tracabilite_type, format_lot
+      unite_id, reference_sage
     } = req.body;
 
     if (!article_id || !quantite_cible) {
@@ -89,8 +89,8 @@ router.post('/', auth, async (req, res) => {
       INSERT INTO ordres_fabrication 
         (client_id, article_id, quantite_cible, machine_id, atelier_id,
          date_livraison_prevue, priorite, instructions, unite_id,
-         reference_sage, temps_prevu_min, statut, tracabilite_type, format_lot)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'planifie',$12,$13)
+         reference_sage, temps_prevu_min, statut)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'planifie')
       RETURNING *
     `, [
       client_id || null,
@@ -103,9 +103,7 @@ router.post('/', auth, async (req, res) => {
       instructions || null,
       unite_id || null,
       reference_sage || null,
-      temps_prevu_min,
-      ['lot', 'serie', 'aucune'].includes(tracabilite_type) ? tracabilite_type : 'lot',
-      format_lot || null,
+      temps_prevu_min
     ]);
     res.status(201).json(rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
