@@ -8393,18 +8393,6 @@ export default function ChefAtelier() {
     if (nomCible) { const g = groupes.find(x => x.nom === nomCible); if (g) g.ids = [...g.ids, dragged]; }
     sauverDispo({ ...dispo, ordre, groupes });
   };
-  const monterDescendre = (id, delta) => {
-    const { ordre } = etatMenu();
-    const i = ordre.indexOf(id), j = i + delta;
-    if (i < 0 || j < 0 || j >= ordre.length) return;
-    const n = [...ordre]; [n[i], n[j]] = [n[j], n[i]];
-    sauverDispo({ ...dispo, ordre: n });
-  };
-  const affecterGroupe = (id, nom) => {
-    const groupes = dispo.groupes.map(g => ({ ...g, ids: g.ids.filter(x => x !== id) }));
-    if (nom) { const g = groupes.find(x => x.nom === nom); if (g) g.ids = [...g.ids, id]; }
-    sauverDispo({ ...dispo, groupes, ordre: etatMenu().ordre });
-  };
   const nouveauGroupeMenu = async () => {
     const nom = await saisir('Nom du nouveau groupe (40 caractères max) :', '');
     const n = (nom || '').trim().slice(0, 40);
@@ -8864,7 +8852,7 @@ function OrdresLivraison() {
                     <button onClick={nouveauGroupeMenu} style={{ ...btnMenuPerso, flex:1 }}>+ Nouveau groupe</button>
                     <button onClick={reinitialiserMenu} style={{ ...btnMenuPerso, flex:1 }}>Réinitialiser</button>
                   </div>
-                  <div style={{ fontSize:10, color:'#6b7280' }}>Glissez un écran sur un autre, sur un groupe ou sur « Haut du menu ». Les flèches restent disponibles.</div>
+                  <div style={{ fontSize:10, color:'#6b7280' }}>Glissez un écran sur un autre, sur un groupe ou sur « Haut du menu ».</div>
                 </>
               )}
             </div>
@@ -8901,14 +8889,8 @@ function OrdresLivraison() {
                   style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 10px', color:'#e5e7eb', fontSize:12, cursor:'grab',
                     borderTop: survol === item.id && glisse && glisse !== item.id ? '2px solid #60a5fa' : '2px solid transparent',
                     background: glisse === item.id ? '#1f2937' : 'none', borderRadius:4 }}>
+                  <span style={{ color:'#6b7280', fontSize:14, flexShrink:0 }} aria-hidden="true">⠿</span>
                   <span style={{ flex:1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{item.label}</span>
-                  <button onClick={() => monterDescendre(item.id, -1)} style={flechePerso} aria-label="Monter">↑</button>
-                  <button onClick={() => monterDescendre(item.id, 1)} style={flechePerso} aria-label="Descendre">↓</button>
-                  <select value={groupe?.nom || ''} onChange={ev => affecterGroupe(item.id, ev.target.value)}
-                    style={{ fontSize:10, maxWidth:96, background:'#1f2937', color:'#e5e7eb', border:'1px solid #374151', borderRadius:4 }}>
-                    <option value="">Haut du menu</option>
-                    {dispo.groupes.map(g => <option key={g.nom} value={g.nom}>{g.nom}</option>)}
-                  </select>
                 </div>
               );
             };
