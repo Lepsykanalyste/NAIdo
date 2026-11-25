@@ -666,6 +666,84 @@ function GestionLibelles({ onClose }) {
   );
 }
 
+// Historique Sage : achats, receptions, ventes et mouvements d'un article (lecture seule)
+function HistoriqueSage() {
+  const [q, setQ] = useState('');
+  const [resultats, setResultats] = useState([]);
+  const [art, setArt] = useState(null);
+  const [detail, setDetail] = useState(null);
+  const chercher = async v => {
+    setQ(v);
+    if (v.trim().length < 2) { setResultats([]); return; }
+    try { const { data } = await axios.get(`${API}/achat/historique-sage/recherche`, { params: { q: v } }); setResultats(data); }
+    catch { setResultats([]); }
+  };
+  const ouvrir = async a => {
+    setArt(a); setDetail(null);
+    try { const { data } = await axios.get(`${API}/achat/historique-sage/article/${a.id}`); setDetail(data); }
+    catch (e) { toast.error(msg(e)); }
+  };
+  const titre = (t, n) => <h3 style={{ fontSize: 14, fontWeight: 800, margin: '18px 0 6px' }}>{t} ({n})</h3>;
+  return (
+    <div>
+      <input value={q} onChange={e => chercher(e.target.value)} placeholder="Chercher un article (code ou désignation)…"
+        style={{ width: '100%', maxWidth: 480, padding: '9px 12px', borderRadius: 8, border: '1px solid #d1d5db', fontSize: 14, boxSizing: 'border-box' }} />
+      {!art && resultats.length > 0 && (
+        <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', overflow: 'auto', marginTop: 10 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead><tr>{['Code', 'Désignation', 'Stock'].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
+            <tbody>{resultats.map(a => (
+              <tr key={a.id} onClick={() => ouvrir(a)} style={{ cursor: 'pointer' }}>
+                <td style={{ ...tdStyle, fontFamily: 'monospace', fontWeight: 700, color: '#6d28d9' }}>{a.code}</td>
+                <td style={tdStyle}>{a.designation}</td>
+                <td style={{ ...tdStyle, fontWeight: 700 }}>{Number(a.stock).toLocaleString('fr-FR')}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
+      {art && (
+        <div style={{ marginTop: 10 }}>
+          <button onClick={() => { setArt(null); setDetail(null); }} style={{ border: 'none', background: 'none', color: '#6d28d9', cursor: 'pointer', fontWeight: 700, padding: 0, marginBottom: 8 }}>← Retour à la recherche</button>
+          <h2 style={{ fontSize: 18, fontWeight: 800, margin: '0 0 4px' }}>{art.code} — {art.designation}</h2>
+          {!detail && <p style={{ color: '#6b7280' }}>Chargement…</p>}
+          {detail && (<>
+            {titre('Stock par emplacement', detail.stock.length)}
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead><tr>{['Emplacement', 'Quantité'].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
+              <tbody>{detail.stock.map(s => <tr key={s.code}><td style={tdStyle}>{s.code} {s.libelle}</td><td style={{ ...tdStyle, fontWeight: 700 }}>{Number(s.quantite).toLocaleString('fr-FR')}</td></tr>)}</tbody>
+            </table>
+
+            {titre('Commandes', detail.commandes.length)}
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead><tr>{['N° commande Sage', 'Fournisseur', 'Date', 'Commandé', 'Reçu', 'Statut'].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
+              <tbody>{detail.commandes.map((c, i) => (
+                <tr key={i}><td style={{ ...tdStyle, fontFamily: 'monospace' }}>{c.reference_fournisseur || c.numero_commande}</td><td style={tdStyle}>{c.fournisseur_nom || '—'}</td><td style={tdStyle}>{jour(c.date_commande)}</td><td style={tdStyle}>{Number(c.quantite_commandee).toLocaleString('fr-FR')}</td><td style={tdStyle}>{Number(c.quantite_recue || 0).toLocaleString('fr-FR')}</td><td style={tdStyle}>{c.statut}</td></tr>
+              ))}</tbody>
+            </table>
+
+            {titre('Réceptions (bons de livraison)', detail.receptions.length)}
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead><tr>{['N° BL', 'Date', 'Commande', 'Quantité reçue'].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
+              <tbody>{detail.receptions.map((r, i) => (
+                <tr key={i}><td style={{ ...tdStyle, fontFamily: 'monospace' }}>{r.reference_bl}</td><td style={tdStyle}>{jour(r.date_reception)}</td><td style={{ ...tdStyle, fontFamily: 'monospace' }}>{r.commande_ref}</td><td style={{ ...tdStyle, fontWeight: 700 }}>{Number(r.quantite_recue).toLocaleString('fr-FR')}</td></tr>
+              ))}</tbody>
+            </table>
+
+            {titre('Mouvements Sage 2026 (ventes, cessions, entrées, achats)', detail.mouvements.length)}
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead><tr>{['Date', 'Type', 'N° document', 'Sens', 'Quantité', 'Dépôt', 'Tiers', 'Règle D/PSML'].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
+              <tbody>{detail.mouvements.map((m, i) => (
+                <tr key={i}><td style={tdStyle}>{jour(m.date_mouvement)}</td><td style={tdStyle}>{m.type_document}</td><td style={{ ...tdStyle, fontFamily: 'monospace' }}>{m.numero_document}</td><td style={tdStyle}>{m.sens}</td><td style={{ ...tdStyle, fontWeight: 700 }}>{Number(m.quantite_signee).toLocaleString('fr-FR')}</td><td style={tdStyle}>{m.nom_depot}</td><td style={tdStyle}>{m.nom_tiers || m.code_tiers || '—'}</td><td style={tdStyle}>{m.regle_clients_appliquee ? 'exclue du stock' : ''}</td></tr>
+              ))}</tbody>
+            </table>
+          </>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AchatsV2() {
   const { user } = useAuth();
   const role = user?.role;
@@ -718,7 +796,7 @@ export default function AchatsV2() {
     <div>
 {envoi && <ChoixEnvoi commande={envoi} onClose={() => setEnvoi(null)} onEnvoye={() => { setEnvoi(null); recharger(); }} />}
       <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-        {[['commandes', '🛒 Commandes'], ['demandes', "📝 Demandes d'achat"]].map(([v, l]) => (
+        {[['commandes', '🛒 Commandes'], ['demandes', "📝 Demandes d'achat"], ['historique', '📚 Historique Sage']].map(([v, l]) => (
           <button key={v} onClick={() => setOnglet(v)} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, background: onglet === v ? '#6d28d9' : '#f3f4f6', color: onglet === v ? '#fff' : '#374151' }}>{l}</button>
         ))}
       </div>
@@ -730,6 +808,7 @@ export default function AchatsV2() {
       )}
       {libellesOuvert && <GestionLibelles onClose={() => setLibellesOuvert(false)} />}
       {onglet === 'demandes' && <PanneauDemandes peutTransformer={achat} onBonCree={recharger} />}
+      {onglet === 'historique' && <HistoriqueSage />}
 
       {onglet === 'commandes' && (
         <div>
