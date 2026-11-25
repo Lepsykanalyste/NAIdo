@@ -2432,7 +2432,8 @@ async def update_parametre(cle: str, payload: dict, user=Depends(get_current_use
                             * (CASE WHEN LOWER(um.code) = 'kg' THEN 1 ELSE 2 END))::numeric, 4)
                      FROM unites_mesure um, ateliers at
                     WHERE um.id = a.unite_mesure_id
-                      AND at.id = a.atelier_production_id AND UPPER(at.code) = 'AT3'
+                      AND at.id = a.atelier_production_id
+                      AND (UPPER(at.code) = 'AT3' OR UPPER(at.parent_code) = 'AT3' OR at.libelle ILIKE '%atelier 3%')
                       AND LOWER(um.code) IN ('pce', 'pc', 'piece', 'pièce', 'kg')
                       AND a.longueur_mm > 0 AND a.largeur_mm > 0 AND a.epaisseur_mm > 0""",
                 float(valeur)

@@ -3500,6 +3500,42 @@ function RapportsJournaliers() {
   );
 }
 
+// Listes à choix multiples (normes, allergènes) : valeurs séparées par « | »
+const NORMES_ARTICLE = ['ISO 9001 (qualité)', 'ISO 14001 (environnement)', 'ISO 45001 (santé-sécurité)', 'FSSC 22000 (sécurité alimentaire)'];
+const ALLERGENES_ARTICLE = ['Gluten (blé, seigle, orge, avoine)', 'Crustacés', 'Œufs', 'Poissons', 'Arachides', 'Soja', 'Lait (lactose)', 'Fruits à coque', 'Céleri', 'Moutarde', 'Sésame', 'Anhydride sulfureux / sulfites', 'Lupin', 'Mollusques'];
+
+function ListeMultiple({ label, valeur, onChange, options, aide }) {
+  const [ouvert, setOuvert] = useState(false);
+  const choisis = (valeur || '').split('|').map(s => s.trim()).filter(Boolean);
+  const basculer = (opt) => {
+    const n = choisis.includes(opt) ? choisis.filter(x => x !== opt) : [...choisis, opt];
+    onChange(n.join(' | '));
+  };
+  return (
+    <div style={{ position:'relative' }}>
+      <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>
+        {label} {aide && <span style={{ fontSize:10, color:'#9ca3af', marginLeft:4 }}>{aide}</span>}
+      </label>
+      <button type="button" onClick={() => setOuvert(!ouvert)}
+        style={{ width:'100%', textAlign:'left', border:'1px solid #d1d5db', borderRadius:8, padding:'9px', fontSize:13, background:'#fff', cursor:'pointer', boxSizing:'border-box', minHeight:38 }}>
+        {choisis.length ? choisis.join(', ') : <span style={{ color:'#9ca3af' }}>— Choisir —</span>} <span style={{ float:'right', color:'#6b7280' }}>▾</span>
+      </button>
+      {ouvert && (
+        <div style={{ position:'absolute', zIndex:60, left:0, right:0, top:'100%', marginTop:4, background:'#fff', border:'1px solid #d1d5db', borderRadius:8, boxShadow:'0 8px 20px rgba(0,0,0,0.12)', maxHeight:260, overflowY:'auto', padding:6 }}>
+          {options.map(o => (
+            <label key={o} style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 8px', cursor:'pointer', fontSize:13 }}>
+              <input type="checkbox" checked={choisis.includes(o)} onChange={() => basculer(o)}/> {o}
+            </label>
+          ))}
+          <div style={{ textAlign:'right', padding:'4px 6px' }}>
+            <button type="button" onClick={() => setOuvert(false)} style={{ fontSize:12, padding:'4px 10px', borderRadius:6, border:'1px solid #d1d5db', background:'#fff', cursor:'pointer' }}>Fermer</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const COULEURS_ARTICLE = ['Naturel', 'Blanc', 'Noir', 'Bleu', 'Rouge', 'Vert', 'Jaune', 'Gris', 'Transparent', 'Imprimé multicolore'];
 
 function Articles() {
@@ -3793,7 +3829,8 @@ function Articles() {
                   const code = (u?.code || '').toLowerCase();
                   const facteur = code === 'kg' ? 1 : (code === 'pce' || code === 'pc' || code === 'piece' || code === 'pièce') ? 2 : null;
                   // Calcul réservé à l'atelier AT3 : pour les autres ateliers, le poids reste saisi à la main
-                  const atelierAT3 = (ateliers.find((x) => String(x.id) === String(form.atelier_production_id))?.code || '').toUpperCase() === 'AT3';
+                  const atAT3 = ateliers.find((x) => String(x.id) === String(form.atelier_production_id));
+                  const atelierAT3 = !!atAT3 && (/^AT3$/i.test(atAT3.code || '') || /^AT3$/i.test(atAT3.parent_code || '') || /atelier\s*3/i.test(atAT3.libelle || ''));
                   const L = parseFloat(form.longueur_mm), l = parseFloat(form.largeur_mm), e = parseFloat(form.epaisseur_mm);
                   const calcule = atelierAT3 && facteur && L > 0 && l > 0 && e > 0 ? Math.round((L / 100) * (l / 100) * e * densiteAtelier * facteur * 10000) / 10000 : null;
                   return (
@@ -3830,16 +3867,10 @@ function Articles() {
                 <InputField label="Prix cession interne" value={form.prix_cession_interne} onChange={e => setForm({...form,prix_cession_interne:e.target.value})} type="number" placeholder="0"/>
                 <InputField label="Stock minimum" value={form.stock_mini} onChange={e => setForm({...form,stock_mini:e.target.value})} type="number" placeholder="0"/>
                 <InputField label="DLC — Durée de vie (jours)" value={form.dlc_jours} onChange={e => setForm({...form,dlc_jours:e.target.value})} type="number" placeholder="Ex: 365 = 1 an"/>
-                <div>
-                  <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>
-                    Normes / Certifications
-                    <span style={{ fontSize:10, color:'#9ca3af', marginLeft:6 }}>La gestion des normes est dans QHSE</span>
-                  </label>
-                  <input value={form.normes_iso||''} onChange={e => setForm({...form,normes_iso:e.target.value})}
-                    placeholder="ISO 9001, ISO 22000, EN 13432..."
-                    style={{ width:'100%', border:'1px solid #d1d5db', borderRadius:8, padding:'9px', fontSize:13, boxSizing:'border-box' }}/>
-                </div>
-                <InputField label="Allergènes (alimentaire)" value={form.allergenes} onChange={e => setForm({...form,allergenes:e.target.value})} placeholder="Gluten, Lait..."/>
+                <ListeMultiple label="Normes / Certifications" aide="(une ou plusieurs)" valeur={form.normes_iso}
+                  onChange={v => setForm({...form, normes_iso:v})} options={NORMES_ARTICLE}/>
+                <ListeMultiple label="Allergènes (alimentaire)" aide="(une ou plusieurs)" valeur={form.allergenes}
+                  onChange={v => setForm({...form, allergenes:v})} options={ALLERGENES_ARTICLE}/>
               </div>
               <div style={{ marginTop:12, display:'flex', alignItems:'center', gap:8 }}>
                 <input type="checkbox" id="chk-ccp" checked={!!form.points_ccp}
@@ -8841,22 +8872,6 @@ function OrdresLivraison() {
 
         {/* Menu */}
         <nav style={{ flex:1, overflowY:'auto', padding:'8px 0' }}>
-          {sidebarOuverte && (
-            <div style={{ padding:'0 12px 8px', display:'flex', flexDirection:'column', gap:6 }}>
-              {!editionMenu ? (
-                <button onClick={() => setEditionMenu(true)} style={btnMenuPerso}>⚙ Personnaliser le menu</button>
-              ) : (
-                <>
-                  <button onClick={() => setEditionMenu(false)} style={{ ...btnMenuPerso, background:'#15803d', borderColor:'#15803d', color:'#fff', fontWeight:600 }}>✔ Terminer</button>
-                  <div style={{ display:'flex', gap:6 }}>
-                    <button onClick={nouveauGroupeMenu} style={{ ...btnMenuPerso, flex:1 }}>+ Nouveau groupe</button>
-                    <button onClick={reinitialiserMenu} style={{ ...btnMenuPerso, flex:1 }}>Réinitialiser</button>
-                  </div>
-                  <div style={{ fontSize:10, color:'#6b7280' }}>Glissez un écran sur un autre, sur un groupe ou sur « Haut du menu ».</div>
-                </>
-              )}
-            </div>
-          )}
           {(editionMenu || etatMenu().perso) && (() => {
             const e = etatMenu();
             const ligne = (item) => {
@@ -8955,6 +8970,22 @@ function OrdresLivraison() {
               </button>
             );
           })}
+          {sidebarOuverte && (
+            <div style={{ padding:'10px 12px 8px', display:'flex', flexDirection:'column', gap:6, borderTop:'1px solid #1f2937', marginTop:8 }}>
+              {!editionMenu ? (
+                <button onClick={() => setEditionMenu(true)} style={btnMenuPerso}>⚙ Personnaliser le menu</button>
+              ) : (
+                <>
+                  <button onClick={() => setEditionMenu(false)} style={{ ...btnMenuPerso, background:'#15803d', borderColor:'#15803d', color:'#fff', fontWeight:600 }}>✔ Terminer</button>
+                  <div style={{ display:'flex', gap:6 }}>
+                    <button onClick={nouveauGroupeMenu} style={{ ...btnMenuPerso, flex:1 }}>+ Nouveau groupe</button>
+                    <button onClick={reinitialiserMenu} style={{ ...btnMenuPerso, flex:1 }}>Réinitialiser</button>
+                  </div>
+                  <div style={{ fontSize:10, color:'#6b7280' }}>Glissez un écran sur un autre, sur un groupe ou sur « Haut du menu ».</div>
+                </>
+              )}
+            </div>
+          )}
         </nav>
 
         {/* User info */}
