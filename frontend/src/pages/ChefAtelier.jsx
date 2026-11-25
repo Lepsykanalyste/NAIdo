@@ -3567,7 +3567,7 @@ function Articles() {
     couleur:'', longueur_mm:'', largeur_mm:'', hauteur_mm:'', epaisseur_mm:'',
     poids_theorique_kg:'', poids_reel_kg:'', poids_mandrin_kg:'',
     cadence_theorique_kg_h:'', temps_reglage_min:'30',
-    prix_achat:'0', prix_vente:'0', prix_cession_interne:'0', taux_tva:'18',
+    prix_achat:'0', prix_achat_ttc:'0', prix_vente:'0', prix_vente_ttc:'0', prix_cession_interne:'0', taux_tva:'18',
     stock_mini:'0', dlc_jours:'', allergenes:'', normes_iso:'',
     points_ccp: false, atelier_production_id:'',
   });
@@ -3651,6 +3651,8 @@ function Articles() {
       prix_cession_interne: a.prix_cession_interne || '0',
       stock_mini: a.stock_mini || '0',
       taux_tva: a.taux_tva ?? 18,
+      prix_achat_ttc: String(Math.round((parseFloat(a.prix_achat)||0)*(1+(parseFloat(a.taux_tva ?? 18))/100))),
+      prix_vente_ttc: String(Math.round((parseFloat(a.prix_vente)||0)*(1+(parseFloat(a.taux_tva ?? 18))/100))),
       dlc_jours: a.dlc_jours || '',
       allergenes: a.allergenes || '',
       normes_iso: a.normes_iso || '',
@@ -3845,14 +3847,21 @@ function Articles() {
                 3 · Paramètres commerciaux & stock
               </div>
               <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:12 }}>
-                <InputField label="Prix achat (FCFA)" value={form.prix_achat} onChange={e => setForm({...form,prix_achat:e.target.value})} type="number" placeholder="0"/>
-                <InputField label="Prix vente (FCFA)" value={form.prix_vente} onChange={e => setForm({...form,prix_vente:e.target.value})} type="number" placeholder="0"/>
+                {(() => {
+                  const t = parseFloat(form.taux_tva) || 0;
+                  const ht2ttc = (v) => String(Math.round((parseFloat(v) || 0) * (1 + t / 100)));
+                  const ttc2ht = (v) => String(Math.round(((parseFloat(v) || 0) / (1 + t / 100)) * 100) / 100);
+                  return (
+                    <>
+                      <InputField label="Prix achat HT (FCFA)" value={form.prix_achat} onChange={e => setForm({...form, prix_achat:e.target.value, prix_achat_ttc: ht2ttc(e.target.value)})} type="number" placeholder="0"/>
+                      <InputField label="Prix achat TTC (FCFA)" value={form.prix_achat_ttc} onChange={e => setForm({...form, prix_achat_ttc:e.target.value, prix_achat: ttc2ht(e.target.value)})} type="number" placeholder="0"/>
+                      <InputField label="Prix vente HT (FCFA)" value={form.prix_vente} onChange={e => setForm({...form, prix_vente:e.target.value, prix_vente_ttc: ht2ttc(e.target.value)})} type="number" placeholder="0"/>
+                      <InputField label="Prix vente TTC (FCFA)" value={form.prix_vente_ttc} onChange={e => setForm({...form, prix_vente_ttc:e.target.value, prix_vente: ttc2ht(e.target.value)})} type="number" placeholder="0"/>
+                    </>
+                  );
+                })()}
                 <InputField label="Prix cession interne" value={form.prix_cession_interne} onChange={e => setForm({...form,prix_cession_interne:e.target.value})} type="number" placeholder="0"/>
                 <InputField label="Taux TVA (%)" value={form.taux_tva} onChange={e => setForm({...form,taux_tva:e.target.value})} type="number" placeholder="18"/>
-                <div style={{ gridColumn:'1 / -1', fontSize:11, color:'#374151', background:'#f9fafb', borderRadius:8, padding:'8px 10px' }}>
-                  <b>Prix de vente</b> : HT {Math.round(parseFloat(form.prix_vente)||0).toLocaleString('fr-FR')} FCFA · TVA {(Math.round((parseFloat(form.prix_vente)||0)*(parseFloat(form.taux_tva)||0)/100)).toLocaleString('fr-FR')} FCFA · <b>TTC {Math.round((parseFloat(form.prix_vente)||0)*(1+(parseFloat(form.taux_tva)||0)/100)).toLocaleString('fr-FR')} FCFA</b>
-                  <span style={{ marginLeft:8, color:'#6b7280' }}>Les prix sont saisis HT.</span>
-                </div>
                 <InputField label="Stock minimum" value={form.stock_mini} onChange={e => setForm({...form,stock_mini:e.target.value})} type="number" placeholder="0"/>
                 <InputField label="DLC — Durée de vie (jours)" value={form.dlc_jours} onChange={e => setForm({...form,dlc_jours:e.target.value})} type="number" placeholder="Ex: 365 = 1 an"/>
                 <ListeMultiple label="Normes / Certifications" aide="(une ou plusieurs)" valeur={form.normes_iso}
