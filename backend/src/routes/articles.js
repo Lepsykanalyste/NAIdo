@@ -253,6 +253,7 @@ router.put('/:id', auth, handleUploadOrJSON, async (req, res) => {
     addIf('stock_mini',d.stock_mini,v=>numD(v,0));
     addIf('normes_iso',d.normes_iso,v=>v||null);
     addIf('allergenes',d.allergenes,v=>v||null);
+    addIf('taux_tva',d.taux_tva,v=>numD(v,18));
     addIf('certifications',d.certifications,v=>v||null);
     addIf('risques_securite',d.risques_securite,v=>v||null);
     addIf('epi_requis',d.epi_requis,v=>v||null);
