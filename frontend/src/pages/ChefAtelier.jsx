@@ -203,9 +203,11 @@ function menuPourMoi(menu, ecrans) {
 
 function getMenuFiltre(role) {
   const autorise = MENU_PAR_ROLE[role];
-  if (autorise === null) return MENU; // super_admin et directeur voient tout
-  if (!autorise) return MENU.filter(item => ['dashboard', 'alertes'].includes(item.id)); // role inconnu : acces minimal
-  return MENU.filter(item => autorise.includes(item.id));
+  // Paramètres : reserve au super administrateur, invisible pour les autres roles
+  const sansParametres = liste => (role === 'super_admin' ? liste : liste.filter(item => item.id !== 'parametres'));
+  if (autorise === null) return sansParametres(MENU); // super_admin et directeur voient tout
+  if (!autorise) return sansParametres(MENU.filter(item => ['dashboard', 'alertes'].includes(item.id))); // role inconnu : acces minimal
+  return sansParametres(MENU.filter(item => autorise.includes(item.id)));
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -8526,11 +8528,10 @@ export default function ChefAtelier() {
     { id:'parametres',  label:'⚙ Paramètres Système',     separator:false,    icon:'settings',    color:'#1e1b4b' },
     { id:'separator6',  label:'RÉFÉRENTIELS',              separator:true },
     { id:'alertes',     label:'Alertes',                   icon:'bell',        color:'#dc2626' },
-    { id:'parametres',  label:'⚙ Paramètres',  icon:'settings',    color:'#1e1b4b' },
-  { id:'parametres',  label:'⚙ Paramètres', icon:'settings', color:'#1e1b4b' },
   { id:'referentiels',label:'Référentiels',              icon:'database',    color:'#374151' },
   ].filter(item => {
     if (item.separator) return true;
+    if (item.id === 'parametres') return !!perms.is_super_admin; // reserve au super administrateur
     if (perms.is_super_admin) return true;
     const moduleMap = {
       dashboard:'dashboard', production:'production', planning:'planning',
