@@ -680,6 +680,18 @@ export default function AchatsV2() {
   const [histo, setHisto] = useState(null);
   const [rafraichir, setRafraichir] = useState(0);
   const [libellesOuvert, setLibellesOuvert] = useState(false);
+  // Filtres par colonne (comme Excel) : texte, dates, montants, statut
+  const colVide = { num: '', four: '', du: '', au: '', min: '', max: '', statut: '' };
+  const [colF, setColF] = useState(colVide);
+  const filtreInput = { width: '100%', padding: '4px 6px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 11, fontWeight: 400, boxSizing: 'border-box', marginBottom: 2 };
+  const cmdFiltrees = commandes.filter(c =>
+    (!colF.num || (c.numero_commande || '').toLowerCase().includes(colF.num.toLowerCase())) &&
+    (!colF.four || (c.fournisseur_nom || '').toLowerCase().includes(colF.four.toLowerCase())) &&
+    (!colF.du || (c.date_commande || '').slice(0, 10) >= colF.du) &&
+    (!colF.au || (c.date_commande || '').slice(0, 10) <= colF.au) &&
+    (colF.min === '' || Number(c.montant_ttc) >= Number(colF.min)) &&
+    (colF.max === '' || Number(c.montant_ttc) <= Number(colF.max)) &&
+    (!colF.statut || c.statut === colF.statut));
 
   const charger = () => axios.get(`${API}/achat/commandes${filtre ? `?statut=${filtre}` : ''}`).then(r => setCommandes(Array.isArray(r.data) ? r.data : [])).catch(() => {});
   useEffect(() => { charger(); }, [filtre, rafraichir]);
@@ -729,11 +741,37 @@ export default function AchatsV2() {
             </div>
             {achat && <Btn plein onClick={() => setNouvelle(true)}>+ Nouvelle commande</Btn>}
           </div>
+          <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 6, display: 'flex', gap: 10, alignItems: 'center' }}>
+            <span>{cmdFiltrees.length} commande(s) affichée(s) sur {commandes.length}</span>
+            {Object.values(colF).some(v => v !== '') && <button onClick={() => setColF(colVide)} style={{ border: 'none', background: 'none', color: '#6d28d9', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>✕ Effacer les filtres</button>}
+          </div>
           <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', overflow: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead><tr>{['N° commande', 'Fournisseur', 'Date', 'Livraison', 'Montant TTC', 'Statut', 'Actions'].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
+              <thead>
+                <tr>{['N° commande', 'Fournisseur', 'Date', 'Livraison', 'Montant TTC', 'Statut', 'Actions'].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr>
+                <tr>
+                  <th style={thStyle}><input value={colF.num} onChange={e => setColF({ ...colF, num: e.target.value })} placeholder="Filtrer…" style={filtreInput} /></th>
+                  <th style={thStyle}><input value={colF.four} onChange={e => setColF({ ...colF, four: e.target.value })} placeholder="Filtrer…" style={filtreInput} /></th>
+                  <th style={thStyle}>
+                    <input type="date" title="Du" value={colF.du} onChange={e => setColF({ ...colF, du: e.target.value })} style={filtreInput} />
+                    <input type="date" title="Au" value={colF.au} onChange={e => setColF({ ...colF, au: e.target.value })} style={filtreInput} />
+                  </th>
+                  <th style={thStyle}></th>
+                  <th style={thStyle}>
+                    <input type="number" placeholder="Min" value={colF.min} onChange={e => setColF({ ...colF, min: e.target.value })} style={filtreInput} />
+                    <input type="number" placeholder="Max" value={colF.max} onChange={e => setColF({ ...colF, max: e.target.value })} style={filtreInput} />
+                  </th>
+                  <th style={thStyle}>
+                    <select value={colF.statut} onChange={e => setColF({ ...colF, statut: e.target.value })} style={filtreInput}>
+                      <option value="">Tous</option>
+                      {['brouillon', 'envoye', 'confirme', 'receptionne_partiel', 'receptionne', 'annule'].map(s => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </th>
+                  <th style={thStyle}></th>
+                </tr>
+              </thead>
               <tbody>
-                {commandes.map(c => (
+                {cmdFiltrees.map(c => (
                   <tr key={c.id}>
                     <td style={{ ...tdStyle, fontFamily: 'monospace', fontWeight: 700, color: '#6d28d9' }}>{c.numero_commande}</td>
                     <td style={tdStyle}>{c.fournisseur_nom || '—'}</td>

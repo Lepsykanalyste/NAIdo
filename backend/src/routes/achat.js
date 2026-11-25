@@ -60,7 +60,7 @@ router.get('/commandes', auth, async (req, res) => {
     const p = [];
     if (statut) { p.push(statut); q+=` AND ca.statut=$${p.length}`; }
     if (fournisseur_id) { p.push(fournisseur_id); q+=` AND ca.fournisseur_id=$${p.length}`; }
-    q+=' ORDER BY ca.created_at DESC LIMIT 100';
+    q+=' ORDER BY ca.created_at DESC LIMIT 2000';
     const { rows } = await db.query(q, p);
     res.json(peutVoirPrix(req.user) ? rows : retirerPrix(rows));
   } catch(e) { res.status(500).json({ error:e.message }); }
