@@ -1,6 +1,8 @@
 'use strict';
 // NAIdo - Poids théorique d'un article à partir de ses dimensions (règle de l'atelier 3, fichier SACHERIE) :
-//   poids unitaire (kg) = (longueur / 100) x (largeur / 100) x épaisseur x densité x facteur
+//   longueur et largeur en mm (longueur_mm, largeur_mm), épaisseur en mm (epaisseur_mm)
+//   poids unitaire (kg) = (longueur_mm / 10) x (largeur_mm / 10) x épaisseur_mm x densité / 10000 x facteur
+//   (longueur_mm / 10 = cm, donc cm x cm x mm / 10000 = kg avec une densité de 1 g/cm³)
 //   facteur = 2 si l'unité de l'article est la pièce, 1 si elle est le Kg.
 // Les articles sans dimensions gardent leur poids saisi à la main.
 
@@ -14,7 +16,7 @@ async function recalculerPoids(db, articleId = null) {
   if (articleId) { params.push(String(articleId)); filtre = ` AND a.id = $2`; }
   const res = await db.query(
     `UPDATE articles a
-        SET poids_theorique_kg = ROUND(((a.longueur_mm / 100) * (a.largeur_mm / 100) * a.epaisseur_mm * $1
+        SET poids_theorique_kg = ROUND(((a.longueur_mm / 10.0) * (a.largeur_mm / 10.0) * a.epaisseur_mm * $1 / 10000.0
               * (CASE WHEN LOWER(um.code) = 'kg' THEN 1 ELSE 2 END))::numeric, 4)
        FROM unites_mesure um, ateliers at
       WHERE um.id = a.unite_mesure_id
