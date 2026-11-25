@@ -744,6 +744,85 @@ function HistoriqueSage() {
   );
 }
 
+// Ventes et mouvements Sage 2026 : liste complete, filtres et totaux (lecture seule)
+function VentesSage() {
+  const vide = { du: '', au: '', type: '', sens: '', client: '', article: '', regle: '' };
+  const [f, setF] = useState(vide);
+  const [page, setPage] = useState(0);
+  const [data, setData] = useState(null);
+  const TAILLE = 100;
+  const charger = async () => {
+    const params = Object.fromEntries(Object.entries({ ...f, limit: TAILLE, offset: page * TAILLE }).filter(([, v]) => v !== '' && v !== undefined));
+    try { const { data: d } = await axios.get(`${API}/achat/historique-sage/mouvements`, { params }); setData(d); }
+    catch (e) { toast.error(msg(e)); }
+  };
+  useEffect(() => { charger(); }, [f, page]);
+  const majF = (k, v) => { setF({ ...f, [k]: v }); setPage(0); };
+  const champ = { padding: '6px 8px', borderRadius: 6, border: '1px solid #d1d5db', fontSize: 12, boxSizing: 'border-box' };
+  const nb = v => Number(v || 0).toLocaleString('fr-FR');
+  return (
+    <div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 10, alignItems: 'flex-end' }}>
+        <label style={{ fontSize: 11, color: '#6b7280' }}>Du<br /><input type="date" value={f.du} onChange={e => majF('du', e.target.value)} style={champ} /></label>
+        <label style={{ fontSize: 11, color: '#6b7280' }}>Au<br /><input type="date" value={f.au} onChange={e => majF('au', e.target.value)} style={champ} /></label>
+        <label style={{ fontSize: 11, color: '#6b7280' }}>Type<br />
+          <select value={f.type} onChange={e => majF('type', e.target.value)} style={champ}>
+            <option value="">Tous</option>
+            {(data?.types || []).map(t => <option key={t} value={t}>{t}</option>)}
+          </select></label>
+        <label style={{ fontSize: 11, color: '#6b7280' }}>Sens<br />
+          <select value={f.sens} onChange={e => majF('sens', e.target.value)} style={champ}>
+            <option value="">Tous</option><option value="ENTREE">Entrée</option><option value="SORTIE">Sortie</option>
+          </select></label>
+        <label style={{ fontSize: 11, color: '#6b7280' }}>Client / fournisseur<br /><input value={f.client} onChange={e => majF('client', e.target.value)} placeholder="Nom ou code" style={{ ...champ, width: 150 }} /></label>
+        <label style={{ fontSize: 11, color: '#6b7280' }}>Article<br /><input value={f.article} onChange={e => majF('article', e.target.value)} placeholder="Code ou désignation" style={{ ...champ, width: 170 }} /></label>
+        <label style={{ fontSize: 11, color: '#6b7280' }}>Règle D/PSML<br />
+          <select value={f.regle} onChange={e => majF('regle', e.target.value)} style={champ}>
+            <option value="">Tous</option><option value="exclu">Exclus du stock</option>
+          </select></label>
+        <button onClick={() => { setF(vide); setPage(0); }} style={{ border: 'none', background: 'none', color: '#6d28d9', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}>✕ Effacer</button>
+      </div>
+      {data && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, fontSize: 13, marginBottom: 8 }}>
+          <span><b>{nb(data.total)}</b> mouvement(s)</span>
+          <span>Entrées : <b style={{ color: '#15803d' }}>{nb(data.entrees)}</b></span>
+          <span>Sorties : <b style={{ color: '#dc2626' }}>{nb(data.sorties)}</b></span>
+          <span>Montant TTC : <b>{nb(data.montant_ttc)}</b></span>
+        </div>
+      )}
+      <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #e5e7eb', overflow: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead><tr>{['Date', 'Type', 'N° document', 'Article', 'Quantité', 'Dépôt', 'Client / fournisseur', 'Commande', 'Montant TTC', 'Règle'].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
+          <tbody>
+            {(data?.items || []).map((m, i) => (
+              <tr key={i}>
+                <td style={tdStyle}>{jour(m.date_mouvement)}</td>
+                <td style={tdStyle}>{m.type_document}</td>
+                <td style={{ ...tdStyle, fontFamily: 'monospace' }}>{m.numero_document}</td>
+                <td style={tdStyle}><span style={{ fontFamily: 'monospace', fontWeight: 700 }}>{m.reference_article}</span> {m.designation}</td>
+                <td style={{ ...tdStyle, fontWeight: 700, color: Number(m.quantite_signee) < 0 ? '#dc2626' : '#15803d' }}>{nb(m.quantite_signee)}</td>
+                <td style={tdStyle}>{m.nom_depot}</td>
+                <td style={tdStyle}>{m.nom_tiers || m.code_tiers || '—'}</td>
+                <td style={{ ...tdStyle, fontFamily: 'monospace' }}>{m.numero_commande || '—'}</td>
+                <td style={tdStyle}>{m.montant_ttc != null ? nb(m.montant_ttc) : '—'}</td>
+                <td style={tdStyle}>{m.regle_clients_appliquee ? 'exclu du stock' : ''}</td>
+              </tr>
+            ))}
+            {data && data.items.length === 0 && <tr><td colSpan={10} style={{ ...tdStyle, textAlign: 'center', color: '#6b7280' }}>Aucun mouvement pour ces filtres</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      {data && data.total > TAILLE && (
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 10, fontSize: 13 }}>
+          <button disabled={page === 0} onClick={() => setPage(page - 1)} style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', cursor: page === 0 ? 'default' : 'pointer' }}>‹ Précédent</button>
+          <span>Page {page + 1} / {Math.ceil(data.total / TAILLE)}</span>
+          <button disabled={(page + 1) * TAILLE >= data.total} onClick={() => setPage(page + 1)} style={{ padding: '5px 12px', borderRadius: 6, border: '1px solid #d1d5db', background: '#fff', cursor: 'pointer' }}>Suivant ›</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AchatsV2() {
   const { user } = useAuth();
   const role = user?.role;
@@ -796,7 +875,7 @@ export default function AchatsV2() {
     <div>
 {envoi && <ChoixEnvoi commande={envoi} onClose={() => setEnvoi(null)} onEnvoye={() => { setEnvoi(null); recharger(); }} />}
       <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-        {[['commandes', '🛒 Commandes'], ['demandes', "📝 Demandes d'achat"], ['historique', '📚 Historique Sage']].map(([v, l]) => (
+        {[['commandes', '🛒 Commandes'], ['demandes', "📝 Demandes d'achat"], ['historique', '📚 Historique Sage'], ['ventes', '🧾 Ventes & mouvements']].map(([v, l]) => (
           <button key={v} onClick={() => setOnglet(v)} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', cursor: 'pointer', fontWeight: 700, fontSize: 13, background: onglet === v ? '#6d28d9' : '#f3f4f6', color: onglet === v ? '#fff' : '#374151' }}>{l}</button>
         ))}
       </div>
@@ -809,6 +888,7 @@ export default function AchatsV2() {
       {libellesOuvert && <GestionLibelles onClose={() => setLibellesOuvert(false)} />}
       {onglet === 'demandes' && <PanneauDemandes peutTransformer={achat} onBonCree={recharger} />}
       {onglet === 'historique' && <HistoriqueSage />}
+      {onglet === 'ventes' && <VentesSage />}
 
       {onglet === 'commandes' && (
         <div>

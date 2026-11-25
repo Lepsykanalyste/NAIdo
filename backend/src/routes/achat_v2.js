@@ -682,4 +682,39 @@ router.get('/historique-sage/article/:id', auth, async (req, res) => {
   } catch (e) { err(res, e, 'historique article'); }
 });
 
+// Liste de tous les mouvements Sage (ventes, entrees, cessions, achats...) avec filtres et totaux
+router.get('/historique-sage/mouvements', auth, async (req, res) => {
+  try {
+    const { du, au, type, sens, client, article, regle } = req.query;
+    const cond = ['1=1'];
+    const p = [];
+    if (du) { p.push(du); cond.push(`date_mouvement >= $${p.length}`); }
+    if (au) { p.push(au); cond.push(`date_mouvement <= $${p.length}`); }
+    if (type) { p.push(type); cond.push(`type_document = $${p.length}`); }
+    if (sens) { p.push(sens); cond.push(`sens = $${p.length}`); }
+    if (client) { p.push(`%${client}%`); cond.push(`(nom_tiers ILIKE $${p.length} OR code_tiers ILIKE $${p.length})`); }
+    if (article) { p.push(`%${article}%`); cond.push(`(reference_article ILIKE $${p.length} OR designation ILIKE $${p.length})`); }
+    if (regle === 'exclu') cond.push('regle_clients_appliquee = TRUE');
+    const where = cond.join(' AND ');
+    const lim = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 500);
+    const off = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+    const { rows: [tot] } = await db.query(
+      `SELECT COUNT(*)::int AS n,
+              COALESCE(SUM(CASE WHEN quantite_signee > 0 THEN quantite_signee ELSE 0 END),0) AS entrees,
+              COALESCE(SUM(CASE WHEN quantite_signee < 0 THEN quantite_signee ELSE 0 END),0) AS sorties,
+              COALESCE(SUM(montant_ttc),0) AS montant_ttc
+       FROM mouvements_sage_2026 WHERE ${where}`, p);
+    const { rows } = await db.query(
+      `SELECT date_mouvement, type_document, numero_document, sens, reference_article, designation,
+              quantite_signee, nom_depot, code_tiers, nom_tiers, numero_commande, numero_livraison,
+              prix_unitaire, montant_ht, montant_ttc, regle_clients_appliquee
+       FROM mouvements_sage_2026 WHERE ${where}
+       ORDER BY date_mouvement DESC, id DESC
+       LIMIT ${lim} OFFSET ${off}`, p);
+    const { rows: types } = await db.query('SELECT DISTINCT type_document FROM mouvements_sage_2026 ORDER BY type_document');
+    res.json({ items: rows, total: tot.n, entrees: tot.entrees, sorties: tot.sorties, montant_ttc: tot.montant_ttc,
+               types: types.map(t => t.type_document) });
+  } catch (e) { err(res, e, 'historique mouvements'); }
+});
+
 module.exports = router;
