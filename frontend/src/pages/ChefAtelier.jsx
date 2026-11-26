@@ -419,7 +419,7 @@ function GestionDevis() {
                     <span style={{background:bgStatut(d.statut),color:couleurStatut(d.statut),padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:700}}>{labelStatut(d.statut)}</span>
                   </td>
                   <td style={{padding:'9px 12px',display:'flex',gap:5}}>
-                    <button onClick={()=>ouvrirPdfSecurise(`/api/devis/${d.id}/pdf`)} style={{background:'#e0f2fe',color:'#0891b2',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>🖨</button> <button onClick={()=>ouvrirPdfSecurise(`/api/devis/${d.id}/pdf-html`)} style={{background:'#f3f4f6',color:'#374151',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>🌐</button>
+                    <button onClick={()=>ouvrirPdfSecurise(`/api/devis/${d.id}/pdf`)} style={{background:'#e0f2fe',color:'#0891b2',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>🖨</button>
                     {(d.statut==='brouillon'||d.statut==='envoye')&&<button onClick={()=>setShowEmail(d)} style={{background:'#fef3c7',color:'#d97706',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>✉ Email</button>}
                     {d.statut==='brouillon'&&<button onClick={()=>changerStatut(d.id,'envoye')} style={{background:'#dbeafe',color:'#0369a1',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>📤</button>}
                     {d.statut==='envoye'&&<button onClick={()=>changerStatut(d.id,'accepte')} style={{background:'#dcfce7',color:'#15803d',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>✓</button>}
@@ -912,7 +912,7 @@ function GestionBC() {
                   </td>
                   <td style={{padding:'9px 12px',fontWeight:600,color:'#7c3aed',fontSize:12}}>{b.numero_df||'—'}</td>
                   <td style={{padding:'9px 12px',display:'flex',gap:6}}>
-                    <button onClick={()=>ouvrirPdfSecurise(`/api/bc/${b.id}/pdf`)} style={{background:'#e0f2fe',color:'#0369a1',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>🖨 PDF</button> <button onClick={()=>ouvrirPdfSecurise(`/api/bc/${b.id}/pdf-html`)} style={{background:'#f3f4f6',color:'#374151',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>🌐 HTML</button>
+                    <button onClick={()=>ouvrirPdfSecurise(`/api/bc/${b.id}/pdf`)} style={{background:'#e0f2fe',color:'#0369a1',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>🖨 PDF</button>
                     {b.statut==='recu' && (
                       <button onClick={()=>ouvrirDfModal(b)} style={{background:'#f5f3ff',color:'#7c3aed',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11,fontWeight:700}}>→ DF</button>
                     )}
@@ -962,8 +962,7 @@ function GestionBC() {
                 Total TTC : {bcDetailLignes.reduce((s,l)=>s+parseFloat(l.montant_ttc||0),0).toLocaleString('fr-FR')} FCFA
               </div>
               <div style={{display:'flex',gap:10,justifyContent:'flex-end',marginTop:16}}>
-                <button onClick={()=>ouvrirPdfSecurise(`/api/bc/${bcDetail.id}/pdf-html`)} style={{background:'#f3f4f6',color:'#374151',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>🌐 HTML</button>
-                  <button onClick={()=>ouvrirPdfSecurise(`/api/bc/${bcDetail.id}/pdf`)}
+                <button onClick={()=>ouvrirPdfSecurise(`/api/bc/${bcDetail.id}/pdf`)}
                   style={{padding:'8px 16px',borderRadius:8,border:'none',background:'#0369a1',color:'#fff',cursor:'pointer',fontSize:13}}>🖨 PDF</button>
                 <button onClick={()=>setBcDetail(null)}
                   style={{padding:'8px 16px',borderRadius:8,border:'1px solid #e5e7eb',background:'#f9fafb',cursor:'pointer',fontSize:13}}>Fermer</button>
@@ -1063,7 +1062,7 @@ function MenuActionsDF({ df, isDir, user, onValider, onRefuser, onAnnuler, onMod
                 </div>
                 {df.description && <div style={{background:"#faf5ff",borderRadius:8,padding:12,fontSize:13,marginBottom:12}}><strong>Description :</strong> {df.description}</div>}
                 <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                  <button onClick={()=>ouvrirPdfSecurise("/api/df/"+df.id+"/pdf?t="+Date.now())} style={{background:"#7c3aed",color:"#fff",border:"none",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:13}}>🖨 PDF</button> <button onClick={()=>ouvrirPdfSecurise("/api/df/"+df.id+"/pdf-html")} style={{background:"#f3f4f6",color:"#374151",border:"none",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:13}}>🌐 HTML</button>
+                  <button onClick={()=>ouvrirPdfSecurise("/api/df/"+df.id+"/pdf?t="+Date.now())} style={{background:"#7c3aed",color:"#fff",border:"none",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:13}}>🖨 PDF</button>
                   {df.statut==="en_attente" && isDir && <button onClick={()=>{onValider();setShow(false);}} style={{background:"#dcfce7",color:"#15803d",border:"none",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:13,fontWeight:700}}>✓ Valider → OF</button>}
                   {df.statut==="en_attente" && isDir && <button onClick={async ()=>{const m=(await saisir("Motif refus :"));if(m){onRefuser(m);setShow(false);}}} style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:13}}>✗ Refuser</button>}
                   <button onClick={()=>{onAnnuler();setShow(false);}} style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:13}}>🗑 Annuler</button>
@@ -1423,7 +1422,6 @@ function DemandesFabrication() {
                   </td>
                   <td style={{padding:'9px 12px',fontSize:12,color:'#0369a1',fontWeight:600}}>{df.numero_of||'—'}</td>
                   <td style={{padding:'9px 12px',textAlign:'center'}}>
-                    <button onClick={()=>ouvrirPdfSecurise(`/api/df/${df.id}/pdf-html`)} style={{background:'#f3f4f6',color:'#374151',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>🌐 HTML</button>
                     <button onClick={()=>ouvrirPdfSecurise(`/api/df/${df.id}/pdf?t=${Date.now()}`)}
                       title="Imprimer PDF"
                       style={{background:'#f5f3ff',color:'#7c3aed',border:'none',borderRadius:6,padding:'4px 10px',cursor:'pointer',fontSize:12}}>
@@ -1496,7 +1494,7 @@ function DemandesFabrication() {
                   )}
                   {dfSelectionne.description && <div style={{background:'#faf5ff',borderRadius:8,padding:12,fontSize:13,marginBottom:12}}><strong>Description :</strong> {dfSelectionne.description}</div>}
                   <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-                    <button onClick={()=>ouvrirPdfSecurise('/api/df/'+dfSelectionne.id+'/pdf?t='+Date.now())} style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:8,padding:'8px 14px',cursor:'pointer',fontSize:13}}>🖨 PDF</button> <button onClick={()=>ouvrirPdfSecurise('/api/df/'+dfSelectionne.id+'/pdf-html')} style={{background:'#f3f4f6',color:'#374151',border:'none',borderRadius:8,padding:'8px 14px',cursor:'pointer',fontSize:13}}>🌐 HTML</button>
+                    <button onClick={()=>ouvrirPdfSecurise('/api/df/'+dfSelectionne.id+'/pdf?t='+Date.now())} style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:8,padding:'8px 14px',cursor:'pointer',fontSize:13}}>🖨 PDF</button>
                     {dfSelectionne.statut==='en_attente' && isDir && <button onClick={()=>{setShowValider(dfSelectionne);chargerMachines('AT3');setDfSelectionne(null);}} style={{background:'#dcfce7',color:'#15803d',border:'none',borderRadius:8,padding:'8px 14px',cursor:'pointer',fontSize:13,fontWeight:700}}>✓ Valider</button>}
                     {dfSelectionne.statut==='en_attente' && isDir && <button onClick={async ()=>{const m=(await saisir('Motif refus :'));if(m){refuser(dfSelectionne.id,m);setDfSelectionne(null);}}} style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:8,padding:'8px 14px',cursor:'pointer',fontSize:13}}>✗ Refuser</button>}
                     <button onClick={()=>{annulerDF(dfSelectionne.id);setDfSelectionne(null);}} style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:8,padding:'8px 14px',cursor:'pointer',fontSize:13}}>🗑 Annuler</button>

@@ -7,7 +7,7 @@ const ICONES = {
   '👁': 'Détails', '📋': 'Détails', '📦': 'Détails',
   '✏': 'Modifier', '✎': 'Modifier',
   '🗑': 'Supprimer',
-  '🖨': 'PDF', '📄': 'PDF', '🌐': 'HTML',
+  '🖨': 'PDF', '📄': 'PDF',
   '➕': 'Ajouter', '+': 'Ajouter',
   '✉': 'Envoyer', '📧': 'Envoyer',
   '🔄': 'Actualiser', '🔁': 'Répéter',
