@@ -3819,14 +3819,15 @@ function Articles() {
                   const atAT3 = ateliers.find((x) => String(x.id) === String(form.atelier_production_id));
                   const atelierAT3 = !!atAT3 && (/^AT3$/i.test(atAT3.code || '') || /^AT3$/i.test(atAT3.parent_code || '') || /atelier\s*3/i.test(atAT3.libelle || ''));
                   const L = parseFloat(form.longueur_mm), l = parseFloat(form.largeur_mm), e = parseFloat(form.epaisseur_mm);
-                  const calcule = atelierAT3 && facteur && L > 0 && l > 0 && e > 0 ? Math.round((L / 100) * (l / 100) * e * densiteAtelier * facteur * 10000) / 10000 : null;
+                  // L, l, e en mm : mm x mm x mm = mm3 ; /1 000 000 donne des kg (densite g/cm3, 1 cm3 = 1 000 mm3, 1 kg = 1 000 g)
+                  const calcule = atelierAT3 && facteur && L > 0 && l > 0 && e > 0 ? Math.round((L * l * e * densiteAtelier * facteur / 1000000) * 10000) / 10000 : null;
                   return (
                     <>
                       <InputField label="Poids théorique (kg)" value={calcule !== null ? String(calcule) : form.poids_theorique_kg}
                         onChange={e => setForm({...form,poids_theorique_kg:e.target.value})} type="number" placeholder="0.000"/>
                       <div style={{ gridColumn:'1 / -1', fontSize:11, color: calcule !== null ? '#15803d' : '#6b7280', marginTop:-4, marginBottom:8 }}>
                         {calcule !== null
-                          ? `Calculé : longueur/100 × largeur/100 × épaisseur × densité ${densiteAtelier} × ${facteur} (unité ${u?.code}).`
+                          ? `Calculé : longueur × largeur × épaisseur (mm) × densité ${densiteAtelier} × ${facteur} ÷ 1 000 000 (unité ${u?.code}).`
                           : atelierAT3
                             ? 'Se calcule automatiquement dès que longueur, largeur, épaisseur et une unité pièce ou Kg sont renseignées.'
                             : 'Poids saisi à la main (calcul automatique réservé à l\'atelier AT3).'}
