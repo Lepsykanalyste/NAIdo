@@ -343,7 +343,8 @@ router.get('/receptions/:id/pdf', auth, async (req, res, next) => {
       <table><thead><tr><th>Code</th><th>Designation</th><th class="r">Commande</th><th class="r">Deja recu</th><th class="r">Recu ce jour</th><th class="r">Reste</th></tr></thead><tbody>${rowsHtml}</tbody></table>
       ${rec.notes ? `<div class="sec"><div class="sec-h">Notes</div><div class="sec-b">${esc(rec.notes)}</div></div>` : ''}
       <div class="sigs"><div class="sig"><b>SERVICE ACHAT</b><br><br>Signature :</div><div class="sig"><b>MAGASIN</b><br><br>Signature :</div></div>`;
-    const pdf = await pdfReception({ numRec, cmd, rec, lignes: lignesRec });
+    const sigRec = await signatureDe(rec.cree_par);
+    const pdf = await pdfReception({ numRec, cmd, rec, lignes: lignesRec, sign: sigRec, nomRec: rec.cree_par_nom || '' });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${numRec}.pdf"`);
     res.send(pdf);

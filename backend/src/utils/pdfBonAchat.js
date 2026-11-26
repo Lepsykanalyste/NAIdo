@@ -181,7 +181,7 @@ function pdfBonAchat(cmd, lignes, urlQr, sign = {}) {
 }
 
 // Bordereau de reception en PDF (remplace la version HTML)
-function pdfReception({ numRec, cmd, rec, lignes }) {
+function pdfReception({ numRec, cmd, rec, lignes, sign = null, nomRec = '' }) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margin: 40 });
     const morceaux = [];
@@ -254,12 +254,17 @@ function pdfReception({ numRec, cmd, rec, lignes }) {
     }
 
     // Signatures
-    const ySig = 680;
+    // Les deux cases portent le nom et la signature de la personne qui a recu la marchandise
+    const ySig = 676;
     const sigW = (largeur - 16) / 2;
     [[G, 'SERVICE ACHAT'], [G + sigW + 16, 'MAGASIN']].forEach(([x, titre]) => {
-      doc.rect(x, ySig, sigW, 76).lineWidth(0.8).strokeColor(LIGNE).stroke();
+      doc.rect(x, ySig, sigW, 96).lineWidth(0.8).strokeColor(LIGNE).stroke();
       doc.font('Helvetica-Bold').fontSize(9).fillColor(BLEU).text(titre, x + 10, ySig + 7);
-      doc.fillColor(GRIS).fontSize(7).text('Signature', x + 10, ySig + 63);
+      doc.font('Helvetica-Bold').fontSize(9).fillColor('#111827').text(nomRec || '—', x + 10, ySig + 21, { width: sigW - 20 });
+      if (sign) {
+        try { doc.image(sign, x + 10, ySig + 36, { fit: [sigW - 20, 40] }); } catch (e) { /* image illisible : case vide */ }
+      }
+      doc.fillColor(GRIS).fontSize(7).text('Signature', x + 10, ySig + 82);
     });
 
     doc.font('Helvetica').fontSize(7.5).fillColor(GRIS)
