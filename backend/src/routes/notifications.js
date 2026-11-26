@@ -32,6 +32,13 @@ router.get('/', auth, async (req, res) => {
     ajouter('nc', 'Non-conformités critiques ou bloquantes ouvertes',
       await compter("SELECT COUNT(*)::int AS n FROM non_conformites WHERE statut NOT IN ('clos','annule') AND gravite IN ('critique','bloquante')"));
   }
+  // Direction : demandes de fabrication a valider et demandes d'annulation (ecran 'df')
+  if (ROLES_DIRECTION.includes(role)) {
+    ajouter('df', 'Demandes de fabrication à valider par la direction',
+      await compter("SELECT COUNT(*)::int AS n FROM demandes_fabrication WHERE statut = 'en_attente'"));
+    ajouter('df', "Demandes d'annulation de fabrication à traiter",
+      await compter("SELECT COUNT(*)::int AS n FROM demandes_fabrication WHERE statut = 'annulation_demandee'"));
+  }
   // Achat : envoi et reception des bons (les alertes sont dans Achats, pas chez la direction)
   if (['achat', 'super_admin'].includes(role)) {
     ajouter('achat', 'Bons validés à envoyer au fournisseur',
