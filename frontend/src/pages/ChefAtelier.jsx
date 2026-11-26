@@ -3746,6 +3746,7 @@ function Articles() {
     emballage:       { bg:'#fef3c7', tx:'#92400e', label:'Emballage' },
     consommable:     { bg:'#f3f4f6', tx:'#374151', label:'Consommable' },
     piece_detachee:  { bg:'#fce7f3', tx:'#9d174d', label:'Pièce détachée' },
+    article_divers:  { bg:'#f3f4f6', tx:'#374151', label:'Article divers' },
   };
 
   // InputField global utilisé
@@ -3793,6 +3794,7 @@ function Articles() {
                     { v:'emballage', l:'Emballage' },
                     { v:'consommable', l:'Consommable' },
                     { v:'piece_detachee', l:'Pièce détachée' },
+                    { v:'article_divers', l:'Article divers' },
                   ]}/>
                 <SelectField label="Unité de mesure *" value={form.unite_mesure_id} onChange={e => setForm({...form,unite_mesure_id:e.target.value})} required={true}
                   options={unites.length ? unites.map(u => ({ v:String(u.id), l:`${u.code} — ${u.libelle}` })) : [{v:'',l:'⚠ Activez des unités dans Référentiels'}]}/>
