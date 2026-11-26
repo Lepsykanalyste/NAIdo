@@ -39,6 +39,13 @@ router.get('/', auth, async (req, res) => {
     ajouter('df', "Demandes d'annulation de fabrication à traiter",
       await compter("SELECT COUNT(*)::int AS n FROM demandes_fabrication WHERE statut = 'annulation_demandee'"));
   }
+  // Chef d'atelier : ordres de fabrication a lancer et en retard (ecran 'of')
+  if (['chef_atelier', 'super_admin'].includes(role)) {
+    ajouter('of', 'Ordres de fabrication à lancer',
+      await compter("SELECT COUNT(*)::int AS n FROM ordres_fabrication WHERE statut = 'planifie'"));
+    ajouter('of', 'Ordres de fabrication en retard',
+      await compter("SELECT COUNT(*)::int AS n FROM ordres_fabrication WHERE date_livraison_prevue < CURRENT_DATE AND statut NOT IN ('termine','annule','pret_livraison')"));
+  }
   // Achat : envoi et reception des bons (les alertes sont dans Achats, pas chez la direction)
   if (['achat', 'super_admin'].includes(role)) {
     ajouter('achat', 'Bons validés à envoyer au fournisseur',
