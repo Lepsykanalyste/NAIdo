@@ -297,7 +297,7 @@ function pdfReception({ numRec, cmd, rec, lignes, sign = null, nomRec = '' }) {
 }
 
 // Document commercial en PDF (devis, bon de commande client, demande de fabrication) : portrait, ou paysage pour les grands tableaux
-function pdfCommercial({ titre, numero, dateStr, statut, infos = [], client = [], entete = [], lignes = [], totaux = [], notes = '', paysage = false, qrUrl = null, signatures = [], titreGauche = 'CLIENT', titreDroite = 'INFORMATIONS' }) {
+function pdfCommercial({ titre, numero, dateStr, statut, infos = [], client = [], entete = [], lignes = [], totaux = [], notes = '', paysage = false, qrUrl = null, signatures = [], titreGauche = 'CLIENT', titreDroite = 'INFORMATIONS', sousTitre = 'Service Commercial' }) {
   return new Promise(async (resolve, reject) => {
     // QR code en haut a droite (meme place que sur le bon d'achat)
     let qr = null;
@@ -317,7 +317,7 @@ function pdfCommercial({ titre, numero, dateStr, statut, infos = [], client = []
     // Bandeau
     doc.rect(0, 0, W, 90).fill(BLEU);
     doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(22).text('NAI', G, 28);
-    doc.font('Helvetica').fontSize(9).text('Service Commercial', G, 56);
+    doc.font('Helvetica').fontSize(9).text(sousTitre, G, 56);
     doc.font('Helvetica-Bold').fontSize(16).text(titre, xDroite, 24, { width: 305, align: 'right' });
     doc.font('Helvetica').fontSize(11).text(numero || '', xDroite, 46, { width: 305, align: 'right' });
     doc.fontSize(9).text('Date : ' + (dateStr || '—') + (statut ? '  ·  ' + statut : ''), xDroite, 64, { width: 305, align: 'right' });

@@ -192,6 +192,7 @@ router.get('/:id/pdf', auth, async (req, res) => {
         { titre: 'RÉGLEUR', nom: 'À compléter', image: null },
         { titre: 'OPÉRATEUR', nom: 'À compléter', image: null },
       ],
+      sousTitre: 'Atelier 3 — Système de Production',
       titre: 'ORDRE DE FABRICATION',
       numero: d.numero_of,
       dateStr: date(d.created_at),
