@@ -245,6 +245,8 @@ function GestionDevis() {
   const [tfForm, setTfForm] = useState({
     date_livraison_souhaitee:'', reference_client:'', adresse_livraison:'', notes:''
   });
+  const [tfFichier, setTfFichier] = useState(null);
+  const [tfAVenir, setTfAVenir] = useState(false);
   const PER_PAGE = 10;
 
   const charger = async () => {
@@ -355,9 +357,14 @@ function GestionDevis() {
   };
 
   const transformerBC = async () => {
+    if (!tfFichier && !tfAVenir) return toast.error('Joignez le bon de commande du client, ou cochez « À VENIR »');
+    const fd = new FormData();
+    Object.entries(tfForm).forEach(([k,v])=>fd.append(k, v||''));
+    if (tfFichier) fd.append('fichier_bc', tfFichier);
+    fd.append('bc_a_venir', tfAVenir ? 'true' : 'false');
     try{
-      await axios.post(`${API}/devis/${showTransfo.id}/transformer-bc`,tfForm);
-      toast.success('BC créé !');setShowTransfo(null);charger();
+      await axios.post(`${API}/devis/${showTransfo.id}/transformer-bc`, fd);
+      toast.success('BC créé !');setShowTransfo(null);setTfFichier(null);setTfAVenir(false);charger();
     }catch(e){toast.error(e.response?.data?.error||'Erreur');}
   };
 
@@ -475,6 +482,15 @@ function GestionDevis() {
                   style={inp()} placeholder={ph}/>
               </div>
             ))}
+            <div style={{marginBottom:10}}>
+              <div style={{fontSize:11,fontWeight:600,color:'#6b7280',marginBottom:3}}>Bon de commande du client *</div>
+              <input type="file" accept=".pdf,.png,.jpg,.jpeg,.webp" disabled={tfAVenir}
+                onChange={e=>{const f=e.target.files[0]||null; setTfFichier(f); if(f) setTfAVenir(false);}} style={{fontSize:12}}/>
+              <label style={{display:'flex',alignItems:'center',gap:6,marginTop:8,fontSize:12,color:'#374151'}}>
+                <input type="checkbox" checked={tfAVenir} disabled={!!tfFichier} onChange={e=>setTfAVenir(e.target.checked)}/>
+                À VENIR (le client enverra son bon de commande plus tard)
+              </label>
+            </div>
             <div style={{display:'flex',gap:8,marginTop:14}}>
               <button onClick={transformerBC} style={{flex:1,background:'#15803d',color:'#fff',border:'none',borderRadius:8,padding:'10px',cursor:'pointer',fontWeight:700}}>✓ Créer le BC</button>
               <button onClick={()=>setShowTransfo(null)} style={{background:'#f3f4f6',border:'none',borderRadius:8,padding:'10px 16px',cursor:'pointer'}}>Annuler</button>

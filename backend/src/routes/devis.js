@@ -1,6 +1,20 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
+const multer = require('multer');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+// Bon de commande du client joint au BC : PDF ou image, 10 Mo maximum
+const uploadBcClient = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => { const d = path.join(__dirname, '../../uploads/bc_client'); fs.mkdirSync(d, { recursive: true }); cb(null, d); },
+    filename: (req, file, cb) => cb(null, crypto.randomBytes(12).toString('hex') + path.extname(file.originalname).toLowerCase()),
+  }),
+  limits: { fileSize: 10 * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, cb) => cb(null, ['.pdf', '.png', '.jpg', '.jpeg', '.webp'].includes(path.extname(file.originalname).toLowerCase())),
+});
+
 const { auth } = require('../middleware/auth');
 
 // GET /api/devis
@@ -105,11 +119,14 @@ router.put('/:id/statut', auth, async (req, res) => {
 });
 
 // POST /api/devis/:id/transformer-bc
-router.post('/:id/transformer-bc', auth, async (req, res) => {
+router.post('/:id/transformer-bc', auth, uploadBcClient.single('fichier_bc'), async (req, res) => {
   const client = await db.connect();
   try {
     await client.query('BEGIN');
     const { reference_client, date_livraison_souhaitee, adresse_livraison, notes } = req.body;
+    // Le BC ne peut pas etre cree sans le bon de commande du client : fichier joint, ou case A VENIR
+    const aVenir = String(req.body.bc_a_venir) === 'true';
+    if (!req.file && !aVenir) throw new Error('Joignez le bon de commande du client, ou cochez A VENIR');
     const { rows: dv } = await client.query(
       'SELECT * FROM devis WHERE id=$1', [req.params.id]
     );
@@ -119,11 +136,12 @@ router.post('/:id/transformer-bc', auth, async (req, res) => {
     const { rows: bc } = await client.query(`
       INSERT INTO bons_commande (devis_id, client_id, date_livraison_souhaitee,
         adresse_livraison, reference_client, notes, commercial_id,
-        montant_ht, montant_tva, montant_total_fcfa, remise_pct, taux_tva, statut)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'recu') RETURNING *
+        montant_ht, montant_tva, montant_total_fcfa, remise_pct, taux_tva, statut, bc_client_fichier, bc_client_a_venir)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'recu',$13,$14) RETURNING *
     `, [d.id, d.client_id, date_livraison_souhaitee||null, adresse_livraison||null,
         reference_client||null, notes||null, req.user.id,
-        d.montant_ht, d.montant_tva, d.montant_total_fcfa, d.remise_pct, d.taux_tva]);
+        d.montant_ht, d.montant_tva, d.montant_total_fcfa, d.remise_pct, d.taux_tva,
+        req.file ? '/uploads/bc_client/' + req.file.filename : null, !req.file && aVenir]);
 
     // Copier les lignes
     const { rows: lignes } = await client.query(
