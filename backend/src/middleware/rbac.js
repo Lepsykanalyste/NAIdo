@@ -48,6 +48,9 @@ function estPublique(methode, chemin) {
 const cheminTransit = (m, c) => (m === 'GET' && c === '/api/achat/transit/commandes')
   || (['GET', 'POST'].includes(m) && /^\/api\/achat\/commandes\/[^/]+\/evolution$/.test(c))
   || (m === 'PUT' && /^\/api\/achat\/commandes\/[^/]+\/lot-conteneur$/.test(c));
+// Magasin MP : receptionner une commande confirmee et ouvrir le bordereau (sans prix)
+const cheminReception = (m, c) => (m === 'PUT' && /^\/api\/achat\/commandes\/[^/]+\/receptionner$/.test(c))
+  || (m === 'GET' && (/^\/api\/achat\/commandes\/[^/]+\/receptions$/.test(c) || /^\/api\/achat\/receptions\/[^/]+\/pdf$/.test(c)));
 function decider(roleBrut, methode, chemin) {
   const role = normaliserRole(roleBrut);
   if (role === 'super_admin') return { autorise: true, raison: 'super_admin' };
@@ -56,6 +59,7 @@ function decider(roleBrut, methode, chemin) {
   // Espaces personnels : chaque utilisateur connecte ne voit que ses propres donnees (notifications de son role, photo, signature, compte mail)
   if (PERSONNELS.some((m) => correspond(m, chemin))) return { autorise: true, raison: 'espace personnel' };
   if (role === 'transitaire' && cheminTransit(String(methode).toUpperCase(), chemin)) return { autorise: true, raison: 'transitaire (export)' };
+  if (role === 'magasinier_mp' && cheminReception(String(methode).toUpperCase(), chemin)) return { autorise: true, raison: 'magasin MP : reception' };
   if (role === 'directeur') return { autorise: true, raison: 'directeur' };
   let meilleure = null;                                // regle la plus precise = celle qui a le plus de segments
   for (const r of POLITIQUE.regles) {

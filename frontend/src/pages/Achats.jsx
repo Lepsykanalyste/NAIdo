@@ -18,6 +18,8 @@ import { ouvrirPdfSecurise } from '../utils/pdf';
 const API = '/api';
 const ROLES_DIRECTION = ['directeur', 'super_admin'];
 const ROLES_ACHAT = ['achat', 'directeur', 'super_admin'];
+// Roles qui peuvent receptionner une commande (le magasin MP en fait partie)
+const ROLES_RECEPTION = ['achat', 'directeur', 'super_admin', 'magasinier_mp'];
 
 const nb = v => parseFloat(v) || 0;
 const fcfa = v => `${nb(v).toLocaleString('fr-FR', { maximumFractionDigits: 2 })} FCFA`;
@@ -422,7 +424,7 @@ function DetailCommande({ id, role, onClose, onChange, onReceptionner, onHistori
         <Btn plein onClick={() => ouvrirPdfSecurise(`${API}/achat/commandes/${id}/pdf`)}>📄 PDF</Btn>
         {c.statut === 'envoye' && direction && <Btn plein color="#15803d" onClick={() => statut('confirme')}>✓ Confirmer (direction)</Btn>}
         {['envoye', 'confirme', 'brouillon'].includes(c.statut) && achat && <Btn plein bg="#fee2e2" color="#dc2626" onClick={async () => { if ((await confirmer('Annuler cette commande ?'))) statut('annule'); }}>Annuler la commande</Btn>}
-        {['confirme', 'receptionne_partiel'].includes(c.statut) && achat && <Btn plein color="#0369a1" onClick={() => onReceptionner(c)}>📥 Réceptionner</Btn>}
+        {['confirme', 'receptionne_partiel'].includes(c.statut) && (achat || ROLES_RECEPTION.includes(role)) && <Btn plein color="#0369a1" onClick={() => onReceptionner(c)}>📥 Réceptionner</Btn>}
         {['receptionne_partiel', 'receptionne'].includes(c.statut) && <Btn plein bg="#f3f4f6" color="#374151" onClick={() => onHistorique(c)}>📋 Historique des réceptions</Btn>}
       </div>
     </Modal>
@@ -947,7 +949,7 @@ function AchatsStandard() {
                         {c.validation === 'refusee' && <span title={c.motif_refus || ''} style={{ fontSize: 10, color: '#dc2626', alignSelf: 'center' }}>Refusé</span>}
                         {c.statut === 'envoye' && direction && <Btn bg="#dcfce7" color="#15803d" onClick={() => statut(c, 'confirme')}>✓ Confirmer</Btn>}
                         {c.statut === 'envoye' && !direction && <span style={{ fontSize: 10, color: '#9ca3af', fontStyle: 'italic', alignSelf: 'center' }}>Validation direction</span>}
-                        {['confirme', 'receptionne_partiel'].includes(c.statut) && achat && <Btn bg="#e0f2fe" color="#0369a1" onClick={() => setRecep(c)}>📥 Réceptionner</Btn>}
+                        {['confirme', 'receptionne_partiel'].includes(c.statut) && (achat || ROLES_RECEPTION.includes(user?.role)) && <Btn bg="#e0f2fe" color="#0369a1" onClick={() => setRecep(c)}>📥 Réceptionner</Btn>}
                         {['receptionne_partiel', 'receptionne'].includes(c.statut) && <Btn bg="#f3f4f6" color="#374151" onClick={() => setHisto(c)}>📋 Historique</Btn>}
                       </div>
                     </td>
