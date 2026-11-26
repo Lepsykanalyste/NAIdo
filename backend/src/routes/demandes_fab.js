@@ -158,6 +158,7 @@ router.get('/:id/pdf', auth, async (req, res) => {
     }
     const statutLabel = { en_attente: 'En attente', validee: 'Validée', refusee: 'Refusée', annulee: 'Annulée', en_cours: 'En cours', terminee: 'Terminée' }[d.statut] || d.statut;
     const pdf = await pdfCommercial({
+      paysage: true,
       titre: 'DEMANDE DE FABRICATION',
       numero: d.numero_df,
       dateStr: date(d.created_at),
@@ -170,8 +171,8 @@ router.get('/:id/pdf', auth, async (req, res) => {
               'OF généré : ' + (d.numero_of || '—'),
               'Demandeur : ' + (d.demandeur_nom || '—'),
               'Validé par : ' + (d.valideur_nom || '—')],
-      entete: [{ t: 'Code', w: 60, al: 'left' }, { t: 'Désignation', w: 185, al: 'left' }, { t: 'Qté (pcs)', w: 70, al: 'right' },
-               { t: 'Qté (kg)', w: 70, al: 'right' }, { t: 'Prix HT', w: 60, al: 'right' }, { t: 'Montant TTC', w: 70, al: 'right' }],
+      entete: [{ t: 'Code', w: 80, al: 'left' }, { t: 'Désignation', w: 300, al: 'left' }, { t: 'Qté (pcs)', w: 90, al: 'right' },
+               { t: 'Qté (kg)', w: 90, al: 'right' }, { t: 'Prix HT', w: 80, al: 'right' }, { t: 'Montant TTC', w: 122, al: 'right' }],
       lignes: lignesPdf,
       totaux: [['Quantité totale', (pcs ? nombre(pcs, 0) + ' pcs · ' : '') + nombre(kg, 2) + ' kg'],
                ['Total TTC', nombre(ttc) + ' FCFA', true]],
