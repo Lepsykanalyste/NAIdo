@@ -17,6 +17,7 @@ const express = require('express');
 const router  = express.Router();
 const db      = require('../config/db');
 const { auth } = require('../middleware/auth');
+const { pdfCommercial } = require('../utils/pdfBonAchat');
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EPS  = 0.0005;
@@ -57,6 +58,14 @@ const page = (title, body) => `<!DOCTYPE html><html lang="fr"><head><meta charse
 <body onload="window.print()">${body}
 <div class="foot">Genere le ${new Date().toLocaleString('fr-FR')} - NAIdo v3 - SOPHOPSY pour NAI</div></body></html>`;
 
+const sendPdf = (res, buf, nom) => {
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.setHeader('Content-Disposition', `inline; filename="${nom}.pdf"`);
+  res.send(buf);
+};
+const dateCourte = d => d ? new Date(d).toLocaleDateString('fr-FR') : '—';
+const kg = (v, d = 1) => fmt(v, d) + ' kg';
 const sendHtml = (res, html) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store');
@@ -120,43 +129,72 @@ router.get('/livraisons/:numero', auth, async (req, res) => {
 router.get('/livraisons/:numero/pdf', auth, async (req, res) => {
   try {
     const lignes = await chargerBon(req.params.numero);
-    if (!lignes.length) return res.status(404).send('<h1>Bon de livraison introuvable</h1>');
+    if (!lignes.length) return res.status(404).json({ error: 'Bon de livraison introuvable' });
     const h = lignes[0];
     const totLivre = lignes.reduce((s, l) => s + num(l.qte_livree), 0);
     const totRecu  = lignes.reduce((s, l) => s + (l.receptionne ? num(l.qte_recue ?? l.qte_livree) : 0), 0);
-    const rowsHtml = lignes.map(l => {
+    const rows = lignes.map(l => {
       const recu = l.receptionne ? num(l.qte_recue ?? l.qte_livree) : null;
       const ecart = l.receptionne && Math.abs(recu - num(l.qte_livree)) > EPS;
-      return `<tr>
-        <td class="b">${esc(l.code)}</td><td>${esc(l.designation)}</td>
-        <td>${esc(l.numero_lot || '—')}</td>
-        <td class="r">${fmt(l.qte_livree, 3)}</td>
-        <td class="r">${recu === null ? '—' : fmt(recu, 3)}</td>
-        <td class="c">${l.receptionne ? (ecart ? 'Recu (ecart)' : 'Recu') : 'En transit'}</td>
-      </tr>${ecart && l.observation_reception ? `<tr><td colspan="6" style="font-size:7.5pt;color:#92400e">Observation : ${esc(l.observation_reception)}</td></tr>` : ''}`;
-    }).join('');
-    const body = `
-      <div class="header"><div><div class="company">NAI</div><div style="font-size:7pt;color:#6b7280">Magasin MP - Atelier 3</div></div>
-        <div style="text-align:right;font-size:7.5pt;color:#6b7280">Date : ${dateFr(h.date_livraison)}</div></div>
-      <div class="banner">Bon de livraison matieres premieres</div>
-      <div class="num">${esc(req.params.numero)}</div>
-      <div class="grid">
-        <div class="sec"><div class="sec-h">Demande</div><div class="sec-b">
-          <div class="row"><span class="lbl">DBM</span><span class="val">${esc(h.numero_dbm)}</span></div>
-          <div class="row"><span class="lbl">Ordre de fabrication</span><span class="val">${esc(h.numero_of || '—')}</span></div></div></div>
-        <div class="sec"><div class="sec-h">Livraison</div><div class="sec-b">
-          <div class="row"><span class="lbl">Livre par</span><span class="val">${esc(h.livre_par_nom || '—')}</span></div>
-          <div class="row"><span class="lbl">Notes</span><span class="val">${esc(h.notes_magasin || '—')}</span></div></div></div>
-      </div>
-      <table><thead><tr><th>Code</th><th>Designation</th><th>N° lot</th><th class="r">Livre (kg)</th><th class="r">Recu (kg)</th><th class="c">Statut</th></tr></thead>
-        <tbody>${rowsHtml}</tbody></table>
-      <div class="tot"><span>Total livre / recu</span><span>${fmt(totLivre, 3)} / ${fmt(totRecu, 3)} kg</span></div>
-      <div class="sigs">
-        <div class="sig"><b>MAGASINIER MP</b><br><br>Signature :</div>
-        <div class="sig"><b>CHEF ATELIER 3 (reception)</b><br><br>Signature :</div>
-      </div>`;
-    sendHtml(res, page(`Bon ${req.params.numero}`, body));
-  } catch (e) { console.error('[DBM-LIV] pdf bon', e); res.status(500).send('<h1>Erreur PDF : ' + esc(e.message) + '</h1>'); }
+      return [l.code || '—', l.designation || '—', l.numero_lot || '—', fmt(l.qte_livree, 3),
+              recu === null ? '—' : fmt(recu, 3), l.receptionne ? (ecart ? 'Reçu (écart)' : 'Reçu') : 'En transit'];
+    });
+    const obs = lignes.filter(l => l.receptionne && l.observation_reception).map(l => `${l.code} : ${l.observation_reception}`).join(' | ');
+    const pdf = await pdfCommercial({
+      titre: 'BON DE LIVRAISON MATIÈRES PREMIÈRES',
+      numero: req.params.numero,
+      dateStr: dateCourte(h.date_livraison),
+      statut: lignes.every(l => l.receptionne) ? 'Reçu' : 'En transit',
+      sousTitre: 'Magasin MP - Atelier 3',
+      titreGauche: 'DEMANDE', titreDroite: 'LIVRAISON',
+      qrUrl: `BL ${req.params.numero} | DBM ${h.numero_dbm} | ${totLivre.toFixed(1)} kg`,
+      client: ['DBM : ' + (h.numero_dbm || '—'), 'Ordre de fabrication : ' + (h.numero_of || '—')],
+      infos: ['Livré par : ' + (h.livre_par_nom || '—'), 'Notes : ' + (h.notes_magasin || '—')],
+      entete: [{ t: 'Code', w: 90, al: 'left' }, { t: 'Désignation', w: 190, al: 'left' }, { t: 'N° lot', w: 90, al: 'left' },
+               { t: 'Livré (kg)', w: 60, al: 'right' }, { t: 'Reçu (kg)', w: 60, al: 'right' }, { t: 'Statut', w: 70, al: 'left' }],
+      lignes: rows,
+      totaux: [['Total livré', kg(totLivre, 3)], ['Total reçu', kg(totRecu, 3), true]],
+      notes: obs ? 'Observations : ' + obs : '',
+      signatures: [
+        { titre: 'MAGASINIER MP', nom: h.livre_par_nom || '', image: null },
+        { titre: 'CHEF ATELIER 3 (réception)', nom: '', image: null },
+      ],
+    });
+    sendPdf(res, pdf, req.params.numero);
+  } catch (e) { console.error('[DBM-LIV] pdf bon', e); res.status(500).json({ error: 'Erreur PDF : ' + e.message }); }
+});
+
+// GET /api/dbm/stock-mp/entree/:lot_id/pdf — fiche de reception fournisseur (PDF)
+router.get('/stock-mp/entree/:lot_id/pdf', auth, async (req, res, next) => {
+  if (!UUID.test(req.params.lot_id)) return next();
+  try {
+    const { rows } = await db.query(`
+      SELECT ls.*, a.code AS article_code, a.designation AS article_nom, f.libelle AS famille_libelle
+      FROM lots_stock ls
+      LEFT JOIN articles a ON a.id = ls.article_id
+      LEFT JOIN familles_articles f ON f.id = a.famille_id
+      WHERE ls.id = $1`, [req.params.lot_id]);
+    if (!rows.length) return res.status(404).json({ error: 'Lot introuvable' });
+    const l = rows[0];
+    const pdf = await pdfCommercial({
+      titre: 'FICHE DE RÉCEPTION FOURNISSEUR',
+      numero: l.numero_lot,
+      dateStr: dateCourte(l.date_reception),
+      statut: 'Reçu',
+      sousTitre: 'Magasin Matières Premières',
+      titreGauche: 'MATIÈRE REÇUE', titreDroite: 'DÉTAILS',
+      qrUrl: `NAI-MP|${l.article_code}|LOT:${l.numero_lot}|${num(l.qte_initiale).toFixed(1)}kg|${l.fournisseur_nom || '?'}`,
+      client: ['Code article : ' + (l.article_code || '—'), 'Désignation : ' + (l.article_nom || '—'),
+               'Famille : ' + (l.famille_libelle || '—'), 'Fournisseur : ' + (l.fournisseur_nom || '—')],
+      infos: ['N° lot : ' + (l.numero_lot || '—'), 'Date réception : ' + dateCourte(l.date_reception),
+              'DLUO : ' + dateCourte(l.date_dluo)],
+      entete: [{ t: 'Code', w: 100, al: 'left' }, { t: 'Désignation', w: 250, al: 'left' }, { t: 'N° lot', w: 110, al: 'left' }, { t: 'Quantité reçue (kg)', w: 92, al: 'right' }],
+      lignes: [[l.article_code || '—', l.article_nom || '—', l.numero_lot || '—', fmt(l.qte_initiale, 1)]],
+      totaux: [['Quantité reçue', kg(l.qte_initiale, 1), true]],
+      signatures: [{ titre: 'MAGASINIER MP', nom: '', image: null }, { titre: 'RESPONSABLE', nom: '', image: null }],
+    });
+    sendPdf(res, pdf, l.numero_lot || 'reception');
+  } catch (e) { console.error('[DBM-LIV] pdf entree', e); res.status(500).json({ error: 'Erreur PDF : ' + e.message }); }
 });
 
 // ══════════════════════════════════════════════════════════════
@@ -196,30 +234,27 @@ router.get('/:id/pdf', auth, async (req, res, next) => {
   if (!UUID.test(req.params.id)) return next();
   try {
     const d = await chargerDbm(req.params.id);
-    if (!d) return res.status(404).send('<h1>DBM introuvable</h1>');
-    const rowsHtml = d.lignes.map(l => `<tr>
-      <td class="b">${esc(l.code)}</td><td>${esc(l.designation)}</td>
-      <td class="r">${fmt(l.qte_demandee, 3)}</td><td class="r">${fmt(l.qte_livree, 3)}</td>
-      <td class="r">${fmt(l.qte_en_transit, 3)}</td><td class="r b">${fmt(l.qte_restante, 3)}</td></tr>`).join('');
-    const body = `
-      <div class="header"><div><div class="company">NAI</div><div style="font-size:7pt;color:#6b7280">Atelier 3 - Demande de besoin en matieres</div></div>
-        <div style="text-align:right;font-size:7.5pt;color:#6b7280">Date : ${dateFr(d.date_demande || d.created_at)}</div></div>
-      <div class="banner">Demande de besoin en matieres (DBM)</div>
-      <div class="num">${esc(d.numero_dbm)}</div>
-      <div class="grid">
-        <div class="sec"><div class="sec-h">Demande</div><div class="sec-b">
-          <div class="row"><span class="lbl">OF</span><span class="val">${esc(d.numero_of || '—')}</span></div>
-          <div class="row"><span class="lbl">Statut</span><span class="val">${esc(d.statut)}</span></div>
-          <div class="row"><span class="lbl">Urgence</span><span class="val">${d.urgence ? 'OUI' : 'non'}</span></div></div></div>
-        <div class="sec"><div class="sec-h">Notes</div><div class="sec-b">
-          <div class="row"><span class="lbl">Demandeur</span><span class="val">${esc(d.notes_demandeur || '—')}</span></div>
-          <div class="row"><span class="lbl">Magasin</span><span class="val">${esc(d.notes_magasin || '—')}</span></div></div></div>
-      </div>
-      <table><thead><tr><th>Code</th><th>Designation</th><th class="r">Demande (kg)</th><th class="r">Recu (kg)</th><th class="r">En transit (kg)</th><th class="r">Reste (kg)</th></tr></thead>
-        <tbody>${rowsHtml}</tbody></table>
-      <div class="sigs"><div class="sig"><b>CHEF ATELIER 3</b><br><br>Signature :</div><div class="sig"><b>MAGASINIER MP</b><br><br>Signature :</div></div>`;
-    sendHtml(res, page(`DBM ${d.numero_dbm}`, body));
-  } catch (e) { console.error('[DBM-LIV] pdf dbm', e); res.status(500).send('<h1>Erreur PDF : ' + esc(e.message) + '</h1>'); }
+    if (!d) return res.status(404).json({ error: 'DBM introuvable' });
+    const rows = d.lignes.map(l => [l.code || '—', l.designation || '—', fmt(l.qte_demandee, 1), fmt(l.qte_livree, 1), fmt(l.qte_en_transit, 1), fmt(l.qte_restante, 1)]);
+    const tot = d.lignes.reduce((s, l) => s + num(l.qte_demandee), 0);
+    const pdf = await pdfCommercial({
+      titre: 'DEMANDE DE BESOIN EN MATIÈRES (DBM)',
+      numero: d.numero_dbm,
+      dateStr: dateCourte(d.date_demande || d.created_at),
+      statut: String(d.statut || '').replace(/_/g, ' '),
+      sousTitre: 'Atelier 3 - Demande de besoin en matières',
+      titreGauche: 'DEMANDE', titreDroite: 'NOTES',
+      qrUrl: `DBM ${d.numero_dbm} | OF ${d.numero_of || '-'} | ${tot.toFixed(1)} kg`,
+      client: ['OF : ' + (d.numero_of || '—'), 'Statut : ' + String(d.statut || '—').replace(/_/g, ' '), 'Urgence : ' + (d.urgence ? 'OUI' : 'non')],
+      infos: ['Demandeur : ' + (d.notes_demandeur || '—'), 'Magasin : ' + (d.notes_magasin || '—')],
+      entete: [{ t: 'Code', w: 90, al: 'left' }, { t: 'Désignation', w: 190, al: 'left' }, { t: 'Demandé (kg)', w: 62, al: 'right' },
+               { t: 'Reçu (kg)', w: 56, al: 'right' }, { t: 'En transit (kg)', w: 62, al: 'right' }, { t: 'Reste (kg)', w: 56, al: 'right' }],
+      lignes: rows,
+      totaux: [['Total demandé', kg(tot, 1), true]],
+      signatures: [{ titre: 'CHEF ATELIER 3', nom: '', image: null }, { titre: 'MAGASINIER MP', nom: '', image: null }],
+    });
+    sendPdf(res, pdf, d.numero_dbm || 'dbm');
+  } catch (e) { console.error('[DBM-LIV] pdf dbm', e); res.status(500).json({ error: 'Erreur PDF : ' + e.message }); }
 });
 
 // GET /api/dbm/:id — detail DBM (lignes + livraisons)
