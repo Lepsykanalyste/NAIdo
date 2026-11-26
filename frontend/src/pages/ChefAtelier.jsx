@@ -3767,9 +3767,10 @@ function Articles() {
         </button>
       </div>
 
-      {/* ══ FORMULAIRE ══ */}
+      {/* ══ FORMULAIRE (fenêtre par-dessus la page, sans remonter en haut) ══ */}
       {showForm && (
-        <div style={{ background:'#fff', borderRadius:14, border:'2px solid #c4b5fd', marginBottom:20 }}>
+        <div style={{ position:'fixed', inset:0, background:'rgba(17,24,39,0.45)', zIndex:1100, display:'flex', justifyContent:'center', alignItems:'flex-start', padding:'32px 16px', overflowY:'auto' }}>
+        <div style={{ background:'#fff', borderRadius:14, border:'2px solid #c4b5fd', marginBottom:20, width:'100%', maxWidth:960 }}>
           {/* Header */}
           <div style={{ background:'linear-gradient(135deg,#7e22ce,#4338ca)', padding:'14px 24px', borderRadius:'12px 12px 0 0', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
             <span style={{ color:'#fff', fontWeight:800, fontSize:15 }}>{modeEditArt ? '✏ Modifier Article' : '📦 Nouvel Article — Fiche Technique'}</span>
@@ -3970,6 +3971,7 @@ function Articles() {
               </button>
             </div>
           </div>
+        </div>
         </div>
       )}
 
