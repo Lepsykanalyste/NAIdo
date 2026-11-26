@@ -8867,9 +8867,11 @@ function OrdresLivraison() {
               <div style={{ fontSize:10, color:'#6b7280', whiteSpace:'nowrap' }}>NAI</div>
             </div>
           )}
-          <button onClick={() => setSidebarOuverte(!sidebarOuverte)}
-            style={{ marginLeft:'auto', background:'none', border:'none', color:'#6b7280', cursor:'pointer', padding:4, flexShrink:0 }}>
-            {sidebarOuverte ? '◀' : '▶'}
+          <button onClick={() => setSidebarOuverte(!sidebarOuverte)} aria-label={sidebarOuverte ? 'Réduire le menu' : 'Ouvrir le menu'} title={sidebarOuverte ? 'Réduire le menu' : 'Ouvrir le menu'}
+            style={{ marginLeft:'auto', background:'none', border:'none', color:'#9ca3af', cursor:'pointer', padding:4, flexShrink:0, lineHeight:0 }}>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
           </button>
         </div>
 
