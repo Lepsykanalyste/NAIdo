@@ -43,6 +43,7 @@ const Badge = ({ statut, map }) => {
 // ══════════════════════════════════════════════════════════════
 // Quantite en kg lisible (1 250,5) pour afficher le stock a cote de chaque matiere
 const fmtKg = (v) => (parseFloat(v) || 0).toLocaleString('fr-FR', { maximumFractionDigits: 1 });
+const TOLERANCE_COMMANDE = 0.10;   // on peut demander au plus le besoin de l'OF + 10 %
 // Liste de choix des matieres : seules celles qui ont du stock au magasin, avec la quantite disponible en couleur
 // (vert = le stock couvre le besoin, orange = stock inferieur au besoin, bleu = pas de besoin connu)
 function ListeMatieres({ articles, selectedId, onSelect, besoin = null }) {
@@ -151,12 +152,7 @@ export function ModuleDBM() {
   };
 
   const majQte = (idx, val) => {
-    setLignes(prev => prev.map((l, i) => {
-      if (i !== idx) return l;
-      const max = parseFloat(l.qte_dispo_mag || 0);   // on ne peut pas demander plus que le stock magasin
-      const v = parseFloat(val);
-      return { ...l, qte_demandee: (max > 0 && v > max) ? String(max) : val };
-    }));
+    setLignes(prev => prev.map((l, i) => i === idx ? { ...l, qte_demandee: val } : l));
   };
 
   const supprimerLigne = (idx) => setLignes(prev => prev.filter((_, i) => i !== idx));
@@ -167,10 +163,11 @@ export function ModuleDBM() {
     const q = parseFloat(ajoutQte);
     if (!a) return toast.error('Choisissez un article');
     if (!(q > 0)) return toast.error('Indiquez une quantité supérieure à 0');
-    if (q > parseFloat(a.qte_disponible || 0)) return toast.error(`Quantité supérieure au stock disponible (${fmtKg(a.qte_disponible)} kg)`);
+    if (erreurAjout) return toast.error(erreurAjout);
+    const g = besoins.find(b => (b.articles || []).some(x => String(x.id) === String(a.id)));
     if (lignes.some(l => String(l.article_id) === String(a.id))) return toast.error('Cette matière est déjà dans la liste');
-    setLignes(prev => [...prev, { article_id: a.id, groupe_id: null, famille_id: null, code: a.code, designation: a.designation,
-      famille_libelle: a.famille_libelle, qte_necessaire: null, qte_dispo_at3: 0, qte_dispo_mag: parseFloat(a.qte_disponible || 0),
+    setLignes(prev => [...prev, { article_id: a.id, groupe_id: g ? g.groupe_id : null, famille_id: g ? g.famille_id : null, code: a.code, designation: a.designation,
+      famille_libelle: a.famille_libelle, qte_necessaire: g ? g.qte_necessaire : null, qte_dispo_at3: 0, qte_dispo_mag: parseFloat(a.qte_disponible || 0),
       qte_demandee: q, unite: 'kg', manuel: true }]);
     setAjoutArt(''); setAjoutQte(''); setRecherche('');
   };
@@ -182,13 +179,39 @@ export function ModuleDBM() {
   const mpsDispo = mps.filter(a => a.qte_disponible > 0);
   const mpsFiltrees = mpsDispo.filter(a => correspond(a, recherche));
 
+  // Regles de quantite : jamais plus que le stock magasin, et jamais plus que le besoin de l'OF + 10 % pour un groupe de la composition de l'article
+  const plafondGroupe = (groupeId) => {
+    const b = besoins.find(x => String(x.groupe_id) === String(groupeId));
+    return b && b.qte_necessaire != null ? parseFloat(b.qte_necessaire) * (1 + TOLERANCE_COMMANDE) : null;
+  };
+  const totalGroupe = (groupeId) => lignes.reduce((s, l) => String(l.groupe_id) === String(groupeId) ? s + (parseFloat(l.qte_demandee) || 0) : s, 0);
+  const erreurLigne = (l) => {
+    const q = parseFloat(l.qte_demandee) || 0;
+    if (l.article_id && q > parseFloat(l.qte_dispo_mag || 0) + 1e-6) return `Supérieur au stock magasin : maximum ${fmtKg(l.qte_dispo_mag)} kg`;
+    const p = l.groupe_id ? plafondGroupe(l.groupe_id) : null;
+    if (p != null && totalGroupe(l.groupe_id) > p + 1e-6) return `Supérieur au besoin de l'OF + 10 % pour ce groupe : maximum ${fmtKg(p)} kg au total`;
+    return null;
+  };
+  // Controle en direct du formulaire « Ajouter une matiere »
+  const aSel = mps.find(x => String(x.id) === String(ajoutArt));
+  const qAjout = parseFloat(ajoutQte) || 0;
+  const gSel = aSel ? besoins.find(b => (b.articles || []).some(x => String(x.id) === String(aSel.id))) : null;
+  let erreurAjout = null;
+  if (aSel && qAjout > parseFloat(aSel.qte_disponible || 0) + 1e-6) {
+    erreurAjout = `Supérieur au stock magasin : maximum ${fmtKg(aSel.qte_disponible)} kg`;
+  } else if (gSel && qAjout > 0) {
+    const p = parseFloat(gSel.qte_necessaire) * (1 + TOLERANCE_COMMANDE);
+    const deja = totalGroupe(gSel.groupe_id);
+    if (deja + qAjout > p + 1e-6) erreurAjout = `Supérieur au besoin de l'OF + 10 % (${gSel.groupe_libelle}) : encore ${fmtKg(Math.max(0, p - deja))} kg possible`;
+  }
+
   const creerDbm = async () => {
     if (!ofSel) return toast.error('Sélectionnez un OF');
     if (!lignes.length) return toast.error('Aucune MP à demander');
     if (lignes.some(l => !l.article_id)) return toast.error('Choisissez la matière (MP) de chaque ligne');
     if (lignes.some(l => !(parseFloat(l.qte_demandee) > 0))) return toast.error('Indiquez une quantité supérieure à 0 pour chaque ligne');
-    const depasse = lignes.find(l => parseFloat(l.qte_demandee) > parseFloat(l.qte_dispo_mag || 0) + 1e-9);
-    if (depasse) return toast.error(`Quantité supérieure au stock magasin pour ${depasse.code} (stock : ${fmtKg(depasse.qte_dispo_mag)} kg)`);
+    const idxErr = lignes.findIndex(l => erreurLigne(l));
+    if (idxErr >= 0) return toast.error(`${lignes[idxErr].code || 'Ligne'} : ${erreurLigne(lignes[idxErr])}`);
     setLoading(true);
     try {
       const { data } = await axios.post(`${API}/dbm`, {
@@ -338,8 +361,9 @@ export function ModuleDBM() {
                 </div>
                 <div>
                   <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Quantité (kg)</label>
-                  <input type="number" min="0" step="0.1" value={ajoutQte} onChange={e => { const a = mps.find(x => String(x.id) === String(ajoutArt)); const st = a ? parseFloat(a.qte_disponible || 0) : 0; const v = parseFloat(e.target.value); setAjoutQte(a && v > st ? String(st) : e.target.value); }} placeholder="0"
-                    style={{ width:'100%', border:'2px solid #fcd34d', borderRadius:8, padding:'8px', fontSize:13, boxSizing:'border-box' }} />
+                  <input type="number" min="0" step="0.1" value={ajoutQte} onChange={e => setAjoutQte(e.target.value)} placeholder="0"
+                    style={{ width:'100%', border: erreurAjout ? '2px solid #dc2626' : '2px solid #fcd34d', borderRadius:8, padding:'8px', fontSize:13, boxSizing:'border-box' }} />
+                  {erreurAjout && <div style={{ color:'#dc2626', fontSize:11, fontWeight:700, marginTop:3 }}>⚠ {erreurAjout}</div>}
                 </div>
                 <button onClick={ajouterMatiere}
                   style={{ background:'#15803d', color:'#fff', border:'none', padding:'10px 16px', borderRadius:8, cursor:'pointer', fontWeight:700, fontSize:13 }}>
@@ -377,8 +401,7 @@ export function ModuleDBM() {
                           <ListeMatieres besoin={l.qte_necessaire}
                             articles={(besoins.find(b => String(b.groupe_id) === String(l.groupe_id))?.articles || []).map(a => ({ id:a.id, code:a.code, designation:a.designation, stock: parseFloat(a.stock_magasin || 0) }))}
                             selectedId={l.article_id}
-                            onSelect={a => setLignes(prev => prev.map((x, j) => j !== i ? x : { ...x, article_id:a.id, code:a.code, designation:a.designation, qte_dispo_mag:a.stock,
-                              qte_demandee: parseFloat(x.qte_demandee) > a.stock ? String(a.stock) : x.qte_demandee }))} />
+                            onSelect={a => setLignes(prev => prev.map((x, j) => j !== i ? x : { ...x, article_id:a.id, code:a.code, designation:a.designation, qte_dispo_mag:a.stock }))} />
                         ))}
                       </td>
                       <td style={{ padding:'8px 10px', fontSize:11, color:'#6b7280' }}>{l.famille_libelle}</td>
@@ -387,14 +410,15 @@ export function ModuleDBM() {
                         {l.qte_dispo_at3} kg
                       </td>
                 
-                      <td style={{ padding:'8px 10px', width:110 }}>
+                      <td style={{ padding:'8px 10px', width:160 }}>
                         <div style={{ display:'flex', alignItems:'center', gap:4 }}>
                           <input type="number" value={l.qte_demandee} min="0" step="0.1"
                             max={l.qte_dispo_mag||undefined}
                             onChange={e => majQte(i, e.target.value)}
-                            style={{ width:80, border:'2px solid #fcd34d', borderRadius:6, padding:'5px', fontSize:13, textAlign:'center', fontWeight:700 }} />
+                            style={{ width:80, border: erreurLigne(l) ? '2px solid #dc2626' : '2px solid #fcd34d', borderRadius:6, padding:'5px', fontSize:13, textAlign:'center', fontWeight:700 }} />
                           <span style={{ fontSize:11 }}>kg</span>
                         </div>
+                        {erreurLigne(l) && <div style={{ color:'#dc2626', fontSize:10, fontWeight:700, marginTop:3, maxWidth:210 }}>⚠ {erreurLigne(l)}</div>}
                       </td>
                       <td style={{ padding:'8px 10px' }}>
                         <div style={{display:'flex',gap:4}}>
