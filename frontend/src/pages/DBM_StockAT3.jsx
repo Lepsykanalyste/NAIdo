@@ -41,6 +41,8 @@ const Badge = ({ statut, map }) => {
 // ══════════════════════════════════════════════════════════════
 // MODULE DBM — Chef AT3 crée les demandes de besoin
 // ══════════════════════════════════════════════════════════════
+// Quantite en kg lisible (1 250,5) pour afficher le stock a cote de chaque matiere
+const fmtKg = (v) => (parseFloat(v) || 0).toLocaleString('fr-FR', { maximumFractionDigits: 1 });
 export function ModuleDBM() {
   const { user } = useAuth();
   const [dbms, setDbms]           = useState([]);
@@ -295,7 +297,7 @@ export function ModuleDBM() {
                     {Object.entries(mpsFiltrees.reduce((acc, a) => { const f = a.famille_libelle || 'Autres'; (acc[f] = acc[f] || []).push(a); return acc; }, {})).map(([fam, arts]) => (
                       <optgroup key={fam} label={fam}>
                         {arts.map(a => (
-                          <option key={a.id} value={a.id}>{a.code} — {a.designation}</option>
+                          <option key={a.id} value={a.id}>{`${a.code} — ${a.designation}  ·  stock magasin : ${fmtKg(a.qte_disponible)} kg`}</option>
                         ))}
                       </optgroup>
                     ))}
@@ -323,7 +325,7 @@ export function ModuleDBM() {
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
                 <thead>
                   <tr style={{ background:'#fef3c7' }}>
-                    {['MP', 'Famille', 'Besoin total', 'Stock AT3', 'Qté à demander', ''].map(h => (
+                    {['MP', 'Famille', 'Besoin total', 'Stock AT3', 'Stock magasin', 'Qté à demander', ''].map(h => (
                       <th key={h} style={{ padding:'8px 10px', textAlign:'left', fontSize:11, fontWeight:600, color:'#92400e' }}>{h}</th>
                     ))}
                   </tr>
@@ -339,7 +341,7 @@ export function ModuleDBM() {
                         }} style={{fontSize:11,border:'1px solid #fcd34d',borderRadius:5,padding:'3px 6px',width:'100%'}}>
                           <option value="">-- Choisir MP --</option>
                           {(besoins.find(b=>String(b.groupe_id)===String(l.groupe_id))?.articles||[]).filter(a=>parseFloat(a.stock_magasin||0)>0).map(a=>(
-                            <option key={a.id} value={a.id}>{a.code}</option>
+                            <option key={a.id} value={a.id}>{`${a.code} — ${a.designation}  ·  stock magasin : ${fmtKg(a.stock_magasin)} kg`}</option>
                           ))}
                         </select>)}
                       </td>
@@ -347,6 +349,9 @@ export function ModuleDBM() {
                       <td style={{ padding:'8px 10px', fontWeight:600 }}>{l.qte_necessaire != null ? `${l.qte_necessaire} kg` : '—'}</td>
                       <td style={{ padding:'8px 10px', color: l.qte_dispo_at3 > 0 ? '#15803d' : '#9ca3af' }}>
                         {l.qte_dispo_at3} kg
+                      </td>
+                      <td style={{ padding:'8px 10px', fontWeight:700, color: l.qte_dispo_mag > 0 ? '#15803d' : '#9ca3af' }}>
+                        {l.article_id ? `${fmtKg(l.qte_dispo_mag)} kg` : '—'}
                       </td>
                 
                       <td style={{ padding:'8px 10px', width:110 }}>
