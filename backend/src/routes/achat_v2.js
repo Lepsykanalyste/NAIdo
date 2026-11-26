@@ -23,7 +23,7 @@ const { envoyerDepuisCompte } = require('../utils/mailcompte');
 const fs = require('fs');
 const path = require('path');
 const lienSigne = require('../utils/lienSigne');
-const { pdfBonAchat } = require('../utils/pdfBonAchat');
+const { pdfBonAchat, pdfReception } = require('../utils/pdfBonAchat');
 const { peutVoirPrix, retirerPrix } = require('../middleware/prix');
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -315,12 +315,14 @@ router.get('/receptions/:id/pdf', auth, async (req, res, next) => {
     const rec = (await chargerReceptions(cmd.id)).find(x => x.id === req.params.id);
     const numRec = `${cmd.numero_commande}-R${String(rec.rang).padStart(2, '0')}`;
     // deja recu AVANT cette reception, par ligne
-    const rowsHtml = (await Promise.all(rec.lignes.map(async lg => {
+    const lignesRec = [];
+    const rowsHtml = (await Promise.all(rec.lignes.map(async (lg, idx) => {
       const avant = (await db.query(`
         SELECT COALESCE(SUM(lr.quantite_recue),0) AS q FROM lignes_reception_achat lr
         JOIN receptions_achat r ON r.id=lr.reception_id
         WHERE lr.ligne_achat_id=$1 AND (r.created_at, r.id) < ($2::timestamptz, $3::uuid)`, [lg.ligne_achat_id, rec.created_at, rec.id])).rows[0].q;
       const restant = Math.max(0, num(lg.quantite_commandee) - num(avant) - num(lg.quantite_recue));
+      lignesRec[idx] = { code: lg.article_code || '', designation: lg.designation || '', commande: num(lg.quantite_commandee), avant: num(avant), recu: num(lg.quantite_recue), reste: restant };
       return `<tr><td class="b">${esc(lg.article_code || '')}</td><td>${esc(lg.designation)}</td>
         <td class="r">${fmt(lg.quantite_commandee, 3)}</td><td class="r">${fmt(avant, 3)}</td>
         <td class="r b">${fmt(lg.quantite_recue, 3)}</td><td class="r">${fmt(restant, 3)}</td></tr>`;
@@ -341,7 +343,10 @@ router.get('/receptions/:id/pdf', auth, async (req, res, next) => {
       <table><thead><tr><th>Code</th><th>Designation</th><th class="r">Commande</th><th class="r">Deja recu</th><th class="r">Recu ce jour</th><th class="r">Reste</th></tr></thead><tbody>${rowsHtml}</tbody></table>
       ${rec.notes ? `<div class="sec"><div class="sec-h">Notes</div><div class="sec-b">${esc(rec.notes)}</div></div>` : ''}
       <div class="sigs"><div class="sig"><b>SERVICE ACHAT</b><br><br>Signature :</div><div class="sig"><b>MAGASIN</b><br><br>Signature :</div></div>`;
-    sendHtml(res, page(`Reception ${numRec}`, body));
+    const pdf = await pdfReception({ numRec, cmd, rec, lignes: lignesRec });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${numRec}.pdf"`);
+    res.send(pdf);
   } catch (e) { console.error('[ACHAT-V2] pdf reception', e); res.status(500).send('<h1>Erreur PDF : ' + esc(e.message) + '</h1>'); }
 });
 

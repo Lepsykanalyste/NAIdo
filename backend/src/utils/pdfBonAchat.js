@@ -180,4 +180,93 @@ function pdfBonAchat(cmd, lignes, urlQr, sign = {}) {
   });
 }
 
-module.exports = { pdfBonAchat, calculer };
+// Bordereau de reception en PDF (remplace la version HTML)
+function pdfReception({ numRec, cmd, rec, lignes }) {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: 'A4', margin: 40 });
+    const morceaux = [];
+    doc.on('data', m => morceaux.push(m));
+    doc.on('end', () => resolve(Buffer.concat(morceaux)));
+    doc.on('error', reject);
+    const G = 40;
+    const L = 595 - 40;
+    const largeur = L - G;
+
+    // Bandeau
+    doc.rect(0, 0, 595, 90).fill(BLEU);
+    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(22).text('NAI', G, 28);
+    doc.font('Helvetica').fontSize(9).text('Service Achats - Magasin', G, 56);
+    doc.font('Helvetica-Bold').fontSize(16).text('BORDEREAU DE RÉCEPTION', 250, 26, { width: 305, align: 'right' });
+    doc.font('Helvetica').fontSize(11).text(numRec, 250, 48, { width: 305, align: 'right' });
+    doc.fontSize(9).text('Réception du ' + date(rec.date_reception), 250, 66, { width: 305, align: 'right' });
+    doc.fillColor('#000000');
+
+    // Commande / livraison
+    const y0 = 108;
+    const demi = (largeur - 16) / 2;
+    const bloc = (x, titre, lignesTxt) => {
+      doc.rect(x, y0, demi, 74).lineWidth(0.8).strokeColor(LIGNE).stroke();
+      doc.rect(x, y0, demi, 18).fill(BLEU_CLAIR);
+      doc.fillColor(BLEU).font('Helvetica-Bold').fontSize(9).text(titre, x + 10, y0 + 5);
+      let yy = y0 + 25;
+      doc.fillColor('#111827').font('Helvetica').fontSize(9);
+      lignesTxt.forEach(t => { doc.text(t, x + 10, yy, { width: demi - 20 }); yy += doc.heightOfString(t, { width: demi - 20 }) + 3; });
+    };
+    bloc(G, 'COMMANDE', [
+      'Bon de commande : ' + (cmd.numero_commande || '—'),
+      'Fournisseur : ' + (cmd.raison_sociale || '—'),
+    ]);
+    bloc(G + demi + 16, 'LIVRAISON', [
+      'Bon de livraison : ' + (rec.reference_bl || '—'),
+      'Reçu par : ' + (rec.cree_par_nom || '—'),
+    ]);
+
+    // Tableau des lignes
+    let y = 200;
+    const cols = [
+      { t: 'Code', x: G, w: 60, al: 'left' },
+      { t: 'Désignation', x: G + 60, w: 185, al: 'left' },
+      { t: 'Commandé', x: G + 245, w: 65, al: 'right' },
+      { t: 'Déjà reçu', x: G + 310, w: 65, al: 'right' },
+      { t: 'Reçu ce jour', x: G + 375, w: 75, al: 'right' },
+      { t: 'Reste', x: G + 450, w: largeur - 450, al: 'right' },
+    ];
+    doc.rect(G, y, largeur, 20).fill(BLEU);
+    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(8.5);
+    cols.forEach(c => doc.text(c.t, c.x + 6, y + 6, { width: c.w - 12, align: c.al }));
+    doc.fillColor('#000000');
+    y += 20;
+    lignes.forEach((l, i) => {
+      const vals = [l.code, l.designation, quantite(l.commande), quantite(l.avant), quantite(l.recu), quantite(l.reste)];
+      const hauteur = Math.max(18, doc.heightOfString(String(vals[1]), { width: cols[1].w - 12, fontSize: 8.5 }) + 6);
+      if (i % 2 === 1) doc.rect(G, y, largeur, hauteur).fill(ZEBRA);
+      doc.fillColor('#111827').font('Helvetica').fontSize(8.5);
+      cols.forEach((c, k) => doc.text(String(vals[k]), c.x + 6, y + 4, { width: c.w - 12, align: c.al }));
+      y += hauteur;
+      doc.moveTo(G, y).lineTo(L, y).lineWidth(0.4).strokeColor(LIGNE).stroke();
+    });
+
+    // Notes
+    y += 14;
+    if (rec.notes) {
+      doc.font('Helvetica-Bold').fontSize(9).fillColor(BLEU).text('Notes', G, y);
+      doc.font('Helvetica').fontSize(9).fillColor('#111827').text(rec.notes, G, y + 12, { width: largeur });
+    }
+
+    // Signatures
+    const ySig = 680;
+    const sigW = (largeur - 16) / 2;
+    [[G, 'SERVICE ACHAT'], [G + sigW + 16, 'MAGASIN']].forEach(([x, titre]) => {
+      doc.rect(x, ySig, sigW, 76).lineWidth(0.8).strokeColor(LIGNE).stroke();
+      doc.font('Helvetica-Bold').fontSize(9).fillColor(BLEU).text(titre, x + 10, ySig + 7);
+      doc.fillColor(GRIS).fontSize(7).text('Signature', x + 10, ySig + 63);
+    });
+
+    doc.font('Helvetica').fontSize(7.5).fillColor(GRIS)
+      .text(`NAI — ${numRec}`, G, 780, { width: largeur, align: 'center', lineBreak: false });
+    doc.end();
+  });
+}
+
+module.exports = { pdfBonAchat, calculer, pdfReception };
+
