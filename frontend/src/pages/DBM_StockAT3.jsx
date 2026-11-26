@@ -43,6 +43,35 @@ const Badge = ({ statut, map }) => {
 // ══════════════════════════════════════════════════════════════
 // Quantite en kg lisible (1 250,5) pour afficher le stock a cote de chaque matiere
 const fmtKg = (v) => (parseFloat(v) || 0).toLocaleString('fr-FR', { maximumFractionDigits: 1 });
+// Liste de choix des matieres : seules celles qui ont du stock au magasin, avec la quantite disponible en couleur
+// (vert = le stock couvre le besoin, orange = stock inferieur au besoin, bleu = pas de besoin connu)
+function ListeMatieres({ articles, selectedId, onSelect, besoin = null }) {
+  const dispo = articles.filter(a => a.stock > 0);
+  if (!dispo.length) return <div style={{ fontSize:11, color:'#dc2626' }}>Aucune matière en stock au magasin.</div>;
+  return (
+    <div style={{ maxHeight:200, overflowY:'auto', border:'2px solid #fcd34d', borderRadius:8, background:'#fff' }}>
+      {dispo.map(a => {
+        const choisi = String(selectedId) === String(a.id);
+        const c = besoin != null
+          ? (a.stock >= besoin ? { bg:'#dcfce7', tx:'#166534', bd:'#86efac' } : { bg:'#ffedd5', tx:'#9a3412', bd:'#fdba74' })
+          : { bg:'#dbeafe', tx:'#1e40af', bd:'#93c5fd' };
+        return (
+          <div key={a.id} onClick={() => onSelect(a)}
+            style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, padding:'7px 10px', cursor:'pointer',
+                     borderBottom:'1px solid #fef3c7', background: choisi ? '#fef9c3' : '#fff' }}>
+            <div style={{ fontSize:12, color:'#374151', minWidth:0 }}>
+              <span style={{ fontWeight:700, color:'#92400e' }}>{a.code}</span> — {a.designation}
+            </div>
+            <span style={{ flexShrink:0, background:c.bg, color:c.tx, border:`1px solid ${c.bd}`, borderRadius:12, padding:'2px 10px', fontSize:12, fontWeight:800 }}>
+              {fmtKg(a.stock)} kg
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function ModuleDBM() {
   const { user } = useAuth();
   const [dbms, setDbms]           = useState([]);
@@ -122,7 +151,12 @@ export function ModuleDBM() {
   };
 
   const majQte = (idx, val) => {
-    setLignes(prev => prev.map((l, i) => i === idx ? { ...l, qte_demandee: val } : l));
+    setLignes(prev => prev.map((l, i) => {
+      if (i !== idx) return l;
+      const max = parseFloat(l.qte_dispo_mag || 0);   // on ne peut pas demander plus que le stock magasin
+      const v = parseFloat(val);
+      return { ...l, qte_demandee: (max > 0 && v > max) ? String(max) : val };
+    }));
   };
 
   const supprimerLigne = (idx) => setLignes(prev => prev.filter((_, i) => i !== idx));
@@ -133,6 +167,7 @@ export function ModuleDBM() {
     const q = parseFloat(ajoutQte);
     if (!a) return toast.error('Choisissez un article');
     if (!(q > 0)) return toast.error('Indiquez une quantité supérieure à 0');
+    if (q > parseFloat(a.qte_disponible || 0)) return toast.error(`Quantité supérieure au stock disponible (${fmtKg(a.qte_disponible)} kg)`);
     if (lignes.some(l => String(l.article_id) === String(a.id))) return toast.error('Cette matière est déjà dans la liste');
     setLignes(prev => [...prev, { article_id: a.id, groupe_id: null, famille_id: null, code: a.code, designation: a.designation,
       famille_libelle: a.famille_libelle, qte_necessaire: null, qte_dispo_at3: 0, qte_dispo_mag: parseFloat(a.qte_disponible || 0),
@@ -152,6 +187,8 @@ export function ModuleDBM() {
     if (!lignes.length) return toast.error('Aucune MP à demander');
     if (lignes.some(l => !l.article_id)) return toast.error('Choisissez la matière (MP) de chaque ligne');
     if (lignes.some(l => !(parseFloat(l.qte_demandee) > 0))) return toast.error('Indiquez une quantité supérieure à 0 pour chaque ligne');
+    const depasse = lignes.find(l => parseFloat(l.qte_demandee) > parseFloat(l.qte_dispo_mag || 0) + 1e-9);
+    if (depasse) return toast.error(`Quantité supérieure au stock magasin pour ${depasse.code} (stock : ${fmtKg(depasse.qte_dispo_mag)} kg)`);
     setLoading(true);
     try {
       const { data } = await axios.post(`${API}/dbm`, {
@@ -288,24 +325,20 @@ export function ModuleDBM() {
                   </div>
                 )}
               </div>
+              <div style={{ marginBottom:10 }}>
+                <ListeMatieres articles={mpsFiltrees.map(a => ({ id:a.id, code:a.code, designation:a.designation, stock: parseFloat(a.qte_disponible || 0) }))}
+                  selectedId={ajoutArt} onSelect={a => setAjoutArt(String(a.id))} />
+              </div>
               <div style={{ display:'grid', gridTemplateColumns:'3fr 1fr auto', gap:8, alignItems:'flex-end' }}>
                 <div>
-                  <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Article</label>
-                  <select value={ajoutArt} onChange={e => setAjoutArt(e.target.value)}
-                    style={{ width:'100%', border:'2px solid #fcd34d', borderRadius:8, padding:'8px', fontSize:13 }}>
-                    <option value="">-- Choisir l'article --</option>
-                    {Object.entries(mpsFiltrees.reduce((acc, a) => { const f = a.famille_libelle || 'Autres'; (acc[f] = acc[f] || []).push(a); return acc; }, {})).map(([fam, arts]) => (
-                      <optgroup key={fam} label={fam}>
-                        {arts.map(a => (
-                          <option key={a.id} value={a.id}>{`${a.code} — ${a.designation}  ·  stock magasin : ${fmtKg(a.qte_disponible)} kg`}</option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
+                  <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Matière choisie</label>
+                  <div style={{ border:'2px solid #fcd34d', borderRadius:8, padding:'8px', fontSize:13, background:'#fff', minHeight:20 }}>
+                    {(() => { const a = mps.find(x => String(x.id) === String(ajoutArt)); return a ? `${a.code} — ${a.designation}` : <span style={{ color:'#9ca3af' }}>Cliquez sur une matière dans la liste ci-dessus</span>; })()}
+                  </div>
                 </div>
                 <div>
                   <label style={{ fontSize:11, fontWeight:600, display:'block', marginBottom:3 }}>Quantité (kg)</label>
-                  <input type="number" min="0" step="0.1" value={ajoutQte} onChange={e => setAjoutQte(e.target.value)} placeholder="0"
+                  <input type="number" min="0" step="0.1" value={ajoutQte} onChange={e => { const a = mps.find(x => String(x.id) === String(ajoutArt)); const st = a ? parseFloat(a.qte_disponible || 0) : 0; const v = parseFloat(e.target.value); setAjoutQte(a && v > st ? String(st) : e.target.value); }} placeholder="0"
                     style={{ width:'100%', border:'2px solid #fcd34d', borderRadius:8, padding:'8px', fontSize:13, boxSizing:'border-box' }} />
                 </div>
                 <button onClick={ajouterMatiere}
@@ -325,7 +358,7 @@ export function ModuleDBM() {
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
                 <thead>
                   <tr style={{ background:'#fef3c7' }}>
-                    {['MP', 'Famille', 'Besoin total', 'Stock AT3', 'Stock magasin', 'Qté à demander', ''].map(h => (
+                    {['MP', 'Famille', 'Besoin total', 'Stock AT3', 'Qté à demander', ''].map(h => (
                       <th key={h} style={{ padding:'8px 10px', textAlign:'left', fontSize:11, fontWeight:600, color:'#92400e' }}>{h}</th>
                     ))}
                   </tr>
@@ -335,23 +368,23 @@ export function ModuleDBM() {
                     <tr key={i} style={{ borderBottom:'1px solid #fef3c7', background: i%2===0?'#fff':'#fffbeb' }}>
                       <td style={{ padding:'8px 10px' }}>
                         <div style={{ fontWeight:700, color:'#92400e', marginBottom:2 }}>{l.famille_libelle||l.code}</div>
-                        {l.manuel ? (<div style={{ fontSize:12, color:'#374151' }}>{l.code} — {l.designation}</div>) : (<select value={l.article_id||''} onChange={e => {
-                          const art = (besoins.find(b=>String(b.groupe_id)===String(l.groupe_id))?.articles||[]).find(a=>a.id===e.target.value);
-                          setLignes(prev=>prev.map((x,j)=>j!==i?x:{...x,article_id:e.target.value,code:art?.code||x.code,designation:art?.designation||x.designation,qte_dispo_mag:parseFloat(art?.stock_magasin||0)}));
-                        }} style={{fontSize:11,border:'1px solid #fcd34d',borderRadius:5,padding:'3px 6px',width:'100%'}}>
-                          <option value="">-- Choisir MP --</option>
-                          {(besoins.find(b=>String(b.groupe_id)===String(l.groupe_id))?.articles||[]).filter(a=>parseFloat(a.stock_magasin||0)>0).map(a=>(
-                            <option key={a.id} value={a.id}>{`${a.code} — ${a.designation}  ·  stock magasin : ${fmtKg(a.stock_magasin)} kg`}</option>
-                          ))}
-                        </select>)}
+                        {l.manuel ? (<div style={{ fontSize:12, color:'#374151' }}>{l.code} — {l.designation}</div>) : (l.article_id ? (
+                          <div style={{ fontSize:12, color:'#374151' }}>{l.code} — {l.designation}
+                            <button onClick={() => setLignes(prev => prev.map((x, j) => j !== i ? x : { ...x, article_id:'', qte_dispo_mag:0 }))}
+                              style={{ marginLeft:8, background:'none', border:'none', color:'#0369a1', cursor:'pointer', fontSize:11, textDecoration:'underline' }}>changer</button>
+                          </div>
+                        ) : (
+                          <ListeMatieres besoin={l.qte_necessaire}
+                            articles={(besoins.find(b => String(b.groupe_id) === String(l.groupe_id))?.articles || []).map(a => ({ id:a.id, code:a.code, designation:a.designation, stock: parseFloat(a.stock_magasin || 0) }))}
+                            selectedId={l.article_id}
+                            onSelect={a => setLignes(prev => prev.map((x, j) => j !== i ? x : { ...x, article_id:a.id, code:a.code, designation:a.designation, qte_dispo_mag:a.stock,
+                              qte_demandee: parseFloat(x.qte_demandee) > a.stock ? String(a.stock) : x.qte_demandee }))} />
+                        ))}
                       </td>
                       <td style={{ padding:'8px 10px', fontSize:11, color:'#6b7280' }}>{l.famille_libelle}</td>
                       <td style={{ padding:'8px 10px', fontWeight:600 }}>{l.qte_necessaire != null ? `${l.qte_necessaire} kg` : '—'}</td>
                       <td style={{ padding:'8px 10px', color: l.qte_dispo_at3 > 0 ? '#15803d' : '#9ca3af' }}>
                         {l.qte_dispo_at3} kg
-                      </td>
-                      <td style={{ padding:'8px 10px', fontWeight:700, color: l.qte_dispo_mag > 0 ? '#15803d' : '#9ca3af' }}>
-                        {l.article_id ? `${fmtKg(l.qte_dispo_mag)} kg` : '—'}
                       </td>
                 
                       <td style={{ padding:'8px 10px', width:110 }}>
