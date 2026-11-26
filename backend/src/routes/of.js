@@ -142,7 +142,7 @@ router.get('/:id/pdf', auth, async (req, res) => {
       const r2 = await db.query(`
         SELECT bl.designation, bl.quantite_pieces, bl.quantite_kg,
                a.code AS article_code, a.designation AS article_designation,
-               a.longueur_mm, a.largeur_mm, a.poids_theorique_kg
+               a.longueur_mm, a.largeur_mm, a.epaisseur_mm, a.poids_theorique_kg
         FROM demandes_fabrication df
         JOIN bc_lignes bl ON bl.bc_id = df.bc_id
         LEFT JOIN articles a ON a.id = bl.article_id
@@ -170,7 +170,8 @@ router.get('/:id/pdf', auth, async (req, res) => {
       ORDER BY ca.ordre`, [req.params.id]);
 
     const n = v => parseFloat(v) || 0;
-    const dims = (L, l) => (L ? nombre(L, 0) + ' x ' + nombre(l, 0) + ' mm' : '—');
+    // Dimensions + epaisseur en centiemes de mm (0,25 mm = 25/100), comme dans la designation des articles
+    const dims = (L, l, e) => (L ? nombre(L, 0) + ' x ' + nombre(l, 0) + ' mm' + (e ? ' · ép. ' + (Math.round(parseFloat(e) * 1000) / 10) + '/100' : '') : '—');
 
     // Articles a fabriquer : toutes les lignes du bon de commande ; a defaut, l'article de l'OF
     let totalPcs = 0, totalKg = 0, lignesArt;
@@ -179,13 +180,13 @@ router.get('/:id/pdf', auth, async (req, res) => {
         const p = n(l.quantite_pieces);
         const kg = n(l.quantite_kg) || p * n(l.poids_theorique_kg);
         totalPcs += p; totalKg += kg;
-        return [l.article_code || '', l.article_designation || l.designation || '', dims(l.longueur_mm, l.largeur_mm),
+        return [l.article_code || '', l.article_designation || l.designation || '', dims(l.longueur_mm, l.largeur_mm, l.epaisseur_mm),
                 l.poids_theorique_kg ? nombre(l.poids_theorique_kg, 4) + ' kg' : '—', p ? nombre(p, 0) : '—', kg ? nombre(kg, 1) + ' kg' : '—'];
       });
     } else {
       totalPcs = n(d.quantite_pieces);
       totalKg = n(d.at3_poids_cible_kg) || n(d.quantite_cible);
-      lignesArt = [[d.article_code || '', d.article_nom || '', dims(d.longueur_mm, d.largeur_mm),
+      lignesArt = [[d.article_code || '', d.article_nom || '', dims(d.longueur_mm, d.largeur_mm, d.epaisseur_mm),
                     d.poids_theorique_kg ? nombre(d.poids_theorique_kg, 4) + ' kg' : '—',
                     totalPcs ? nombre(totalPcs, 0) : '—', totalKg ? nombre(totalKg, 1) + ' kg' : '—']];
     }
@@ -255,8 +256,8 @@ router.get('/:id/pdf', auth, async (req, res) => {
               'Machine : ' + (((d.machine_code || '') + ' ' + (d.machine_nom || '')).trim() || '—'),
               'Temps prévu : ' + (d.temps_prevu_min ? d.temps_prevu_min + ' min' : '—'),
               'Début prévu : ' + (d.date_debut_prevue ? date(d.date_debut_prevue) : '—')],
-      entete: [{ t: 'Code', w: 90, al: 'left' }, { t: 'Désignation', w: 280, al: 'left' }, { t: 'Dimensions', w: 120, al: 'left' },
-               { t: 'Poids / pièce', w: 90, al: 'right' }, { t: 'Qté (pcs)', w: 90, al: 'right' }, { t: 'Qté (kg)', w: 92, al: 'right' }],
+      entete: [{ t: 'Code', w: 90, al: 'left' }, { t: 'Désignation', w: 250, al: 'left' }, { t: 'Dimensions et épaisseur', w: 160, al: 'left' },
+               { t: 'Poids / pièce', w: 80, al: 'right' }, { t: 'Qté (pcs)', w: 90, al: 'right' }, { t: 'Qté (kg)', w: 92, al: 'right' }],
       lignes: lignesArt,
       tableau2: {
         titre: 'COMPOSITION DES MATIÈRES PREMIÈRES',
