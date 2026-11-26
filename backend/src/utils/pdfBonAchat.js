@@ -75,11 +75,13 @@ function pdfBonAchat(cmd, lignes, urlQr, sign = {}) {
       const y0 = 112;
       const demi = (largeur - 16) / 2;
       const bloc = (x, titre, lignesTxt) => {
-        doc.rect(x, y0, demi, 74).lineWidth(0.8).strokeColor(LIGNE).stroke();
+        doc.rect(x, y0, demi, 92).lineWidth(0.8).strokeColor(LIGNE).stroke();
         doc.rect(x, y0, demi, 18).fill(BLEU_CLAIR);
         doc.fillColor(BLEU).font('Helvetica-Bold').fontSize(9).text(titre, x + 10, y0 + 5);
         doc.fillColor('#111827').font('Helvetica').fontSize(corps);
-        lignesTxt.forEach((t, i) => doc.text(t, x + 10, y0 + 25 + i * 15, { width: demi - 20 }));
+        // Lignes posees l'une sous l'autre selon leur hauteur reelle (pas de chevauchement si une adresse passe sur 2 lignes)
+        let yy = y0 + 25;
+        lignesTxt.forEach(t => { doc.text(t, x + 10, yy, { width: demi - 20 }); yy += doc.heightOfString(t, { width: demi - 20 }) + 3; });
       };
       bloc(G, 'FOURNISSEUR', [
         cmd.raison_sociale || '—',
@@ -93,7 +95,7 @@ function pdfBonAchat(cmd, lignes, urlQr, sign = {}) {
       ]);
 
       // ----- Tableau des lignes -----
-      let y = 200;
+      let y = 216;
       const cols = [
         { t: 'Code', x: G, w: 62, al: 'left' },
         { t: 'Désignation', x: G + 62, w: 175, al: 'left' },
