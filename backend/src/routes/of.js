@@ -117,7 +117,7 @@ router.get('/:id/pdf', auth, async (req, res) => {
     const { rows } = await db.query(`
       SELECT o.*, c.raison_sociale AS client_nom, c.telephone,
              a.designation AS article_nom, a.code AS article_code,
-             a.longueur_mm, a.largeur_mm, a.epaisseur_mm, a.poids_theorique_kg,
+             a.longueur_mm, a.largeur_mm, a.epaisseur_mm, a.poids_theorique_kg, a.composition AS article_composition,
              m.code AS machine_code, m.nom AS machine_nom,
              u.nom||' '||u.prenom AS chef_nom,
              at.libelle AS atelier_libelle
@@ -162,7 +162,7 @@ router.get('/:id/pdf', auth, async (req, res) => {
       WHERE o.id=$1
       ORDER BY sf.libelle, a.code`, [req.params.id]);
     const { rows: compoGroupes } = await db.query(`
-      SELECT ca.pct, sf.libelle AS groupe_libelle, f.libelle AS famille_libelle
+      SELECT ca.pct, sf.code AS groupe_code, sf.libelle AS groupe_libelle, f.libelle AS famille_libelle
       FROM composition_article ca
       JOIN sous_familles_articles sf ON sf.id = ca.groupe_id
       JOIN familles_articles f ON f.id = ca.famille_id
@@ -192,15 +192,19 @@ router.get('/:id/pdf', auth, async (req, res) => {
     const poidsBase = n(d.at3_poids_cible_kg) || n(d.quantite_cible) || totalKg;
 
     // Composition : matieres choisies par le chef AT3, sinon groupes de l'article, sinon composition saisie sur l'OF
+    const lireJson = v => { try { const x = typeof v === 'string' ? JSON.parse(v) : v; return Array.isArray(x) ? x : []; } catch (e) { return []; } };
+    const depuisJson = arr => arr.map(c => ({ groupe: c.groupe_libelle || c.famille_libelle || '-', code: c.code || c.mp_code || '—', nom: c.designation || c.mp_nom || c.nom || '—', pct: n(c.pct), kg: 0 }));
+    // Composition, par ordre de priorite : 1) matieres choisies par le chef AT3 sur l'OF, 2) groupes de matiere de la fiche article,
+    // 3) matieres saisies sur l'article, 4) composition saisie sur l'OF
     let source;
     if (compoMp.length) {
       source = compoMp.map(r => ({ groupe: r.groupe_libelle || '-', code: r.mp_code || '', nom: r.mp_nom || '', pct: n(r.pct), kg: n(r.quantite_kg) }));
     } else if (compoGroupes.length) {
-      source = compoGroupes.map(r => ({ groupe: r.groupe_libelle || r.famille_libelle || '-', code: r.groupe_libelle || '', nom: r.famille_libelle || r.groupe_libelle || '', pct: n(r.pct), kg: 0 }));
+      source = compoGroupes.map(r => ({ groupe: r.famille_libelle || '-', code: r.groupe_code || '', nom: r.groupe_libelle || '', pct: n(r.pct), kg: 0 }));
+    } else if (lireJson(d.article_composition).length) {
+      source = depuisJson(lireJson(d.article_composition));
     } else {
-      let brute = [];
-      try { brute = typeof d.composition === 'string' ? JSON.parse(d.composition) : (d.composition || []); } catch (e) { brute = []; }
-      source = (Array.isArray(brute) ? brute : []).map(c => ({ groupe: '-', code: c.code || '—', nom: c.designation || '—', pct: n(c.pct), kg: 0 }));
+      source = depuisJson(lireJson(d.composition));
     }
     let totalPct = 0, totalKgComp = 0;
     const lignesComp = source.map(s => {
@@ -256,10 +260,10 @@ router.get('/:id/pdf', auth, async (req, res) => {
       lignes: lignesArt,
       tableau2: {
         titre: 'COMPOSITION DES MATIÈRES PREMIÈRES',
-        entete: [{ t: 'Groupe', w: 130, al: 'left' }, { t: 'Code MP', w: 110, al: 'left' }, { t: 'Désignation', w: 302, al: 'left' },
+        entete: [{ t: 'Famille', w: 130, al: 'left' }, { t: 'Code', w: 110, al: 'left' }, { t: 'Groupe de matière / matière', w: 302, al: 'left' },
                  { t: '%', w: 100, al: 'right' }, { t: 'Qté (kg)', w: 120, al: 'right' }],
         lignes: lignesComp,
-        vide: "Composition non renseignée : elle est définie par le chef d'atelier AT3 avant le lancement.",
+        vide: "Composition non renseignée pour cet article : à définir dans sa fiche (groupes de matière et pourcentages). Le chef d'atelier AT3 choisit ensuite les matières avant le lancement.",
       },
       totaux,
       notes,
