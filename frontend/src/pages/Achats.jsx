@@ -159,7 +159,7 @@ function useListes() {
 // NOUVELLE COMMANDE
 // ══════════════════════════════════════════════════════════════
 function NouvelleCommande({ fournisseurs, articles, onClose, onCree }) {
-  const [form, setForm] = useState({ fournisseur_id: '', date_commande: aujourdhui(), date_livraison_prevue: '', reference_fournisseur: '', notes: '', taux_tva: '18' });
+  const [form, setForm] = useState({ fournisseur_id: '', date_commande: aujourdhui(), date_livraison_prevue: '', reference_fournisseur: '', notes: '', taux_tva: '18', type_achat: 'local', commentaire: '' });
   const [lignes, setLignes] = useState([{ article_id: '', designation: '', quantite_commandee: '1', prix_unitaire_ht: '' }]);
   const [motifType, setMotifType] = useState('of');
   const [ofId, setOfId] = useState('');
@@ -219,6 +219,8 @@ function NouvelleCommande({ fournisseurs, articles, onClose, onCree }) {
         </div>
         <Champ label="Date commande"><input type="date" value={form.date_commande} onChange={e => setForm({ ...form, date_commande: e.target.value })} style={inputStyle} /></Champ>
         <Champ label="Livraison prévue"><input type="date" value={form.date_livraison_prevue} onChange={e => setForm({ ...form, date_livraison_prevue: e.target.value })} style={inputStyle} /></Champ>
+        <Champ label="Type"><select value={form.type_achat} onChange={e => setForm({ ...form, type_achat: e.target.value })} style={inputStyle}><option value="local">Local</option><option value="export">Export (conteneur)</option></select></Champ>
+        <Champ label="Commentaire"><input value={form.commentaire} onChange={e => setForm({ ...form, commentaire: e.target.value })} style={inputStyle} /></Champ>
         <Champ label="TVA %"><input type="number" value={form.taux_tva} onChange={e => setForm({ ...form, taux_tva: e.target.value })} style={inputStyle} /></Champ>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 10, marginBottom: 14 }}>
@@ -257,6 +259,115 @@ function NouvelleCommande({ fournisseurs, articles, onClose, onCree }) {
 // ══════════════════════════════════════════════════════════════
 // DETAIL, RECEPTION, HISTORIQUE
 // ══════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════
+// EXPORT : evolution de la commande et vue du transitaire
+// ══════════════════════════════════════════════════════════════
+const ETAPES_EXPORT = [
+  'Commande reçue par le fournisseur', 'Marchandise en préparation', 'Conteneur chargé',
+  'Conteneur plombé et expédié', 'Navire embarqué', 'Arrivée au port',
+  'Déclaration en douane déposée', 'Dédouanée', 'Sortie du port',
+  "En route vers l'usine", "Arrivée à l'usine",
+];
+
+function EvolutionExport({ commandeId, role, lotActuel, onChange }) {
+  const [liste, setListe] = useState(null);
+  const [etape, setEtape] = useState('');
+  const [comm, setComm] = useState('');
+  const [lot, setLot] = useState(lotActuel || '');
+  const transitaire = role === 'transitaire';
+  const peutAjouter = transitaire || ROLES_ACHAT.includes(role);
+  const charger = () => axios.get(`${API}/achat/commandes/${commandeId}/evolution`)
+    .then(r => setListe(r.data)).catch(e => { toast.error(msg(e)); setListe([]); });
+  useEffect(() => { charger(); }, [commandeId]);
+  const ajouter = async () => {
+    if (!etape) return toast.error('Choisissez une étape');
+    try {
+      await axios.post(`${API}/achat/commandes/${commandeId}/evolution`, { etape, commentaire: comm });
+      toast.success('Étape ajoutée');
+      setEtape(''); setComm('');
+      await charger();
+      if (onChange) onChange();
+    } catch (e) { toast.error(msg(e)); }
+  };
+  const enregistrerLot = async () => {
+    try {
+      await axios.put(`${API}/achat/commandes/${commandeId}/lot-conteneur`, { numero_lot_conteneur: lot });
+      toast.success('Lot du conteneur enregistré');
+      if (onChange) onChange();
+    } catch (e) { toast.error(msg(e)); }
+  };
+  return (
+    <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 12, marginBottom: 12 }}>
+      <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>🚢 Évolution de la commande (export)</div>
+      {liste === null && <div style={{ color: '#9ca3af', fontSize: 12 }}>Chargement...</div>}
+      {liste && liste.length === 0 && <div style={{ color: '#9ca3af', fontSize: 12, marginBottom: 6 }}>Aucune étape pour l'instant</div>}
+      {liste && liste.map(e => (
+        <div key={e.id} style={{ fontSize: 12, marginBottom: 4 }}>
+          <b>{e.etape}</b> · {jour(e.created_at)}{e.par ? ' · ' + e.par : ''}{e.commentaire ? ' — ' + e.commentaire : ''}
+        </div>
+      ))}
+      {peutAjouter && (
+        <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+          <select value={etape} onChange={e => setEtape(e.target.value)} style={{ ...inputStyle, width: 'auto', minWidth: 260 }}>
+            <option value="">— Étape —</option>
+            {ETAPES_EXPORT.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <input value={comm} onChange={e => setComm(e.target.value)} placeholder="Commentaire (facultatif)" style={{ ...inputStyle, flex: 1, minWidth: 200 }} />
+          <Btn plein color="#7e22ce" onClick={ajouter}>+ Ajouter l'étape</Btn>
+        </div>
+      )}
+      {transitaire && (
+        <div style={{ display: 'flex', gap: 8, marginTop: 10, alignItems: 'flex-end' }}>
+          <Champ label="N° de lot du conteneur"><input value={lot} onChange={e => setLot(e.target.value)} style={inputStyle} /></Champ>
+          <Btn plein color="#0369a1" onClick={enregistrerLot} disabled={!lot.trim()}>Enregistrer le lot</Btn>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Vue du transitaire : seulement les commandes export, sans prix
+function TransitPage() {
+  const [data, setData] = useState(null);
+  const [choisie, setChoisie] = useState(null);
+  const charger = () => axios.get(`${API}/achat/transit/commandes`)
+    .then(r => setData(r.data)).catch(e => { toast.error(msg(e)); setData({ commandes: [] }); });
+  useEffect(() => { charger(); }, []);
+  const cmd = data?.commandes?.find(c => c.id === choisie);
+  return (
+    <div style={{ padding: 20, maxWidth: 1100, margin: '0 auto' }}>
+      <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>🚢 Commandes export</h2>
+      {data === null && <div style={{ color: '#9ca3af' }}>Chargement...</div>}
+      {data && (
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 16 }}>
+          <thead><tr>{['N° commande', 'Fournisseur', 'Date', 'Statut', 'Dernière étape', 'Lot conteneur'].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
+          <tbody>
+            {data.commandes.map(c => (
+              <tr key={c.id} onClick={() => setChoisie(c.id)} style={{ cursor: 'pointer', background: choisie === c.id ? '#f5f3ff' : undefined }}>
+                <td style={{ ...tdStyle, fontFamily: 'monospace', fontWeight: 700 }}>{c.numero_commande}</td>
+                <td style={tdStyle}>{c.raison_sociale || '—'}</td>
+                <td style={tdStyle}>{jour(c.date_commande)}</td>
+                <td style={tdStyle}>{c.statut}</td>
+                <td style={tdStyle}>{c.derniere_etape || '—'}</td>
+                <td style={tdStyle}>{c.numero_lot_conteneur || '—'}</td>
+              </tr>
+            ))}
+            {data.commandes.length === 0 && <tr><td colSpan={6} style={{ ...tdStyle, textAlign: 'center', color: '#9ca3af' }}>Aucune commande export</td></tr>}
+          </tbody>
+        </table>
+      )}
+      {cmd && <EvolutionExport key={cmd.id} commandeId={cmd.id} role="transitaire" lotActuel={cmd.numero_lot_conteneur} onChange={charger} />}
+    </div>
+  );
+}
+
+// Le transitaire n'a que la vue export ; les autres roles gardent la page Achats
+export default function AchatsV2() {
+  const { user } = useAuth();
+  if (user?.role === 'transitaire') return <TransitPage />;
+  return <AchatsStandard />;
+}
+
 function DetailCommande({ id, role, onClose, onChange, onReceptionner, onHistorique }) {
   const [c, setC] = useState(null);
   const charger = () => axios.get(`${API}/achat/commandes/${id}`).then(r => setC(r.data)).catch(e => toast.error(msg(e)));
@@ -303,6 +414,7 @@ function DetailCommande({ id, role, onClose, onChange, onReceptionner, onHistori
         <div style={{ fontSize: 15, color: '#6d28d9', fontWeight: 800 }}>TTC : {fcfa(c.montant_ttc)}</div>
       </div>
       {c.notes && <div style={{ background: '#f9fafb', borderRadius: 8, padding: '8px 10px', fontSize: 12, marginBottom: 12 }}><b>Notes :</b> {c.notes}</div>}
+      {c.type_achat === 'export' && <EvolutionExport commandeId={id} role={role} lotActuel={c.numero_lot_conteneur} onChange={charger} />}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <Btn plein onClick={() => ouvrirPdfSecurise(`${API}/achat/commandes/${id}/pdf`)}>📄 PDF</Btn>
         {c.statut === 'envoye' && direction && <Btn plein color="#15803d" onClick={() => statut('confirme')}>✓ Confirmer (direction)</Btn>}
@@ -319,6 +431,14 @@ function Reception({ commande, onClose, onFait }) {
   const [date, setDate] = useState(aujourdhui());
   const [bl, setBl] = useState('');
   const [notes, setNotes] = useState('');
+  const [rMode, setRMode] = useState('');
+  const [rConteneur, setRConteneur] = useState('');
+  const [rPlomb, setRPlomb] = useState('');
+  const [rImmat, setRImmat] = useState('');
+  const [rChNom, setRChNom] = useState('');
+  const [rChPrenom, setRChPrenom] = useState('');
+  const [rLotMat, setRLotMat] = useState('');
+  const [rCommentaire, setRCommentaire] = useState('');
   const [saisie, setSaisie] = useState({});
   const [envoi, setEnvoi] = useState(false);
   useEffect(() => {
@@ -334,9 +454,13 @@ function Reception({ commande, onClose, onFait }) {
   const valider = async () => {
     const lignes = (c.lignes || []).filter(l => nb(saisie[l.id]?.q) > 0).map(l => ({ ligne_id: l.id, quantite_recue: nb(saisie[l.id].q), prix_unitaire_ht: nb(saisie[l.id].prix) }));
     if (!lignes.length) return toast.error('Saisissez au moins une quantité reçue');
+    if (!rMode) return toast.error('Indiquez si la livraison est par conteneur ou par véhicule');
+    if (!rChNom.trim() || !rChPrenom.trim() || !rLotMat.trim()) return toast.error('Nom, prénom du chauffeur et lot de la matière obligatoires');
+    if (rMode === 'conteneur' && (!rConteneur.trim() || !rPlomb.trim())) return toast.error('Numéro de conteneur et de plomb obligatoires');
+    if (rMode === 'vehicule' && !rImmat.trim()) return toast.error('Immatriculation du véhicule obligatoire');
     setEnvoi(true);
     try {
-      const { data } = await axios.put(`${API}/achat/commandes/${c.id}/receptionner`, { date_reception: date, reference_bl: bl, notes, lignes });
+      const { data } = await axios.put(`${API}/achat/commandes/${c.id}/receptionner`, { date_reception: date, reference_bl: bl, notes, lignes, mode_transport: rMode, numero_conteneur: rConteneur, numero_plomb: rPlomb, immatriculation: rImmat, chauffeur_nom: rChNom, chauffeur_prenom: rChPrenom, numero_lot_matiere: rLotMat, commentaire_reception: rCommentaire });
       toast.success(data.message || 'Réception enregistrée');
       if (data.plafonnees?.length) toast(`Quantité limitée au reste à recevoir : ${data.plafonnees.join(', ')}`, { icon: '⚠️' });
       if (data.stock_non_mis_a_jour?.length) toast.error(`Stock non mis à jour (aucun emplacement) : ${data.stock_non_mis_a_jour.join(', ')}`);
@@ -353,6 +477,24 @@ function Reception({ commande, onClose, onFait }) {
         <Champ label="N° bon de livraison"><input value={bl} onChange={e => setBl(e.target.value)} style={inputStyle} /></Champ>
         <Champ label="Notes"><input value={notes} onChange={e => setNotes(e.target.value)} style={inputStyle} /></Champ>
       </div>
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 12, marginBottom: 12 }}>
+        <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Transport</div>
+        <div style={{ display: 'flex', gap: 16, marginBottom: 10 }}>
+          <label style={{ fontSize: 13 }}><input type="radio" name="rmode" checked={rMode === 'conteneur'} onChange={() => setRMode('conteneur')} /> Conteneur (export)</label>
+          <label style={{ fontSize: 13 }}><input type="radio" name="rmode" checked={rMode === 'vehicule'} onChange={() => setRMode('vehicule')} /> Véhicule (local)</label>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
+          {rMode === 'conteneur' && <Champ label="N° de conteneur *"><input value={rConteneur} onChange={e => setRConteneur(e.target.value)} style={inputStyle} /></Champ>}
+          {rMode === 'conteneur' && <Champ label="N° de plomb *"><input value={rPlomb} onChange={e => setRPlomb(e.target.value)} style={inputStyle} /></Champ>}
+          {rMode === 'vehicule' && <Champ label="Immatriculation du véhicule *"><input value={rImmat} onChange={e => setRImmat(e.target.value)} style={inputStyle} /></Champ>}
+          <Champ label="Nom du chauffeur *"><input value={rChNom} onChange={e => setRChNom(e.target.value)} style={inputStyle} /></Champ>
+          <Champ label="Prénom du chauffeur *"><input value={rChPrenom} onChange={e => setRChPrenom(e.target.value)} style={inputStyle} /></Champ>
+          <Champ label="N° de lot de la matière *"><input value={rLotMat} onChange={e => setRLotMat(e.target.value)} style={inputStyle} /></Champ>
+          {c.type_achat === 'export' && <Champ label="N° de lot du conteneur (transitaire)"><input value={c.numero_lot_conteneur || ''} disabled style={{ ...inputStyle, background: '#f3f4f6' }} /></Champ>}
+          <Champ label="Commentaire (local / export)"><input value={rCommentaire} onChange={e => setRCommentaire(e.target.value)} placeholder={c.type_achat === 'export' ? 'Export' : 'Local'} style={inputStyle} /></Champ>
+        </div>
+      </div>
+
       <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 12 }}>
         <thead><tr>{['Article', 'Commandé', 'Déjà reçu', 'Reste', 'À recevoir', 'Prix réel HT'].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
         <tbody>
@@ -666,7 +808,7 @@ function GestionLibelles({ onClose }) {
   );
 }
 
-export default function AchatsV2() {
+function AchatsStandard() {
   const { user } = useAuth();
   const role = user?.role;
   const direction = ROLES_DIRECTION.includes(role), achat = ROLES_ACHAT.includes(role);
