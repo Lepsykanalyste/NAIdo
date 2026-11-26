@@ -3556,7 +3556,7 @@ function ListeMultiple({ label, valeur, onChange, options, aide }) {
 
 const COULEURS_ARTICLE = ['Naturel', 'Blanc', 'Noir', 'Bleu', 'Rouge', 'Vert', 'Jaune', 'Gris', 'Transparent', 'Imprimé multicolore'];
 
-function Articles() {
+function Articles({ typeFixe = null } = {}) {
   const [articles, setArticles] = useState([]);
   const [familles, setFamilles] = useState([]);
   const [unites, setUnites] = useState([]);
@@ -3574,7 +3574,7 @@ function Articles() {
   const [groupesMp, setGroupesMp] = useState([]);
   const [search, setSearch] = useState('');
   // Articles (Produits) : par defaut seuls les produits finis ; 'tous' affiche aussi les articles divers et les matieres premieres
-  const [filtreType, setFiltreType] = useState('produit_fini');
+  const [filtreType, setFiltreType] = useState(typeFixe || 'produit_fini');
   const [showForm, setShowForm] = useState(false);
   const [detail, setDetail] = useState(null);
   const [modeEditArt, setModeEditArt] = useState(false);
@@ -3583,7 +3583,7 @@ function Articles() {
   const [newComp, setNewComp] = useState({ mp_id:'', quantite:'', unite_id:'', pct:'' });
   const [form, setForm] = useState({
     code:'', designation:'', famille_id:'', unite_mesure_id:'',
-    type_article:'produit_fini', tracabilite_type:'lot', format_lot:'LOT-YYYYMMDD-001', matieres_principales:[],
+    type_article: typeFixe || 'produit_fini', tracabilite_type:'lot', format_lot:'LOT-YYYYMMDD-001', matieres_principales:[],
     couleur:'', longueur_mm:'', largeur_mm:'', hauteur_mm:'', epaisseur_mm:'',
     poids_theorique_kg:'', poids_reel_kg:'', poids_mandrin_kg:'',
     cadence_theorique_kg_h:'', temps_reglage_min:'30',
@@ -3992,7 +3992,7 @@ function Articles() {
       )}
 
       {/* ══ LISTE ARTICLES ══ */}
-      <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
+      {!typeFixe && <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
         <span style={{ fontSize:13, color:'#6b7280' }}>Afficher :</span>
         <select value={filtreType} onChange={e => setFiltreType(e.target.value)}
           style={{ padding:'6px 10px', borderRadius:8, border:'1px solid #d1d5db', fontSize:13 }}>
@@ -4001,7 +4001,7 @@ function Articles() {
           <option value="matiere_premiere">Matières premières</option>
           <option value="tous">Tous les articles</option>
         </select>
-      </div>
+      </div>}
       <div style={{ background:'#fff', borderRadius:14, border:'1px solid #e5e7eb', overflow:'auto', maxHeight:'calc(100vh - 220px)' }}>
         <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13, minWidth:700 }}>
           <thead>
@@ -4012,7 +4012,7 @@ function Articles() {
             </tr>
           </thead>
           <tbody>
-            {articles.filter(a => filtreType === 'tous' || a.type_article === filtreType).map((a, i) => {
+            {articles.filter(a => typeFixe ? a.type_article === typeFixe : (filtreType === 'tous' || a.type_article === filtreType)).map((a, i) => {
               const tc = TYPE_C[a.type_article] || TYPE_C.consommable;
               return (
                 <tr key={a.id}
@@ -8849,7 +8849,7 @@ function OrdresLivraison() {
       case 'vente': return <Vente />;
       case 'fournisseurs': return <Fournisseurs />;
       case 'achat': return <AchatsV2 />;
-      case 'articles_divers': return <ArticlesDivers />;
+      case 'articles_divers': return <Articles typeFixe="article_divers" />;
       case 'demandes_achat': return <DemandesAchatAtelier />;
       case 'cession': return <BonsCession />;
       case 'qhse': return <QHSE />;

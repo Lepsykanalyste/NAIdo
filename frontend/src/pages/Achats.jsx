@@ -221,7 +221,7 @@ function NouvelleCommande({ fournisseurs, articles, onClose, onCree }) {
         </div>
         <Champ label="Date commande"><input type="date" value={form.date_commande} onChange={e => setForm({ ...form, date_commande: e.target.value })} style={inputStyle} /></Champ>
         <Champ label="Livraison prévue"><input type="date" value={form.date_livraison_prevue} onChange={e => setForm({ ...form, date_livraison_prevue: e.target.value })} style={inputStyle} /></Champ>
-        <Champ label="Type"><select value={form.type_achat} onChange={e => setForm({ ...form, type_achat: e.target.value })} style={inputStyle}><option value="local">Local</option><option value="export">Export (conteneur)</option></select></Champ>
+        <Champ label="Type"><select value={form.type_achat} onChange={e => setForm({ ...form, type_achat: e.target.value })} style={inputStyle}><option value="local">Local</option><option value="export">Import (conteneur)</option></select></Champ>
         <Champ label="Commentaire"><input value={form.commentaire} onChange={e => setForm({ ...form, commentaire: e.target.value })} style={inputStyle} /></Champ>
         <Champ label="TVA %"><input type="number" value={form.taux_tva} onChange={e => setForm({ ...form, taux_tva: e.target.value })} style={inputStyle} /></Champ>
       </div>
@@ -300,7 +300,7 @@ function EvolutionExport({ commandeId, role, lotActuel, onChange }) {
   };
   return (
     <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 12, marginBottom: 12 }}>
-      <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>🚢 Évolution de la commande (export)</div>
+      <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>🚢 Évolution de la commande (import)</div>
       {liste === null && <div style={{ color: '#9ca3af', fontSize: 12 }}>Chargement...</div>}
       {liste && liste.length === 0 && <div style={{ color: '#9ca3af', fontSize: 12, marginBottom: 6 }}>Aucune étape pour l'instant</div>}
       {liste && liste.map(e => (
@@ -338,7 +338,7 @@ function TransitPage() {
   const cmd = data?.commandes?.find(c => c.id === choisie);
   return (
     <div style={{ padding: 20, maxWidth: 1100, margin: '0 auto' }}>
-      <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>🚢 Commandes export</h2>
+      <h2 style={{ fontSize: 18, fontWeight: 800, marginBottom: 12 }}>🚢 Commandes import</h2>
       {data === null && <div style={{ color: '#9ca3af' }}>Chargement...</div>}
       {data && (
         <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 16 }}>
@@ -354,7 +354,7 @@ function TransitPage() {
                 <td style={tdStyle}>{c.numero_lot_conteneur || '—'}</td>
               </tr>
             ))}
-            {data.commandes.length === 0 && <tr><td colSpan={6} style={{ ...tdStyle, textAlign: 'center', color: '#9ca3af' }}>Aucune commande export</td></tr>}
+            {data.commandes.length === 0 && <tr><td colSpan={6} style={{ ...tdStyle, textAlign: 'center', color: '#9ca3af' }}>Aucune commande import</td></tr>}
           </tbody>
         </table>
       )}
@@ -487,7 +487,7 @@ function Reception({ commande, onClose, onFait }) {
       <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 12, marginBottom: 12 }}>
         <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Transport</div>
         <div style={{ display: 'flex', gap: 16, marginBottom: 10 }}>
-          <label style={{ fontSize: 13 }}><input type="radio" name="rmode" checked={rMode === 'conteneur'} onChange={() => setRMode('conteneur')} /> Conteneur (export)</label>
+          <label style={{ fontSize: 13 }}><input type="radio" name="rmode" checked={rMode === 'conteneur'} onChange={() => setRMode('conteneur')} /> Conteneur (import)</label>
           <label style={{ fontSize: 13 }}><input type="radio" name="rmode" checked={rMode === 'vehicule'} onChange={() => setRMode('vehicule')} /> Véhicule (local)</label>
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
@@ -498,7 +498,7 @@ function Reception({ commande, onClose, onFait }) {
           <Champ label="Prénom du chauffeur *"><input value={rChPrenom} onChange={e => setRChPrenom(e.target.value)} style={inputStyle} /></Champ>
           <Champ label="N° de lot de la matière *"><input value={rLotMat} onChange={e => setRLotMat(e.target.value)} style={inputStyle} /></Champ>
           {c.type_achat === 'export' && <Champ label="N° de lot du conteneur (transitaire)"><input value={c.numero_lot_conteneur || ''} disabled style={{ ...inputStyle, background: '#f3f4f6' }} /></Champ>}
-          <Champ label="Commentaire (local / export)"><input value={rCommentaire} onChange={e => setRCommentaire(e.target.value)} placeholder={c.type_achat === 'export' ? 'Export' : 'Local'} style={inputStyle} /></Champ>
+          <Champ label="Commentaire (local / export)"><input value={rCommentaire} onChange={e => setRCommentaire(e.target.value)} placeholder={c.type_achat === 'export' ? 'Import' : 'Local'} style={inputStyle} /></Champ>
         </div>
       </div>
 

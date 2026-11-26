@@ -408,7 +408,7 @@ router.post('/commandes/:id/evolution', auth, async (req, res, next) => {
     if (!ETAPES_EXPORT.includes(etape)) return res.status(400).json({ error: 'Étape inconnue' });
     const c = (await db.query('SELECT type_achat FROM commandes_achat WHERE id = $1', [req.params.id])).rows[0];
     if (!c) return res.status(404).json({ error: 'Commande introuvable' });
-    if (c.type_achat !== 'export') return res.status(400).json({ error: 'Évolution réservée aux commandes export' });
+    if (c.type_achat !== 'export') return res.status(400).json({ error: 'Évolution réservée aux commandes import' });
     await db.query(
       'INSERT INTO evolution_commande_achat (commande_id, etape, commentaire, cree_par) VALUES ($1, $2, $3, $4)',
       [req.params.id, etape, String(commentaire || '').trim() || null, req.user?.id || null]);
@@ -425,7 +425,7 @@ router.put('/commandes/:id/lot-conteneur', auth, async (req, res, next) => {
     const r = await db.query(
       "UPDATE commandes_achat SET numero_lot_conteneur = $2 WHERE id = $1 AND type_achat = 'export' RETURNING id",
       [req.params.id, lot]);
-    if (!r.rows.length) return res.status(404).json({ error: 'Commande export introuvable' });
+    if (!r.rows.length) return res.status(404).json({ error: 'Commande import introuvable' });
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

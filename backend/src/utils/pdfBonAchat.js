@@ -209,7 +209,7 @@ function pdfReception({ numRec, cmd, rec, lignes, sign = null, nomRec = '' }) {
     doc.font('Helvetica-Bold').fontSize(16).text('BON DE LIVRAISON', 250, 24, { width: 305, align: 'right' });
     doc.font('Helvetica').fontSize(9).text('Bordereau de réception', 250, 44, { width: 305, align: 'right' });
     doc.font('Helvetica').fontSize(11).text(numRec, 250, 58, { width: 305, align: 'right' });
-    doc.fontSize(9).text('Réception du ' + date(rec.date_reception) + '  ·  ' + (estExport ? 'EXPORT' : 'LOCAL'), 250, 74, { width: 305, align: 'right' });
+    doc.fontSize(9).text('Réception du ' + date(rec.date_reception) + '  ·  ' + (estExport ? 'IMPORT' : 'LOCAL'), 250, 74, { width: 305, align: 'right' });
     doc.fillColor('#000000');
 
     // Commande et livraison
@@ -230,7 +230,7 @@ function pdfReception({ numRec, cmd, rec, lignes, sign = null, nomRec = '' }) {
     bloc(G, 'COMMANDE', [
       'Bon de commande : ' + (cmd.numero_commande || '—'),
       'Fournisseur : ' + (cmd.raison_sociale || '—'),
-      'Type : ' + (estExport ? 'Export' : 'Local'),
+      'Type : ' + (estExport ? 'Import' : 'Local'),
       cmd.commentaire ? 'Commentaire : ' + cmd.commentaire : null,
       estExport ? 'Lot du conteneur : ' + (cmd.numero_lot_conteneur || '—') : null,
     ]);
