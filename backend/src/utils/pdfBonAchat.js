@@ -297,7 +297,7 @@ function pdfReception({ numRec, cmd, rec, lignes, sign = null, nomRec = '' }) {
 }
 
 // Document commercial en PDF (devis, bon de commande client, demande de fabrication) : portrait, ou paysage pour les grands tableaux
-function pdfCommercial({ titre, numero, dateStr, statut, infos = [], client = [], entete = [], lignes = [], totaux = [], notes = '', paysage = false, qrUrl = null }) {
+function pdfCommercial({ titre, numero, dateStr, statut, infos = [], client = [], entete = [], lignes = [], totaux = [], notes = '', paysage = false, qrUrl = null, signatures = [] }) {
   return new Promise(async (resolve, reject) => {
     // QR code en haut a droite (meme place que sur le bon d'achat)
     let qr = null;
@@ -377,6 +377,19 @@ function pdfCommercial({ titre, numero, dateStr, statut, infos = [], client = []
       doc.font('Helvetica').fontSize(9).fillColor('#111827').text(notes, G, y + 12, { width: largeur });
     }
 
+    // Signatures en bas de page (comme sur le bon de commande)
+    if (signatures.length) {
+      const ySigC = H - 130;
+      const sigWC = (largeur - 16) / 2;
+      signatures.slice(0, 2).forEach((s, i) => {
+        const xs = G + i * (sigWC + 16);
+        doc.rect(xs, ySigC, sigWC, 96).lineWidth(0.8).strokeColor(LIGNE).stroke();
+        doc.font('Helvetica-Bold').fontSize(9).fillColor(BLEU).text(s.titre, xs + 10, ySigC + 7);
+        doc.font('Helvetica-Bold').fontSize(9).fillColor('#111827').text(s.nom || '—', xs + 10, ySigC + 21, { width: sigWC - 20 });
+        if (s.image) { try { doc.image(s.image, xs + 10, ySigC + 36, { fit: [sigWC - 20, 40] }); } catch (e) { /* image illisible */ } }
+        doc.fillColor(GRIS).fontSize(7).text('Signature', xs + 10, ySigC + 82);
+      });
+    }
     doc.font('Helvetica').fontSize(7.5).fillColor(GRIS)
       .text(`NAI — ${numero || ''}`, G, H - 50, { width: largeur, align: 'center', lineBreak: false });
     doc.end();

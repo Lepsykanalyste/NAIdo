@@ -157,8 +157,21 @@ router.get('/:id/pdf', auth, async (req, res) => {
       lignesPdf = [[d.article_code || '', d.article_nom || '', '—', nombre(kg, 2), '—', '—']];
     }
     const statutLabel = { en_attente: 'En attente', validee: 'Validée', refusee: 'Refusée', annulee: 'Annulée', en_cours: 'En cours', terminee: 'Terminée' }[d.statut] || d.statut;
+    // Signatures : celles des personnes qui ont fait la demande et qui l'ont validee (si elles ont importe la leur)
+    const sigDe = async uid => {
+      if (!uid) return null;
+      const { rows: u } = await db.query('SELECT signature_path FROM utilisateurs WHERE id = $1', [uid]);
+      const p = u[0] && u[0].signature_path;
+      if (!p || !p.startsWith('/uploads/signatures/')) return null;
+      try { return require('fs').readFileSync(require('path').join(__dirname, '../..', p)); } catch (e) { return null; }
+    };
+    const sigs = [
+      { titre: 'DEMANDEUR', nom: d.demandeur_nom || '—', image: await sigDe(d.demandeur_id) },
+      { titre: 'DIRECTION / VALIDATION', nom: d.valideur_nom || 'En attente de validation', image: await sigDe(d.validee_par) },
+    ];
     const pdf = await pdfCommercial({
       paysage: true,
+      signatures: sigs,
       qrUrl: `DF ${d.numero_df} | ${kg.toFixed(1)} kg | ${Math.round(ttc)} FCFA | ${date(d.created_at)}`,
       titre: 'DEMANDE DE FABRICATION',
       numero: d.numero_df,
