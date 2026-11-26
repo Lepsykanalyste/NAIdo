@@ -1062,7 +1062,7 @@ function MenuActionsDF({ df, isDir, user, onValider, onRefuser, onAnnuler, onMod
                 </div>
                 {df.description && <div style={{background:"#faf5ff",borderRadius:8,padding:12,fontSize:13,marginBottom:12}}><strong>Description :</strong> {df.description}</div>}
                 <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                  <button onClick={()=>ouvrirPdfSecurise("/api/df/"+df.id+"/pdf")} style={{background:"#7c3aed",color:"#fff",border:"none",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:13}}>🖨 PDF</button>
+                  <button onClick={()=>ouvrirPdfSecurise("/api/df/"+df.id+"/pdf?t="+Date.now())} style={{background:"#7c3aed",color:"#fff",border:"none",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:13}}>🖨 PDF</button>
                   {df.statut==="en_attente" && isDir && <button onClick={()=>{onValider();setShow(false);}} style={{background:"#dcfce7",color:"#15803d",border:"none",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:13,fontWeight:700}}>✓ Valider → OF</button>}
                   {df.statut==="en_attente" && isDir && <button onClick={async ()=>{const m=(await saisir("Motif refus :"));if(m){onRefuser(m);setShow(false);}}} style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:13}}>✗ Refuser</button>}
                   <button onClick={()=>{onAnnuler();setShow(false);}} style={{background:"#fee2e2",color:"#dc2626",border:"none",borderRadius:8,padding:"8px 14px",cursor:"pointer",fontSize:13}}>🗑 Annuler</button>
@@ -1494,7 +1494,7 @@ function DemandesFabrication() {
                   )}
                   {dfSelectionne.description && <div style={{background:'#faf5ff',borderRadius:8,padding:12,fontSize:13,marginBottom:12}}><strong>Description :</strong> {dfSelectionne.description}</div>}
                   <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-                    <button onClick={()=>ouvrirPdfSecurise('/api/df/'+dfSelectionne.id+'/pdf')} style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:8,padding:'8px 14px',cursor:'pointer',fontSize:13}}>🖨 PDF</button>
+                    <button onClick={()=>ouvrirPdfSecurise('/api/df/'+dfSelectionne.id+'/pdf?t='+Date.now())} style={{background:'#7c3aed',color:'#fff',border:'none',borderRadius:8,padding:'8px 14px',cursor:'pointer',fontSize:13}}>🖨 PDF</button>
                     {dfSelectionne.statut==='en_attente' && isDir && <button onClick={()=>{setShowValider(dfSelectionne);chargerMachines('AT3');setDfSelectionne(null);}} style={{background:'#dcfce7',color:'#15803d',border:'none',borderRadius:8,padding:'8px 14px',cursor:'pointer',fontSize:13,fontWeight:700}}>✓ Valider</button>}
                     {dfSelectionne.statut==='en_attente' && isDir && <button onClick={async ()=>{const m=(await saisir('Motif refus :'));if(m){refuser(dfSelectionne.id,m);setDfSelectionne(null);}}} style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:8,padding:'8px 14px',cursor:'pointer',fontSize:13}}>✗ Refuser</button>}
                     <button onClick={()=>{annulerDF(dfSelectionne.id);setDfSelectionne(null);}} style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:8,padding:'8px 14px',cursor:'pointer',fontSize:13}}>🗑 Annuler</button>
