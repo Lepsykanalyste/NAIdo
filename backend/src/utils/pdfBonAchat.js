@@ -40,7 +40,8 @@ function calculer(cmd, lignes) {
 }
 
 // sign = { achat: Buffer|null, direction: Buffer|null } : signatures image de chaque personne (importees dans son compte)
-function pdfBonAchat(cmd, lignes, urlQr, sign = {}) {
+function pdfBonAchat(cmd, lignes, urlQr, sign = {}, opts = {}) {
+  const sansPrix = !!opts.sansPrix;
   return new Promise(async (resolve, reject) => {
     try {
       const qr = urlQr ? await QRCode.toBuffer(urlQr, { type: 'png', width: 240, margin: 1 }) : null;
@@ -96,7 +97,12 @@ function pdfBonAchat(cmd, lignes, urlQr, sign = {}) {
 
       // ----- Tableau des lignes -----
       let y = 216;
-      const cols = [
+      const cols = sansPrix ? [
+        { t: 'Code', x: G, w: 62, al: 'left' },
+        { t: 'Désignation', x: G + 62, w: largeur - 62 - 130, al: 'left' },
+        { t: 'Unité', x: G + largeur - 130, w: 50, al: 'center' },
+        { t: 'Quantité', x: G + largeur - 80, w: 80, al: 'right' },
+      ] : [
         { t: 'Code', x: G, w: 62, al: 'left' },
         { t: 'Désignation', x: G + 62, w: 175, al: 'left' },
         { t: 'Unité', x: G + 237, w: 50, al: 'center' },
@@ -127,7 +133,8 @@ function pdfBonAchat(cmd, lignes, urlQr, sign = {}) {
         doc.moveTo(G, y).lineTo(L, y).lineWidth(0.4).strokeColor(LIGNE).stroke();
       });
 
-      // ----- Totaux (recalcules) -----
+      // ----- Totaux (recalcules) : absents pour les roles qui ne voient pas les prix -----
+      if (!sansPrix) {
       const t = calculer(cmd, lignes);
       y += 12;
       const xT = G + 300;
@@ -145,6 +152,7 @@ function pdfBonAchat(cmd, lignes, urlQr, sign = {}) {
       doc.moveTo(xT + 10, y - 2).lineTo(xT + wT - 10, y - 2).lineWidth(0.8).strokeColor(BLEU).stroke();
       ligneTotal('Total TTC', nombre(t.ttc) + ' FCFA', true);
       y += 14;
+      }
 
       // ----- Notes -----
       if (cmd.notes) {

@@ -307,7 +307,7 @@ router.get('/commandes/:id/pdf', authOuLien, async (req, res, next) => {
     const base = process.env.APP_BASE_URL || `${req.protocol}://${req.get('host')}`;
     const urlQr = `${base}/api/achat/commandes/${cmd.id}/pdf?t=${lienSigne.signer(cmd.id)}`;
     const sign = { achat: await signatureDe(cmd.cree_par), direction: await signatureDe(cmd.validee_par), direction_nom: await nomDe(cmd.validee_par) };
-    const pdf = await pdfBonAchat(cmd, lignes, urlQr, sign);
+    const pdf = await pdfBonAchat(cmd, lignes, urlQr, sign, { sansPrix: !peutVoirPrix(req.user) });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${cmd.numero_commande}.pdf"`);
     res.setHeader('Cache-Control', 'no-store');
@@ -317,7 +317,7 @@ router.get('/commandes/:id/pdf', authOuLien, async (req, res, next) => {
 
 // GET /receptions/:id/pdf — bordereau de reception
 router.get('/receptions/:id/pdf', auth, async (req, res, next) => {
-  if (!peutVoirPrix(req.user)) return res.status(403).json({ error: 'Impression réservée aux rôles autorisés à voir les prix' });
+
   if (!UUID.test(req.params.id)) return next();
   try {
     const r = await db.query(`SELECT commande_id FROM receptions_achat WHERE id=$1`, [req.params.id]);

@@ -368,7 +368,10 @@ export default function AchatsV2() {
   return <AchatsStandard />;
 }
 
+// Roles qui voient les prix d'achat (le magasin ne voit que les quantites)
+const PRIX_ROLES = ['achat', 'directeur', 'super_admin', 'comptable'];
 function DetailCommande({ id, role, onClose, onChange, onReceptionner, onHistorique }) {
+  const voitPrix = PRIX_ROLES.includes(role);
   const [c, setC] = useState(null);
   const charger = () => axios.get(`${API}/achat/commandes/${id}`).then(r => setC(r.data)).catch(e => toast.error(msg(e)));
   useEffect(() => { charger(); }, [id]);
@@ -391,7 +394,7 @@ function DetailCommande({ id, role, onClose, onChange, onReceptionner, onHistori
         {c.statut === 'envoye' && <span style={{ fontSize: 12, color: '#92400e' }}>En attente de validation de la direction</span>}
       </div>
       <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 12 }}>
-        <thead><tr>{['Article', 'Désignation', 'Commandé', 'Reçu', 'Reste', 'Prix HT', 'Total HT'].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
+        <thead><tr>{['Article', 'Désignation', 'Commandé', 'Reçu', 'Reste', ...(voitPrix ? ['Prix HT', 'Total HT'] : [])].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
         <tbody>
           {(c.lignes || []).map(l => {
             const reste = Math.max(0, nb(l.quantite_commandee) - nb(l.quantite_recue));
@@ -402,17 +405,17 @@ function DetailCommande({ id, role, onClose, onChange, onReceptionner, onHistori
                 <td style={{ ...tdStyle, textAlign: 'right' }}>{qte(l.quantite_commandee)}</td>
                 <td style={{ ...tdStyle, textAlign: 'right', color: '#15803d', fontWeight: 700 }}>{qte(l.quantite_recue)}</td>
                 <td style={{ ...tdStyle, textAlign: 'right', color: reste > 0 ? '#d97706' : '#15803d', fontWeight: 700 }}>{qte(reste)}</td>
-                <td style={{ ...tdStyle, textAlign: 'right' }}>{fcfa(l.prix_unitaire_ht)}</td>
-                <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700 }}>{fcfa(l.montant_ht)}</td>
+                {voitPrix && <td style={{ ...tdStyle, textAlign: 'right' }}>{fcfa(l.prix_unitaire_ht)}</td>}
+                {voitPrix && <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700 }}>{fcfa(l.montant_ht)}</td>}
               </tr>
             );
           })}
         </tbody>
       </table>
-      <div style={{ textAlign: 'right', fontSize: 13, marginBottom: 12 }}>
+      {voitPrix && <div style={{ textAlign: 'right', fontSize: 13, marginBottom: 12 }}>
         <div>HT : <b>{fcfa(c.montant_ht)}</b> · TVA : <b>{fcfa(c.montant_tva)}</b></div>
         <div style={{ fontSize: 15, color: '#6d28d9', fontWeight: 800 }}>TTC : {fcfa(c.montant_ttc)}</div>
-      </div>
+      </div>}
       {c.notes && <div style={{ background: '#f9fafb', borderRadius: 8, padding: '8px 10px', fontSize: 12, marginBottom: 12 }}><b>Notes :</b> {c.notes}</div>}
       {c.type_achat === 'export' && <EvolutionExport commandeId={id} role={role} lotActuel={c.numero_lot_conteneur} onChange={charger} />}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -427,6 +430,8 @@ function DetailCommande({ id, role, onClose, onChange, onReceptionner, onHistori
 }
 
 function Reception({ commande, onClose, onFait }) {
+  const { user } = useAuth();
+  const voitPrix = PRIX_ROLES.includes(user?.role);
   const [c, setC] = useState(null);
   const [date, setDate] = useState(aujourdhui());
   const [bl, setBl] = useState('');
@@ -452,7 +457,7 @@ function Reception({ commande, onClose, onFait }) {
   if (!c) return <Modal titre="Réception" onClose={onClose} largeur={860}><div style={{ padding: 20, textAlign: 'center', color: '#9ca3af' }}>Chargement...</div></Modal>;
 
   const valider = async () => {
-    const lignes = (c.lignes || []).filter(l => nb(saisie[l.id]?.q) > 0).map(l => ({ ligne_id: l.id, quantite_recue: nb(saisie[l.id].q), prix_unitaire_ht: nb(saisie[l.id].prix) }));
+    const lignes = (c.lignes || []).filter(l => nb(saisie[l.id]?.q) > 0).map(l => ({ ligne_id: l.id, quantite_recue: nb(saisie[l.id].q), ...(voitPrix ? { prix_unitaire_ht: nb(saisie[l.id].prix) } : {}) }));
     if (!lignes.length) return toast.error('Saisissez au moins une quantité reçue');
     if (!rMode) return toast.error('Indiquez si la livraison est par conteneur ou par véhicule');
     if (!rChNom.trim() || !rChPrenom.trim() || !rLotMat.trim()) return toast.error('Nom, prénom du chauffeur et lot de la matière obligatoires');
@@ -496,7 +501,7 @@ function Reception({ commande, onClose, onFait }) {
       </div>
 
       <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 12 }}>
-        <thead><tr>{['Article', 'Commandé', 'Déjà reçu', 'Reste', 'À recevoir', 'Prix réel HT'].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
+        <thead><tr>{['Article', 'Commandé', 'Déjà reçu', 'Reste', 'À recevoir', ...(voitPrix ? ['Prix réel HT'] : [])].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
         <tbody>
           {(c.lignes || []).map(l => {
             const reste = Math.max(0, nb(l.quantite_commandee) - nb(l.quantite_recue));
@@ -507,7 +512,7 @@ function Reception({ commande, onClose, onFait }) {
                 <td style={{ ...tdStyle, textAlign: 'right' }}>{qte(l.quantite_recue)}</td>
                 <td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700, color: '#d97706' }}>{qte(reste)}</td>
                 <td style={tdStyle}><input type="number" disabled={reste <= 0} value={saisie[l.id]?.q ?? ''} onChange={e => setSaisie({ ...saisie, [l.id]: { ...saisie[l.id], q: e.target.value } })} style={{ ...inputStyle, width: 110, textAlign: 'center' }} /></td>
-                <td style={tdStyle}><input type="number" disabled={reste <= 0} value={saisie[l.id]?.prix ?? ''} onChange={e => setSaisie({ ...saisie, [l.id]: { ...saisie[l.id], prix: e.target.value } })} style={{ ...inputStyle, width: 120, textAlign: 'center' }} /></td>
+                {voitPrix && <td style={tdStyle}><input type="number" disabled={reste <= 0} value={saisie[l.id]?.prix ?? ''} onChange={e => setSaisie({ ...saisie, [l.id]: { ...saisie[l.id], prix: e.target.value } })} style={{ ...inputStyle, width: 120, textAlign: 'center' }} /></td>}
               </tr>
             );
           })}
