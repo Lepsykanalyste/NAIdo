@@ -3986,12 +3986,12 @@ function Articles() {
           <option value="tous">Tous les articles</option>
         </select>
       </div>
-      <div style={{ background:'#fff', borderRadius:14, border:'1px solid #e5e7eb', overflow:'auto' }}>
+      <div style={{ background:'#fff', borderRadius:14, border:'1px solid #e5e7eb', overflow:'auto', maxHeight:'calc(100vh - 220px)' }}>
         <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13, minWidth:700 }}>
           <thead>
             <tr style={{ background:'#faf5ff' }}>
               {['Code','Désignation','Famille','Unité','Poids théo.','Cadence','Stock','Type','Atelier','Actions'].map(h => (
-                <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:700, color:'#7e22ce', borderBottom:'2px solid #e9d5ff', whiteSpace:'nowrap' }}>{h}</th>
+                <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontWeight:700, color:'#7e22ce', borderBottom:'2px solid #e9d5ff', whiteSpace:'nowrap', position:'sticky', top:0, background:'#faf5ff', zIndex:2 }}>{h}</th>
               ))}
             </tr>
           </thead>
