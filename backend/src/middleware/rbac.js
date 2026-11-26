@@ -49,6 +49,8 @@ const cheminTransit = (m, c) => (m === 'GET' && c === '/api/achat/transit/comman
   || (['GET', 'POST'].includes(m) && /^\/api\/achat\/commandes\/[^/]+\/evolution$/.test(c))
   || (m === 'PUT' && /^\/api\/achat\/commandes\/[^/]+\/lot-conteneur$/.test(c));
 // Magasin MP : receptionner une commande confirmee et ouvrir le bordereau (sans prix)
+// Commercial : transformer un bon de commande client en demande de fabrication
+const cheminCommercial = (m, c) => m === 'POST' && /^\/api\/bc\/[^/]+\/transformer-df$/.test(c);
 const cheminReception = (m, c) => (m === 'PUT' && /^\/api\/achat\/commandes\/[^/]+\/receptionner$/.test(c))
   || (m === 'GET' && (/^\/api\/achat\/commandes\/[^/]+\/receptions$/.test(c) || /^\/api\/achat\/receptions\/[^/]+\/pdf$/.test(c)));
 function decider(roleBrut, methode, chemin) {
@@ -60,6 +62,7 @@ function decider(roleBrut, methode, chemin) {
   if (PERSONNELS.some((m) => correspond(m, chemin))) return { autorise: true, raison: 'espace personnel' };
   if (role === 'transitaire' && cheminTransit(String(methode).toUpperCase(), chemin)) return { autorise: true, raison: 'transitaire (export)' };
   if (role === 'magasinier_mp' && cheminReception(String(methode).toUpperCase(), chemin)) return { autorise: true, raison: 'magasin MP : reception' };
+  if (role === 'commercial' && cheminCommercial(String(methode).toUpperCase(), chemin)) return { autorise: true, raison: 'commercial : demande de fabrication' };
   if (role === 'directeur') return { autorise: true, raison: 'directeur' };
   let meilleure = null;                                // regle la plus precise = celle qui a le plus de segments
   for (const r of POLITIQUE.regles) {

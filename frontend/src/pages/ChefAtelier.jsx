@@ -705,7 +705,7 @@ function GestionDevis() {
                 💾 Enregistrer comme brouillon
               </button>
               <button onClick={()=>sauver('envoye')} style={{background:'#f59e0b',color:'#fff',border:'none',borderRadius:8,padding:'9px',cursor:'pointer',fontWeight:700,fontSize:13}}>
-                ✓ Confirmer la commande
+                ✓ Confirmer le devis
               </button>
               <button onClick={reset} style={{background:'#fff',color:'#374151',border:'1px solid #e5e7eb',borderRadius:8,padding:'9px',cursor:'pointer',fontSize:13}}>
                 🔄 Réinitialiser
