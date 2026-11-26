@@ -3557,6 +3557,8 @@ function Articles() {
   const [matieresPremiers, setMatieresPremiers] = useState([]);
   const [groupesMp, setGroupesMp] = useState([]);
   const [search, setSearch] = useState('');
+  // Articles (Produits) : par defaut seuls les produits finis ; 'tous' affiche aussi les articles divers et les matieres premieres
+  const [filtreType, setFiltreType] = useState('produit_fini');
   const [showForm, setShowForm] = useState(false);
   const [detail, setDetail] = useState(null);
   const [modeEditArt, setModeEditArt] = useState(false);
@@ -3972,6 +3974,16 @@ function Articles() {
       )}
 
       {/* ══ LISTE ARTICLES ══ */}
+      <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
+        <span style={{ fontSize:13, color:'#6b7280' }}>Afficher :</span>
+        <select value={filtreType} onChange={e => setFiltreType(e.target.value)}
+          style={{ padding:'6px 10px', borderRadius:8, border:'1px solid #d1d5db', fontSize:13 }}>
+          <option value="produit_fini">Produits finis</option>
+          <option value="article_divers">Articles divers</option>
+          <option value="matiere_premiere">Matières premières</option>
+          <option value="tous">Tous les articles</option>
+        </select>
+      </div>
       <div style={{ background:'#fff', borderRadius:14, border:'1px solid #e5e7eb', overflow:'auto' }}>
         <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13, minWidth:700 }}>
           <thead>
@@ -3982,7 +3994,7 @@ function Articles() {
             </tr>
           </thead>
           <tbody>
-            {articles.map((a, i) => {
+            {articles.filter(a => filtreType === 'tous' || a.type_article === filtreType).map((a, i) => {
               const tc = TYPE_C[a.type_article] || TYPE_C.consommable;
               return (
                 <tr key={a.id}
