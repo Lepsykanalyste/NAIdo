@@ -1193,7 +1193,9 @@ function DemandesFabrication() {
   const valider = async () => {
     try {
       const res = await axios.put(`${API}/df/${showValider.id}/valider`, valForm);
-      toast.success('DF validée — OF ' + res.data.of.numero_of + ' créé !');
+      toast.success(res.data.ofs && res.data.ofs.length > 1
+        ? 'DF validée — ' + res.data.ofs.length + ' OF créés (un par article) : ' + res.data.ofs.map(x => x.numero_of).join(', ')
+        : 'DF validée — OF ' + res.data.of.numero_of + ' créé !');
       setShowValider(null);
       setDetail(null);
       charger();

@@ -15,7 +15,8 @@ router.get('/', auth, async (req, res) => {
              a.designation AS article_nom, a.code AS article_code,
              u1.nom||' '||u1.prenom AS demandeur_nom,
              u2.nom||' '||u2.prenom AS valideur_nom,
-             o.numero_of,
+             COALESCE((SELECT string_agg(x.numero_of, ', ' ORDER BY x.numero_of) FROM ordres_fabrication x WHERE x.df_id = df.id), o.numero_of) AS numero_of,
+             (SELECT COUNT(*)::int FROM ordres_fabrication x WHERE x.df_id = df.id) AS nb_of,
              bc.numero_bc,
              df.quantite_demandee AS quantite_totale_kg
       FROM demandes_fabrication df
@@ -58,51 +59,61 @@ router.post('/', auth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// PUT /api/df/:id/valider — Direction valide et crée OF automatiquement
+// PUT /api/df/:id/valider — la direction valide : un OF est cree pour CHAQUE article du bon de commande
 router.put('/:id/valider', auth, async (req, res) => {
+  const client = await db.connect();
   try {
-    const { machine_id, atelier_id, date_debut_prevue } = req.body;
-    const { rows: df } = await db.query(
-      'SELECT * FROM demandes_fabrication WHERE id=$1', [req.params.id]
-    );
+    const { machine_id, atelier_id, date_debut_prevue } = req.body || {};
+    const { rows: df } = await client.query('SELECT * FROM demandes_fabrication WHERE id=$1', [req.params.id]);
     if (!df.length) return res.status(404).json({ error: 'DF introuvable' });
     const d = df[0];
+    if (d.statut === 'validee') return res.status(400).json({ error: 'Cette demande est déjà validée' });
 
-    // Calculer temps prévu
-    let temps_prevu_min = null;
-    const { rows: art } = await db.query(
-      'SELECT cadence_theorique_kg_h, temps_reglage_min FROM articles WHERE id=$1', [d.article_id]
-    );
-    if (art.length && parseFloat(art[0].cadence_theorique_kg_h||0) > 0) {
-      const c = parseFloat(art[0].cadence_theorique_kg_h);
-      const r = parseFloat(art[0].temps_reglage_min||30);
-      temps_prevu_min = Math.round((parseFloat(d.quantite_demandee)/c)*60 + r);
+    // Articles a fabriquer : une ligne du bon de commande = un OF (les lignes sans article sont ignorees)
+    const num = v => parseFloat(v) || 0;
+    let lignes = [];
+    if (d.bc_id) {
+      const r = await client.query(`
+        SELECT bl.article_id, bl.quantite_pieces, bl.quantite_kg,
+               a.poids_theorique_kg, a.cadence_theorique_kg_h, a.temps_reglage_min
+        FROM bc_lignes bl JOIN articles a ON a.id = bl.article_id
+        WHERE bl.bc_id = $1 ORDER BY bl.ordre`, [d.bc_id]);
+      lignes = r.rows.map(l => {
+        const pcs = num(l.quantite_pieces);
+        return { article_id: l.article_id, pcs, kg: num(l.quantite_kg) || pcs * num(l.poids_theorique_kg),
+                 cadence: num(l.cadence_theorique_kg_h), reglage: l.temps_reglage_min === null || l.temps_reglage_min === undefined ? 30 : num(l.temps_reglage_min) };
+      });
+    }
+    if (!lignes.length) {   // demande sans bon de commande : l'article de la demande
+      const a = await client.query('SELECT cadence_theorique_kg_h, temps_reglage_min FROM articles WHERE id=$1', [d.article_id]);
+      lignes = [{ article_id: d.article_id, pcs: parseInt(d.quantite_pieces || 0), kg: num(d.quantite_demandee),
+                  cadence: a.rows.length ? num(a.rows[0].cadence_theorique_kg_h) : 0, reglage: a.rows.length ? num(a.rows[0].temps_reglage_min || 30) : 30 }];
     }
 
-    // Créer OF automatiquement
-    const { rows: of } = await db.query(`
-      INSERT INTO ordres_fabrication
-        (client_id, article_id, quantite_cible, quantite_pieces, machine_id, atelier_id,
-         date_livraison_prevue, date_debut_prevue, priorite, statut,
-         temps_prevu_min, df_id)
-      VALUES ($1,$2,$3,$11,$4,$5,$6,$7,$8,'planifie',$9,$10)
-      RETURNING *
-    `, [d.client_id, d.article_id, d.quantite_demandee,
-        machine_id ? parseInt(machine_id) : null,
-        atelier_id||'AT3',
-        d.date_livraison_souhaitee, date_debut_prevue||null,
-        d.priorite, temps_prevu_min, d.id,
-        parseInt(d.quantite_pieces||0)]);
-
-    // Mettre à jour la DF
-    const { rows: updated } = await db.query(`
-      UPDATE demandes_fabrication 
+    await client.query('BEGIN');
+    const ofs = [];
+    for (const l of lignes) {
+      const temps = l.cadence > 0 ? Math.round((l.kg / l.cadence) * 60 + l.reglage) : null;
+      const { rows: of } = await client.query(`
+        INSERT INTO ordres_fabrication
+          (client_id, article_id, quantite_cible, quantite_pieces, machine_id, atelier_id,
+           date_livraison_prevue, date_debut_prevue, priorite, statut, temps_prevu_min, df_id)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'planifie',$10,$11)
+        RETURNING *`,
+        [d.client_id, l.article_id, l.kg, l.pcs, machine_id ? parseInt(machine_id) : null, atelier_id || 'AT3',
+         d.date_livraison_souhaitee, date_debut_prevue || null, d.priorite, temps, d.id]);
+      ofs.push(of[0]);
+    }
+    const { rows: updated } = await client.query(`
+      UPDATE demandes_fabrication
       SET statut='validee', validee_par=$1, validee_at=NOW(), of_id=$2, updated_at=NOW()
-      WHERE id=$3 RETURNING *
-    `, [req.user.id, of[0].id, req.params.id]);
-
-    res.json({ df: updated[0], of: of[0] });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+      WHERE id=$3 RETURNING *`, [req.user.id, ofs[0].id, req.params.id]);
+    await client.query('COMMIT');
+    res.json({ df: updated[0], of: ofs[0], ofs });
+  } catch (e) {
+    try { await client.query('ROLLBACK'); } catch (_) { /* pas de transaction ouverte */ }
+    res.status(500).json({ error: e.message });
+  } finally { client.release(); }
 });
 
 // PUT /api/df/:id/refuser

@@ -147,7 +147,9 @@ router.get('/:id/pdf', auth, async (req, res) => {
         JOIN bc_lignes bl ON bl.bc_id = df.bc_id
         LEFT JOIN articles a ON a.id = bl.article_id
         WHERE df.id = $1 ORDER BY bl.ordre`, [d.df_id]);
-      lignesBc = r2.rows;
+      // Plusieurs OF pour une meme demande (un par article) : chaque OF n'affiche que son propre article
+      const nbOf = (await db.query('SELECT COUNT(*)::int AS n FROM ordres_fabrication WHERE df_id = $1', [d.df_id])).rows[0].n;
+      if (nbOf <= 1) lignesBc = r2.rows;
     }
 
     const { rows: compoMp } = await db.query(`
