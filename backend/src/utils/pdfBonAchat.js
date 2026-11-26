@@ -379,7 +379,7 @@ function pdfCommercial({ titre, numero, dateStr, statut, infos = [], client = []
 
     // Signatures en bas de page (comme sur le bon de commande)
     if (signatures.length) {
-      const ySigC = H - 130;
+      const ySigC = H - 175;
       const sigWC = (largeur - 16) / 2;
       signatures.slice(0, 2).forEach((s, i) => {
         const xs = G + i * (sigWC + 16);
