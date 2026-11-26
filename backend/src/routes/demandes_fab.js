@@ -192,6 +192,7 @@ router.get('/:id/pdf', auth, async (req, res) => {
                ['Total TTC', nombre(ttc) + ' FCFA', true]],
     });
     res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
     res.setHeader('Content-Disposition', `inline; filename="${d.numero_df || 'df'}.pdf"`);
     res.send(pdf);
   } catch (e) { console.error('[DF] pdf', e); res.status(500).json({ error: e.message }); }
