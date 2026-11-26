@@ -3814,7 +3814,9 @@ function Articles() {
                   // Poids théorique calculé en direct : L/100 × l/100 × e × densité × facteur (2 pièce, 1 Kg)
                   const u = unites.find((x) => String(x.id) === String(form.unite_mesure_id));
                   const code = (u?.code || '').toLowerCase();
-                  const facteur = code === 'kg' ? 1 : (code === 'pce' || code === 'pc' || code === 'piece' || code === 'pièce') ? 2 : null;
+                  // Double pli (x2) pour housses et sacs seulement, comme dans le fichier SACHERIE ; intercalaires, feuilles, gaines : x1
+                  const estDoublePli = /HOUSSE|HOUS|^SAC/i.test(`${form.designation || ''} ${form.code || ''}`.trim());
+                  const facteur = code === 'kg' ? 1 : (code === 'pce' || code === 'pc' || code === 'piece' || code === 'pièce') ? (estDoublePli ? 2 : 1) : null;
                   // Calcul réservé à l'atelier AT3 : pour les autres ateliers, le poids reste saisi à la main
                   const atAT3 = ateliers.find((x) => String(x.id) === String(form.atelier_production_id));
                   const atelierAT3 = !!atAT3 && (/^AT3$/i.test(atAT3.code || '') || /^AT3$/i.test(atAT3.parent_code || '') || /atelier\s*3/i.test(atAT3.libelle || ''));
