@@ -297,7 +297,7 @@ function pdfReception({ numRec, cmd, rec, lignes, sign = null, nomRec = '' }) {
 }
 
 // Document commercial en PDF (devis, bon de commande client, demande de fabrication) : portrait, ou paysage pour les grands tableaux
-function pdfCommercial({ titre, numero, dateStr, statut, infos = [], client = [], entete = [], lignes = [], totaux = [], notes = '', paysage = false, qrUrl = null, signatures = [] }) {
+function pdfCommercial({ titre, numero, dateStr, statut, infos = [], client = [], entete = [], lignes = [], totaux = [], notes = '', paysage = false, qrUrl = null, signatures = [], titreGauche = 'CLIENT', titreDroite = 'INFORMATIONS' }) {
   return new Promise(async (resolve, reject) => {
     // QR code en haut a droite (meme place que sur le bon d'achat)
     let qr = null;
@@ -327,7 +327,7 @@ function pdfCommercial({ titre, numero, dateStr, statut, infos = [], client = []
     // Client et informations
     const y0 = 104;
     const demi = (largeur - 16) / 2;
-    const hBloc = 96;
+    const hBloc = Math.max(96, 32 + 14 * Math.max(client.filter(Boolean).length, infos.filter(Boolean).length));
     const bloc = (x, titreB, lignesTxt) => {
       doc.rect(x, y0, demi, hBloc).lineWidth(0.8).strokeColor(LIGNE).stroke();
       doc.rect(x, y0, demi, 18).fill(BLEU_CLAIR);
@@ -339,8 +339,8 @@ function pdfCommercial({ titre, numero, dateStr, statut, infos = [], client = []
         yy += doc.heightOfString(t, { width: demi - 20 }) + 3;
       });
     };
-    bloc(G, 'CLIENT', client);
-    bloc(G + demi + 16, 'INFORMATIONS', infos);
+    bloc(G, titreGauche, client);
+    bloc(G + demi + 16, titreDroite, infos);
 
     // Tableau des lignes : toutes les lignes sont affichees
     let y = y0 + hBloc + 14;
@@ -379,9 +379,12 @@ function pdfCommercial({ titre, numero, dateStr, statut, infos = [], client = []
 
     // Signatures en bas de page (comme sur le bon de commande)
     if (signatures.length) {
-      const ySigC = H - 175;
-      const sigWC = (largeur - 16) / 2;
-      signatures.slice(0, 2).forEach((s, i) => {
+      // Position : en bas de page, ou juste sous le contenu s'il est long (nouvelle page si necessaire)
+      let ySigC = Math.max(H - 175, y + 20);
+      if (ySigC > H - 130) { doc.addPage(); ySigC = 60; }
+      const nSig = Math.min(signatures.length, 3);
+      const sigWC = (largeur - 16 * (nSig - 1)) / nSig;
+      signatures.slice(0, 3).forEach((s, i) => {
         const xs = G + i * (sigWC + 16);
         doc.rect(xs, ySigC, sigWC, 96).lineWidth(0.8).strokeColor(LIGNE).stroke();
         doc.font('Helvetica-Bold').fontSize(9).fillColor(BLEU).text(s.titre, xs + 10, ySigC + 7);

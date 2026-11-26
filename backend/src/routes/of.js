@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
 const { auth } = require('../middleware/auth');
+const { pdfCommercial, nombre, date } = require('../utils/pdfBonAchat');
 
 // GET /api/of
 router.get('/', auth, async (req, res) => {
@@ -110,6 +111,119 @@ router.post('/', auth, async (req, res) => {
 });
 
 // GET /api/of/:id
+// GET /api/of/:id/pdf — ordre de fabrication en PDF (paysage) : article, client, production, composition, instructions, signatures
+router.get('/:id/pdf', auth, async (req, res) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT o.*, c.raison_sociale AS client_nom, c.telephone,
+             a.designation AS article_nom, a.code AS article_code,
+             a.longueur_mm, a.largeur_mm, a.epaisseur_mm, a.poids_theorique_kg,
+             m.code AS machine_code, m.nom AS machine_nom,
+             u.nom||' '||u.prenom AS chef_nom,
+             at.libelle AS atelier_libelle
+      FROM ordres_fabrication o
+      LEFT JOIN clients_complet c ON c.id=o.client_id
+      LEFT JOIN articles a ON a.id=o.article_id
+      LEFT JOIN machines m ON m.id=o.at3_machine_assignee_id
+      LEFT JOIN utilisateurs u ON u.id=o.at3_valide_par
+      LEFT JOIN ateliers at ON at.id::text = o.atelier_id::text
+      WHERE o.id=$1`, [req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: 'OF introuvable' });
+    const d = rows[0];
+    const { rows: compoMp } = await db.query(`
+      SELECT a.code AS mp_code, a.designation AS mp_nom, sf.libelle AS groupe_libelle,
+             elem->>'pct' AS pct, elem->>'quantite' AS quantite_kg
+      FROM ordres_fabrication o,
+           jsonb_array_elements(COALESCE(o.at3_composition_of, '[]'::jsonb)) AS elem
+      JOIN articles a ON a.id = (elem->>'mp_id')::uuid
+      LEFT JOIN sous_familles_articles sf ON sf.id = a.sous_famille_id
+      WHERE o.id=$1
+      ORDER BY sf.libelle, a.code`, [req.params.id]);
+    const { rows: compoGroupes } = await db.query(`
+      SELECT ca.pct, sf.libelle AS groupe_libelle, f.libelle AS famille_libelle
+      FROM composition_article ca
+      JOIN sous_familles_articles sf ON sf.id = ca.groupe_id
+      JOIN familles_articles f ON f.id = ca.famille_id
+      WHERE ca.article_id = (SELECT article_id FROM ordres_fabrication WHERE id=$1)
+      ORDER BY ca.ordre`, [req.params.id]);
+
+    const n = v => parseFloat(v) || 0;
+    const poidsCible = n(d.at3_poids_cible_kg) || n(d.quantite_cible);
+    const pcs = n(d.quantite_pieces);
+
+    // Composition : matieres choisies par le chef AT3, sinon groupes de l'article, sinon composition saisie sur l'OF
+    let source;
+    if (compoMp.length) {
+      source = compoMp.map(r => ({ groupe: r.groupe_libelle || '-', code: r.mp_code || '', nom: r.mp_nom || '', pct: n(r.pct), kg: n(r.quantite_kg) }));
+    } else if (compoGroupes.length) {
+      source = compoGroupes.map(r => ({ groupe: r.groupe_libelle || r.famille_libelle || '-', code: r.groupe_libelle || '', nom: r.famille_libelle || r.groupe_libelle || '', pct: n(r.pct), kg: 0 }));
+    } else {
+      let brute = [];
+      try { brute = typeof d.composition === 'string' ? JSON.parse(d.composition) : (d.composition || []); } catch (e) { brute = []; }
+      source = (Array.isArray(brute) ? brute : []).map(c => ({ groupe: '-', code: c.code || '—', nom: c.designation || '—', pct: n(c.pct), kg: 0 }));
+    }
+    let totalPct = 0, totalKg = 0;
+    const lignesPdf = source.map(s => {
+      const kg = s.kg || (poidsCible > 0 ? Math.round(s.pct / 100 * poidsCible * 10) / 10 : 0);
+      totalPct += s.pct; totalKg += kg;
+      return [s.groupe, s.code, s.nom, nombre(s.pct, 1) + ' %', nombre(kg, 1) + ' kg'];
+    });
+
+    // Signature du chef d'atelier (si elle a ete importee dans son profil)
+    let sigChef = null;
+    if (d.at3_valide_par) {
+      const { rows: u } = await db.query('SELECT signature_path FROM utilisateurs WHERE id = $1', [d.at3_valide_par]);
+      const p = u[0] && u[0].signature_path;
+      if (p && p.startsWith('/uploads/signatures/')) {
+        try { sigChef = require('fs').readFileSync(require('path').join(__dirname, '../..', p)); } catch (e) { sigChef = null; }
+      }
+    }
+
+    const statutLabel = { planifie: 'Planifié', lance: 'Lancé', en_cours: 'En cours', pause: 'En pause', termine: 'Terminé', annule: 'Annulé' }[d.statut] || d.statut;
+    const priorite = { 1: 'Basse', 2: 'Normale', 3: 'Haute', 4: 'Urgente', 5: 'Critique' }[d.priorite || 1] || 'Normale';
+    const notes = [d.instructions ? 'Instructions : ' + d.instructions : null,
+                   d.at3_notes_regleur ? 'Instructions régleur : ' + d.at3_notes_regleur : null].filter(Boolean).join('\n');
+
+    const pdf = await pdfCommercial({
+      paysage: true,
+      qrUrl: `NAI-OF|${d.numero_of}|${d.article_code || ''}|${poidsCible.toFixed(1)}kg|${d.statut}`,
+      signatures: [
+        { titre: "CHEF D'ATELIER", nom: d.chef_nom || '—', image: sigChef },
+        { titre: 'RÉGLEUR', nom: 'À compléter', image: null },
+        { titre: 'OPÉRATEUR', nom: 'À compléter', image: null },
+      ],
+      titre: 'ORDRE DE FABRICATION',
+      numero: d.numero_of,
+      dateStr: date(d.created_at),
+      statut: statutLabel,
+      titreGauche: 'CLIENT ET LIVRAISON',
+      titreDroite: 'ARTICLE ET PRODUCTION',
+      client: ['Client : ' + (d.client_nom || '—'),
+               d.telephone ? 'Tél : ' + d.telephone : null,
+               'Livraison prévue : ' + (d.date_livraison_prevue ? date(d.date_livraison_prevue) : '—'),
+               'Priorité : ' + priorite],
+      infos: ['Article : ' + (d.article_code || '—') + ' — ' + (d.article_nom || '—'),
+              d.longueur_mm ? 'Dimensions : ' + nombre(d.longueur_mm, 0) + ' x ' + nombre(d.largeur_mm, 0) + ' mm' : null,
+              d.epaisseur_mm ? 'Épaisseur : ' + nombre(d.epaisseur_mm, 3) + ' mm' : null,
+              d.poids_theorique_kg ? 'Poids théorique : ' + nombre(d.poids_theorique_kg, 4) + ' kg / pièce' : null,
+              'Atelier : ' + (d.atelier_libelle || '—'),
+              'Machine : ' + (((d.machine_code || '') + ' ' + (d.machine_nom || '')).trim() || '—'),
+              'Temps prévu : ' + (d.temps_prevu_min ? d.temps_prevu_min + ' min' : '—'),
+              'Début prévu : ' + (d.date_debut_prevue ? date(d.date_debut_prevue) : '—')],
+      entete: [{ t: 'Groupe', w: 130, al: 'left' }, { t: 'Code MP', w: 110, al: 'left' }, { t: 'Désignation', w: 302, al: 'left' },
+               { t: '%', w: 100, al: 'right' }, { t: 'Qté (kg)', w: 120, al: 'right' }],
+      lignes: lignesPdf,
+      totaux: [['Quantité cible', (pcs ? nombre(pcs, 0) + ' pcs · ' : '') + nombre(poidsCible, 1) + ' kg'],
+               ['Total composition', nombre(totalPct, 1) + ' % · ' + nombre(totalKg, 1) + ' kg', true]],
+      notes,
+    });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.setHeader('Content-Disposition', `inline; filename="${d.numero_of || 'of'}.pdf"`);
+    res.send(pdf);
+  } catch (e) { console.error('[OF] pdf', e); res.status(500).json({ error: e.message }); }
+});
+
 router.get('/:id', auth, async (req, res) => {
   try {
     const { rows } = await db.query(`
