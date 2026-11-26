@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { AuthProvider } from './hooks/useAuth.jsx';
 import App from './App';
 import './index.css';
+import './utils/legendesIcones.js';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <BrowserRouter>

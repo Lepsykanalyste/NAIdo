@@ -52,7 +52,7 @@ const cheminTransit = (m, c) => (m === 'GET' && c === '/api/achat/transit/comman
 // Commercial : transformer un bon de commande client en demande de fabrication
 const cheminCommercial = (m, c) => m === 'POST' && /^\/api\/bc\/[^/]+\/transformer-df$/.test(c);
 const cheminReception = (m, c) => (m === 'PUT' && /^\/api\/achat\/commandes\/[^/]+\/receptionner$/.test(c))
-  || (m === 'GET' && (/^\/api\/achat\/commandes\/[^/]+\/receptions$/.test(c) || /^\/api\/achat\/receptions\/[^/]+\/pdf$/.test(c)));
+  || (m === 'GET' && (c === '/api/achat/commandes' || /^\/api\/achat\/commandes\/[^/]+(\/receptions)?$/.test(c) || /^\/api\/achat\/receptions\/[^/]+\/pdf$/.test(c)));
 function decider(roleBrut, methode, chemin) {
   const role = normaliserRole(roleBrut);
   if (role === 'super_admin') return { autorise: true, raison: 'super_admin' };

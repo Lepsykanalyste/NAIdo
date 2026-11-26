@@ -842,7 +842,7 @@ function AchatsStandard() {
     (colF.max === '' || Number(c.montant_ttc) <= Number(colF.max)) &&
     (!colF.statut || c.statut === colF.statut));
 
-  const charger = () => axios.get(`${API}/achat/commandes${filtre ? `?statut=${filtre}` : ''}`).then(r => setCommandes(Array.isArray(r.data) ? r.data : [])).catch(() => {});
+  const charger = () => axios.get(`${API}/achat/commandes${filtre ? `?statut=${filtre}` : ''}`).then(r => setCommandes(Array.isArray(r.data) ? r.data : [])).catch(e => { setCommandes([]); toast.error(msg(e)); });
   useEffect(() => { charger(); }, [filtre, rafraichir]);
   // Une action (validation, refus, envoi, reception) met aussi a jour les alertes et le menu
   const recharger = () => { setRafraichir(n => n + 1); window.dispatchEvent(new Event('naido:alertes')); };
