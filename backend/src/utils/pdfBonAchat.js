@@ -297,7 +297,7 @@ function pdfReception({ numRec, cmd, rec, lignes, sign = null, nomRec = '' }) {
 }
 
 // Document commercial en PDF (devis, bon de commande client, demande de fabrication) : portrait, ou paysage pour les grands tableaux
-function pdfCommercial({ titre, numero, dateStr, statut, infos = [], client = [], entete = [], lignes = [], totaux = [], notes = '', paysage = false, qrUrl = null, signatures = [], titreGauche = 'CLIENT', titreDroite = 'INFORMATIONS', sousTitre = 'Service Commercial' }) {
+function pdfCommercial({ titre, numero, dateStr, statut, infos = [], client = [], entete = [], lignes = [], totaux = [], notes = '', paysage = false, qrUrl = null, signatures = [], titreGauche = 'CLIENT', titreDroite = 'INFORMATIONS', sousTitre = 'Service Commercial', tableau2 = null }) {
   return new Promise(async (resolve, reject) => {
     // QR code en haut a droite (meme place que sur le bon d'achat)
     let qr = null;
@@ -360,6 +360,33 @@ function pdfCommercial({ titre, numero, dateStr, statut, infos = [], client = []
       doc.moveTo(G, y).lineTo(L, y).lineWidth(0.4).strokeColor(LIGNE).stroke();
     });
 
+    // Deuxieme tableau (ex. composition des matieres d'un OF) ; message explicatif s'il est vide
+    if (tableau2) {
+      y += 16;
+      doc.font('Helvetica-Bold').fontSize(9).fillColor(BLEU).text(tableau2.titre, G, y);
+      y += 14;
+      if (tableau2.lignes.length) {
+        doc.rect(G, y, largeur, 20).fill(BLEU);
+        doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(8.5);
+        let x2 = G;
+        tableau2.entete.forEach(c => { doc.text(c.t, x2 + 6, y + 6, { width: c.w - 12, align: c.al }); x2 += c.w; });
+        doc.fillColor('#000000');
+        y += 20;
+        tableau2.lignes.forEach((vals, i) => {
+          const h2 = Math.max(18, doc.heightOfString(String(vals[2] || ''), { width: tableau2.entete[2].w - 12, fontSize: 8.5 }) + 6);
+          if (i % 2 === 1) doc.rect(G, y, largeur, h2).fill(ZEBRA);
+          doc.fillColor('#111827').font('Helvetica').fontSize(8.5);
+          let xx2 = G;
+          tableau2.entete.forEach((c, k) => { doc.text(String(vals[k] ?? ''), xx2 + 6, y + 4, { width: c.w - 12, align: c.al }); xx2 += c.w; });
+          y += h2;
+          doc.moveTo(G, y).lineTo(L, y).lineWidth(0.4).strokeColor(LIGNE).stroke();
+        });
+      } else {
+        doc.font('Helvetica-Oblique').fontSize(8.5).fillColor(GRIS).text(tableau2.vide || 'Aucune ligne', G, y, { width: largeur });
+        y += 18;
+      }
+    }
+
     // Totaux
     y += 12;
     const yTot0 = y;
@@ -386,9 +413,9 @@ function pdfCommercial({ titre, numero, dateStr, statut, infos = [], client = []
       // Position : en bas de page, ou juste sous le contenu s'il est long (nouvelle page si necessaire)
       let ySigC = Math.max(H - 175, y + 16);
       if (ySigC + 100 > H - 56) { doc.addPage(); ySigC = 60; }
-      const nSig = Math.min(signatures.length, 3);
+      const nSig = Math.min(signatures.length, 4);
       const sigWC = (largeur - 16 * (nSig - 1)) / nSig;
-      signatures.slice(0, 3).forEach((s, i) => {
+      signatures.slice(0, 4).forEach((s, i) => {
         const xs = G + i * (sigWC + 16);
         doc.rect(xs, ySigC, sigWC, 96).lineWidth(0.8).strokeColor(LIGNE).stroke();
         doc.font('Helvetica-Bold').fontSize(9).fillColor(BLEU).text(s.titre, xs + 10, ySigC + 7);

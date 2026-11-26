@@ -111,7 +111,7 @@ router.post('/', auth, async (req, res) => {
 });
 
 // GET /api/of/:id
-// GET /api/of/:id/pdf — ordre de fabrication en PDF (paysage) : article, client, production, composition, instructions, signatures
+// GET /api/of/:id/pdf — ordre de fabrication en PDF (paysage) : tous les articles de la demande, production, composition, instructions, signatures
 router.get('/:id/pdf', auth, async (req, res) => {
   try {
     const { rows } = await db.query(`
@@ -124,12 +124,32 @@ router.get('/:id/pdf', auth, async (req, res) => {
       FROM ordres_fabrication o
       LEFT JOIN clients_complet c ON c.id=o.client_id
       LEFT JOIN articles a ON a.id=o.article_id
-      LEFT JOIN machines m ON m.id=o.at3_machine_assignee_id
+      LEFT JOIN machines m ON m.id::text = COALESCE(o.at3_machine_assignee_id::text, o.machine_id::text)
       LEFT JOIN utilisateurs u ON u.id=o.at3_valide_par
-      LEFT JOIN ateliers at ON at.id::text = o.atelier_id::text
+      LEFT JOIN ateliers at ON at.code::text = o.atelier_id::text OR at.id::text = o.atelier_id::text
       WHERE o.id=$1`, [req.params.id]);
     if (!rows.length) return res.status(404).json({ error: 'OF introuvable' });
     const d = rows[0];
+
+    // Demande de fabrication d'origine : validation direction et articles du bon de commande
+    let df = null, lignesBc = [];
+    if (d.df_id) {
+      const r1 = await db.query(`
+        SELECT df.numero_df, df.validee_par, (u.nom||' '||u.prenom) AS valideur_nom
+        FROM demandes_fabrication df LEFT JOIN utilisateurs u ON u.id = df.validee_par
+        WHERE df.id = $1`, [d.df_id]);
+      df = r1.rows[0] || null;
+      const r2 = await db.query(`
+        SELECT bl.designation, bl.quantite_pieces, bl.quantite_kg,
+               a.code AS article_code, a.designation AS article_designation,
+               a.longueur_mm, a.largeur_mm, a.poids_theorique_kg
+        FROM demandes_fabrication df
+        JOIN bc_lignes bl ON bl.bc_id = df.bc_id
+        LEFT JOIN articles a ON a.id = bl.article_id
+        WHERE df.id = $1 ORDER BY bl.ordre`, [d.df_id]);
+      lignesBc = r2.rows;
+    }
+
     const { rows: compoMp } = await db.query(`
       SELECT a.code AS mp_code, a.designation AS mp_nom, sf.libelle AS groupe_libelle,
              elem->>'pct' AS pct, elem->>'quantite' AS quantite_kg
@@ -148,8 +168,26 @@ router.get('/:id/pdf', auth, async (req, res) => {
       ORDER BY ca.ordre`, [req.params.id]);
 
     const n = v => parseFloat(v) || 0;
-    const poidsCible = n(d.at3_poids_cible_kg) || n(d.quantite_cible);
-    const pcs = n(d.quantite_pieces);
+    const dims = (L, l) => (L ? nombre(L, 0) + ' x ' + nombre(l, 0) + ' mm' : '—');
+
+    // Articles a fabriquer : toutes les lignes du bon de commande ; a defaut, l'article de l'OF
+    let totalPcs = 0, totalKg = 0, lignesArt;
+    if (lignesBc.length) {
+      lignesArt = lignesBc.map(l => {
+        const p = n(l.quantite_pieces);
+        const kg = n(l.quantite_kg) || p * n(l.poids_theorique_kg);
+        totalPcs += p; totalKg += kg;
+        return [l.article_code || '', l.article_designation || l.designation || '', dims(l.longueur_mm, l.largeur_mm),
+                l.poids_theorique_kg ? nombre(l.poids_theorique_kg, 4) + ' kg' : '—', p ? nombre(p, 0) : '—', kg ? nombre(kg, 1) + ' kg' : '—'];
+      });
+    } else {
+      totalPcs = n(d.quantite_pieces);
+      totalKg = n(d.at3_poids_cible_kg) || n(d.quantite_cible);
+      lignesArt = [[d.article_code || '', d.article_nom || '', dims(d.longueur_mm, d.largeur_mm),
+                    d.poids_theorique_kg ? nombre(d.poids_theorique_kg, 4) + ' kg' : '—',
+                    totalPcs ? nombre(totalPcs, 0) : '—', totalKg ? nombre(totalKg, 1) + ' kg' : '—']];
+    }
+    const poidsBase = n(d.at3_poids_cible_kg) || n(d.quantite_cible) || totalKg;
 
     // Composition : matieres choisies par le chef AT3, sinon groupes de l'article, sinon composition saisie sur l'OF
     let source;
@@ -162,33 +200,36 @@ router.get('/:id/pdf', auth, async (req, res) => {
       try { brute = typeof d.composition === 'string' ? JSON.parse(d.composition) : (d.composition || []); } catch (e) { brute = []; }
       source = (Array.isArray(brute) ? brute : []).map(c => ({ groupe: '-', code: c.code || '—', nom: c.designation || '—', pct: n(c.pct), kg: 0 }));
     }
-    let totalPct = 0, totalKg = 0;
-    const lignesPdf = source.map(s => {
-      const kg = s.kg || (poidsCible > 0 ? Math.round(s.pct / 100 * poidsCible * 10) / 10 : 0);
-      totalPct += s.pct; totalKg += kg;
+    let totalPct = 0, totalKgComp = 0;
+    const lignesComp = source.map(s => {
+      const kg = s.kg || (poidsBase > 0 ? Math.round(s.pct / 100 * poidsBase * 10) / 10 : 0);
+      totalPct += s.pct; totalKgComp += kg;
       return [s.groupe, s.code, s.nom, nombre(s.pct, 1) + ' %', nombre(kg, 1) + ' kg'];
     });
 
-    // Signature du chef d'atelier (si elle a ete importee dans son profil)
-    let sigChef = null;
-    if (d.at3_valide_par) {
-      const { rows: u } = await db.query('SELECT signature_path FROM utilisateurs WHERE id = $1', [d.at3_valide_par]);
+    // Signatures (si elles ont ete importees dans le profil de chaque personne)
+    const sigDe = async uid => {
+      if (!uid) return null;
+      const { rows: u } = await db.query('SELECT signature_path FROM utilisateurs WHERE id = $1', [uid]);
       const p = u[0] && u[0].signature_path;
-      if (p && p.startsWith('/uploads/signatures/')) {
-        try { sigChef = require('fs').readFileSync(require('path').join(__dirname, '../..', p)); } catch (e) { sigChef = null; }
-      }
-    }
+      if (!p || !p.startsWith('/uploads/signatures/')) return null;
+      try { return require('fs').readFileSync(require('path').join(__dirname, '../..', p)); } catch (e) { return null; }
+    };
 
     const statutLabel = { planifie: 'Planifié', lance: 'Lancé', en_cours: 'En cours', pause: 'En pause', termine: 'Terminé', annule: 'Annulé' }[d.statut] || d.statut;
     const priorite = { 1: 'Basse', 2: 'Normale', 3: 'Haute', 4: 'Urgente', 5: 'Critique' }[d.priorite || 1] || 'Normale';
     const notes = [d.instructions ? 'Instructions : ' + d.instructions : null,
                    d.at3_notes_regleur ? 'Instructions régleur : ' + d.at3_notes_regleur : null].filter(Boolean).join('\n');
 
+    const totaux = [['Quantité totale à fabriquer', (totalPcs ? nombre(totalPcs, 0) + ' pcs · ' : '') + nombre(totalKg, 1) + ' kg', !lignesComp.length]];
+    if (lignesComp.length) totaux.push(['Total composition', nombre(totalPct, 1) + ' % · ' + nombre(totalKgComp, 1) + ' kg', true]);
+
     const pdf = await pdfCommercial({
       paysage: true,
-      qrUrl: `NAI-OF|${d.numero_of}|${d.article_code || ''}|${poidsCible.toFixed(1)}kg|${d.statut}`,
+      qrUrl: `NAI-OF|${d.numero_of}|${totalPcs}pcs|${totalKg.toFixed(1)}kg|${d.statut}`,
       signatures: [
-        { titre: "CHEF D'ATELIER", nom: d.chef_nom || '—', image: sigChef },
+        { titre: 'DIRECTION / VALIDATION', nom: (df && df.valideur_nom) || 'En attente', image: await sigDe(df && df.validee_par) },
+        { titre: "CHEF D'ATELIER AT3", nom: d.chef_nom || 'À compléter', image: await sigDe(d.at3_valide_par) },
         { titre: 'RÉGLEUR', nom: 'À compléter', image: null },
         { titre: 'OPÉRATEUR', nom: 'À compléter', image: null },
       ],
@@ -198,24 +239,27 @@ router.get('/:id/pdf', auth, async (req, res) => {
       dateStr: date(d.created_at),
       statut: statutLabel,
       titreGauche: 'CLIENT ET LIVRAISON',
-      titreDroite: 'ARTICLE ET PRODUCTION',
+      titreDroite: 'PRODUCTION',
       client: ['Client : ' + (d.client_nom || '—'),
                d.telephone ? 'Tél : ' + d.telephone : null,
                'Livraison prévue : ' + (d.date_livraison_prevue ? date(d.date_livraison_prevue) : '—'),
                'Priorité : ' + priorite],
-      infos: ['Article : ' + (d.article_code || '—') + ' — ' + (d.article_nom || '—'),
-              d.longueur_mm ? 'Dimensions : ' + nombre(d.longueur_mm, 0) + ' x ' + nombre(d.largeur_mm, 0) + ' mm' : null,
-              d.epaisseur_mm ? 'Épaisseur : ' + nombre(d.epaisseur_mm, 3) + ' mm' : null,
-              d.poids_theorique_kg ? 'Poids théorique : ' + nombre(d.poids_theorique_kg, 4) + ' kg / pièce' : null,
-              'Atelier : ' + (d.atelier_libelle || '—'),
+      infos: ['Demande de fabrication : ' + ((df && df.numero_df) || '—'),
+              'Atelier : ' + (d.atelier_libelle || d.atelier_id || '—'),
               'Machine : ' + (((d.machine_code || '') + ' ' + (d.machine_nom || '')).trim() || '—'),
               'Temps prévu : ' + (d.temps_prevu_min ? d.temps_prevu_min + ' min' : '—'),
               'Début prévu : ' + (d.date_debut_prevue ? date(d.date_debut_prevue) : '—')],
-      entete: [{ t: 'Groupe', w: 130, al: 'left' }, { t: 'Code MP', w: 110, al: 'left' }, { t: 'Désignation', w: 302, al: 'left' },
-               { t: '%', w: 100, al: 'right' }, { t: 'Qté (kg)', w: 120, al: 'right' }],
-      lignes: lignesPdf,
-      totaux: [['Quantité cible', (pcs ? nombre(pcs, 0) + ' pcs · ' : '') + nombre(poidsCible, 1) + ' kg'],
-               ['Total composition', nombre(totalPct, 1) + ' % · ' + nombre(totalKg, 1) + ' kg', true]],
+      entete: [{ t: 'Code', w: 90, al: 'left' }, { t: 'Désignation', w: 280, al: 'left' }, { t: 'Dimensions', w: 120, al: 'left' },
+               { t: 'Poids / pièce', w: 90, al: 'right' }, { t: 'Qté (pcs)', w: 90, al: 'right' }, { t: 'Qté (kg)', w: 92, al: 'right' }],
+      lignes: lignesArt,
+      tableau2: {
+        titre: 'COMPOSITION DES MATIÈRES PREMIÈRES',
+        entete: [{ t: 'Groupe', w: 130, al: 'left' }, { t: 'Code MP', w: 110, al: 'left' }, { t: 'Désignation', w: 302, al: 'left' },
+                 { t: '%', w: 100, al: 'right' }, { t: 'Qté (kg)', w: 120, al: 'right' }],
+        lignes: lignesComp,
+        vide: "Composition non renseignée : elle est définie par le chef d'atelier AT3 avant le lancement.",
+      },
+      totaux,
       notes,
     });
     res.setHeader('Content-Type', 'application/pdf');
