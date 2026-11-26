@@ -297,8 +297,11 @@ function pdfReception({ numRec, cmd, rec, lignes, sign = null, nomRec = '' }) {
 }
 
 // Document commercial en PDF (devis, bon de commande client, demande de fabrication) : portrait, ou paysage pour les grands tableaux
-function pdfCommercial({ titre, numero, dateStr, statut, infos = [], client = [], entete = [], lignes = [], totaux = [], notes = '', paysage = false }) {
-  return new Promise((resolve, reject) => {
+function pdfCommercial({ titre, numero, dateStr, statut, infos = [], client = [], entete = [], lignes = [], totaux = [], notes = '', paysage = false, qrUrl = null }) {
+  return new Promise(async (resolve, reject) => {
+    // QR code en haut a droite (meme place que sur le bon d'achat)
+    let qr = null;
+    if (qrUrl) { try { qr = await QRCode.toBuffer(qrUrl, { type: 'png', width: 240, margin: 1 }); } catch (e) { qr = null; } }
     const W = paysage ? 842 : 595;
     const H = paysage ? 595 : 842;
     const doc = new PDFDocument({ size: 'A4', layout: paysage ? 'landscape' : 'portrait', margin: 40 });
@@ -309,7 +312,7 @@ function pdfCommercial({ titre, numero, dateStr, statut, infos = [], client = []
     const G = 40;
     const L = W - 40;
     const largeur = L - G;
-    const xDroite = W - 40 - 305;
+    const xDroite = W - 40 - 305 - (qr ? 90 : 0);
 
     // Bandeau
     doc.rect(0, 0, W, 90).fill(BLEU);
@@ -320,6 +323,7 @@ function pdfCommercial({ titre, numero, dateStr, statut, infos = [], client = []
     doc.fontSize(9).text('Date : ' + (dateStr || '—') + (statut ? '  ·  ' + statut : ''), xDroite, 64, { width: 305, align: 'right' });
     doc.fillColor('#000000');
 
+    if (qr) { doc.rect(W - 40 - 78, 8, 80, 80).fill('#ffffff'); doc.image(qr, W - 40 - 76, 10, { width: 76 }); }
     // Client et informations
     const y0 = 104;
     const demi = (largeur - 16) / 2;

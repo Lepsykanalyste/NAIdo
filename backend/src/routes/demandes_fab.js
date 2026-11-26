@@ -159,6 +159,7 @@ router.get('/:id/pdf', auth, async (req, res) => {
     const statutLabel = { en_attente: 'En attente', validee: 'Validée', refusee: 'Refusée', annulee: 'Annulée', en_cours: 'En cours', terminee: 'Terminée' }[d.statut] || d.statut;
     const pdf = await pdfCommercial({
       paysage: true,
+      qrUrl: `DF ${d.numero_df} | ${kg.toFixed(1)} kg | ${Math.round(ttc)} FCFA | ${date(d.created_at)}`,
       titre: 'DEMANDE DE FABRICATION',
       numero: d.numero_df,
       dateStr: date(d.created_at),
