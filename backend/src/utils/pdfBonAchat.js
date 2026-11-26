@@ -180,7 +180,7 @@ function pdfBonAchat(cmd, lignes, urlQr, sign = {}) {
   });
 }
 
-// Bordereau de reception en PDF (remplace la version HTML)
+// Bon de livraison en PDF (bordereau de reception, avec transport, chauffeur, lots et type local/export)
 function pdfReception({ numRec, cmd, rec, lignes, sign = null, nomRec = '' }) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margin: 40 });
@@ -191,38 +191,53 @@ function pdfReception({ numRec, cmd, rec, lignes, sign = null, nomRec = '' }) {
     const G = 40;
     const L = 595 - 40;
     const largeur = L - G;
+    const estExport = cmd.type_achat === 'export';
+    const conteneur = rec.mode_transport === 'conteneur';
 
     // Bandeau
     doc.rect(0, 0, 595, 90).fill(BLEU);
     doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(22).text('NAI', G, 28);
     doc.font('Helvetica').fontSize(9).text('Service Achats - Magasin', G, 56);
-    doc.font('Helvetica-Bold').fontSize(16).text('BORDEREAU DE RÉCEPTION', 250, 26, { width: 305, align: 'right' });
-    doc.font('Helvetica').fontSize(11).text(numRec, 250, 48, { width: 305, align: 'right' });
-    doc.fontSize(9).text('Réception du ' + date(rec.date_reception), 250, 66, { width: 305, align: 'right' });
+    doc.font('Helvetica-Bold').fontSize(16).text('BON DE LIVRAISON', 250, 24, { width: 305, align: 'right' });
+    doc.font('Helvetica').fontSize(9).text('Bordereau de réception', 250, 44, { width: 305, align: 'right' });
+    doc.font('Helvetica').fontSize(11).text(numRec, 250, 58, { width: 305, align: 'right' });
+    doc.fontSize(9).text('Réception du ' + date(rec.date_reception) + '  ·  ' + (estExport ? 'EXPORT' : 'LOCAL'), 250, 74, { width: 305, align: 'right' });
     doc.fillColor('#000000');
 
-    // Commande / livraison
-    const y0 = 108;
+    // Commande et livraison
+    const y0 = 104;
     const demi = (largeur - 16) / 2;
+    const hBloc = 124;
     const bloc = (x, titre, lignesTxt) => {
-      doc.rect(x, y0, demi, 74).lineWidth(0.8).strokeColor(LIGNE).stroke();
+      doc.rect(x, y0, demi, hBloc).lineWidth(0.8).strokeColor(LIGNE).stroke();
       doc.rect(x, y0, demi, 18).fill(BLEU_CLAIR);
       doc.fillColor(BLEU).font('Helvetica-Bold').fontSize(9).text(titre, x + 10, y0 + 5);
-      let yy = y0 + 25;
-      doc.fillColor('#111827').font('Helvetica').fontSize(9);
-      lignesTxt.forEach(t => { doc.text(t, x + 10, yy, { width: demi - 20 }); yy += doc.heightOfString(t, { width: demi - 20 }) + 3; });
+      let yy = y0 + 24;
+      doc.fillColor('#111827').font('Helvetica').fontSize(8.5);
+      lignesTxt.filter(Boolean).forEach(t => {
+        doc.text(t, x + 10, yy, { width: demi - 20 });
+        yy += doc.heightOfString(t, { width: demi - 20 }) + 3;
+      });
     };
     bloc(G, 'COMMANDE', [
       'Bon de commande : ' + (cmd.numero_commande || '—'),
       'Fournisseur : ' + (cmd.raison_sociale || '—'),
+      'Type : ' + (estExport ? 'Export' : 'Local'),
+      cmd.commentaire ? 'Commentaire : ' + cmd.commentaire : null,
+      estExport ? 'Lot du conteneur : ' + (cmd.numero_lot_conteneur || '—') : null,
     ]);
+    const chauffeur = ((rec.chauffeur_prenom || '') + ' ' + (rec.chauffeur_nom || '')).trim() || '—';
     bloc(G + demi + 16, 'LIVRAISON', [
       'Bon de livraison : ' + (rec.reference_bl || '—'),
       'Reçu par : ' + (rec.cree_par_nom || '—'),
+      conteneur ? 'Conteneur n° : ' + (rec.numero_conteneur || '—') : 'Véhicule (immatriculation) : ' + (rec.immatriculation || '—'),
+      conteneur ? 'N° de plomb : ' + (rec.numero_plomb || '—') : null,
+      'Chauffeur : ' + chauffeur,
+      'Lot de la matière : ' + (rec.numero_lot_matiere || '—'),
     ]);
 
     // Tableau des lignes
-    let y = 200;
+    let y = y0 + hBloc + 14;
     const cols = [
       { t: 'Code', x: G, w: 60, al: 'left' },
       { t: 'Désignation', x: G + 60, w: 185, al: 'left' },
@@ -246,15 +261,15 @@ function pdfReception({ numRec, cmd, rec, lignes, sign = null, nomRec = '' }) {
       doc.moveTo(G, y).lineTo(L, y).lineWidth(0.4).strokeColor(LIGNE).stroke();
     });
 
-    // Notes
-    y += 14;
-    if (rec.notes) {
+    // Notes et commentaire de reception
+    const notes = [rec.commentaire ? 'Commentaire : ' + rec.commentaire : null, rec.notes || null].filter(Boolean).join('\n');
+    if (notes) {
+      y += 14;
       doc.font('Helvetica-Bold').fontSize(9).fillColor(BLEU).text('Notes', G, y);
-      doc.font('Helvetica').fontSize(9).fillColor('#111827').text(rec.notes, G, y + 12, { width: largeur });
+      doc.font('Helvetica').fontSize(9).fillColor('#111827').text(notes, G, y + 12, { width: largeur });
     }
 
-    // Signatures
-    // Les deux cases portent le nom et la signature de la personne qui a recu la marchandise
+    // Signatures : nom et signature de la personne qui a receptionne (dans les deux cases)
     const ySig = 676;
     const sigW = (largeur - 16) / 2;
     [[G, 'SERVICE ACHAT'], [G + sigW + 16, 'MAGASIN']].forEach(([x, titre]) => {
