@@ -44,6 +44,10 @@ function estPublique(methode, chemin) {
   return POLITIQUE.publiques.some((r) => methodeOk(r, methode) && correspond(r.motif, chemin));
 }
 
+// Transitaire : seulement la liste des commandes export, leurs etapes et le lot du conteneur (pas de prix)
+const cheminTransit = (m, c) => (m === 'GET' && c === '/api/achat/transit/commandes')
+  || (['GET', 'POST'].includes(m) && /^\/api\/achat\/commandes\/[^/]+\/evolution$/.test(c))
+  || (m === 'PUT' && /^\/api\/achat\/commandes\/[^/]+\/lot-conteneur$/.test(c));
 function decider(roleBrut, methode, chemin) {
   const role = normaliserRole(roleBrut);
   if (role === 'super_admin') return { autorise: true, raison: 'super_admin' };
@@ -51,6 +55,7 @@ function decider(roleBrut, methode, chemin) {
   if (POLITIQUE.tous_connectes.some((r) => methodeOk(r, methode) && correspond(r.motif, chemin))) return { autorise: true, raison: 'tous connectes' };
   // Espaces personnels : chaque utilisateur connecte ne voit que ses propres donnees (notifications de son role, photo, signature, compte mail)
   if (PERSONNELS.some((m) => correspond(m, chemin))) return { autorise: true, raison: 'espace personnel' };
+  if (role === 'transitaire' && cheminTransit(String(methode).toUpperCase(), chemin)) return { autorise: true, raison: 'transitaire (export)' };
   if (role === 'directeur') return { autorise: true, raison: 'directeur' };
   let meilleure = null;                                // regle la plus precise = celle qui a le plus de segments
   for (const r of POLITIQUE.regles) {

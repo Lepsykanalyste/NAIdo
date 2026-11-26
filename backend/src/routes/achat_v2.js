@@ -93,11 +93,12 @@ router.post('/commandes', auth, async (req, res) => {
     if (!d.of_id && !d.libelle_frais_id) throw userError('Indiquez un OF ou un libellé de frais', 400);
     const statut = 'brouillon';
     const { rows: [cmd] } = await client.query(`
-      INSERT INTO commandes_achat (statut,fournisseur_id,date_commande,date_livraison_prevue,montant_ht,taux_tva,montant_tva,montant_ttc,reference_fournisseur,notes,cree_par)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+      INSERT INTO commandes_achat (statut,fournisseur_id,date_commande,date_livraison_prevue,montant_ht,taux_tva,montant_tva,montant_ttc,reference_fournisseur,notes,cree_par,type_achat,commentaire)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
       [statut, d.fournisseur_id, d.date_commande || new Date().toISOString().slice(0, 10), d.date_livraison_prevue || null,
        totalHT, d.taux_tva === undefined ? 18 : num(d.taux_tva), totalTVA, totalHT + totalTVA,
-       d.reference_fournisseur || null, d.notes || null, req.user?.id || null]);
+       d.reference_fournisseur || null, d.notes || null, req.user?.id || null,
+       (d.type_achat === 'export' ? 'export' : 'local'), String(d.commentaire || '').trim() || null]);
     for (const l of lignes) {
       await client.query(`
         INSERT INTO lignes_achat (commande_id,article_id,designation,quantite_commandee,unite_id,prix_unitaire_ht,taux_tva,montant_ht,montant_ttc)
@@ -156,7 +157,14 @@ router.put('/commandes/:id/receptionner', auth, async (req, res, next) => {
   const client = await db.connect();
   try {
     await client.query('BEGIN');
-    const { date_reception, reference_bl, notes, lignes } = req.body || {};
+    const { date_reception, reference_bl, notes, lignes, mode_transport, numero_conteneur, numero_plomb,
+            chauffeur_nom, chauffeur_prenom, immatriculation, numero_lot_matiere, commentaire_reception } = req.body || {};
+    const txt = v => String(v || '').trim();
+    if (!['conteneur', 'vehicule'].includes(mode_transport)) throw userError('Indiquez si la livraison est par conteneur ou par véhicule', 400);
+    if (!txt(chauffeur_nom) || !txt(chauffeur_prenom)) throw userError('Nom et prénom du chauffeur obligatoires', 400);
+    if (!txt(numero_lot_matiere)) throw userError('Numéro de lot de la matière obligatoire', 400);
+    if (mode_transport === 'conteneur' && (!txt(numero_conteneur) || !txt(numero_plomb))) throw userError('Numéro de conteneur et numéro de plomb obligatoires', 400);
+    if (mode_transport === 'vehicule' && !txt(immatriculation)) throw userError("Immatriculation du véhicule obligatoire", 400);
     if (!Array.isArray(lignes)) throw userError('Aucune ligne a receptionner', 400);
 
     const cr = await client.query('SELECT * FROM commandes_achat WHERE id=$1 FOR UPDATE', [req.params.id]);
@@ -185,9 +193,12 @@ router.put('/commandes/:id/receptionner', auth, async (req, res, next) => {
     if (!aRecevoir.length) throw userError('Aucune quantite a receptionner (tout est deja recu, ou quantites nulles)', 400);
 
     const rec = await client.query(`
-      INSERT INTO receptions_achat (commande_id,date_reception,reference_bl,notes,cree_par)
-      VALUES ($1,$2,$3,$4,$5) RETURNING id`,
-      [cmd.id, date_reception || new Date().toISOString().slice(0, 10), reference_bl || null, notes || null, req.user?.id || null]);
+      INSERT INTO receptions_achat (commande_id,date_reception,reference_bl,notes,cree_par,mode_transport,numero_conteneur,numero_plomb,chauffeur_nom,chauffeur_prenom,immatriculation,numero_lot_matiere,commentaire)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
+      [cmd.id, date_reception || new Date().toISOString().slice(0, 10), reference_bl || null, notes || null, req.user?.id || null,
+       mode_transport, mode_transport === 'conteneur' ? txt(numero_conteneur) : null, mode_transport === 'conteneur' ? txt(numero_plomb) : null,
+       txt(chauffeur_nom), txt(chauffeur_prenom), mode_transport === 'vehicule' ? txt(immatriculation) : null,
+       txt(numero_lot_matiere), String(commentaire_reception || '').trim() || null]);
     const recId = rec.rows[0].id;
 
     // Le stock reçu doit aller dans l'emplacement de réception : sans lui, on refuse plutôt que de ranger au hasard
@@ -352,6 +363,73 @@ router.get('/receptions/:id/pdf', auth, async (req, res, next) => {
 });
 
 // ══════════════════════════════════════════════════════════════
+// ══════════════════════════════════════════════════════════════
+// TRANSIT : commandes export (etapes d'evolution et lot du conteneur saisis par le transitaire)
+// ══════════════════════════════════════════════════════════════
+const ETAPES_EXPORT = [
+  'Commande reçue par le fournisseur', 'Marchandise en préparation', 'Conteneur chargé',
+  'Conteneur plombé et expédié', 'Navire embarqué', 'Arrivée au port',
+  'Déclaration en douane déposée', 'Dédouanée', 'Sortie du port',
+  "En route vers l'usine", "Arrivée à l'usine",
+];
+
+// Liste des commandes export pour le transitaire : sans prix
+router.get('/transit/commandes', auth, async (req, res) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT ca.id, ca.numero_commande, ca.statut, ca.date_commande, ca.date_livraison_prevue,
+             ca.reference_fournisseur, ca.numero_lot_conteneur, ca.commentaire, f.raison_sociale,
+             (SELECT e.etape FROM evolution_commande_achat e WHERE e.commande_id = ca.id ORDER BY e.created_at DESC LIMIT 1) AS derniere_etape
+      FROM commandes_achat ca
+      LEFT JOIN fournisseurs f ON f.id = ca.fournisseur_id
+      WHERE ca.type_achat = 'export'
+      ORDER BY ca.created_at DESC`);
+    res.json({ etapes: ETAPES_EXPORT, commandes: rows });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Historique des etapes d'une commande export
+router.get('/commandes/:id/evolution', auth, async (req, res, next) => {
+  if (!UUID.test(req.params.id)) return next();
+  try {
+    const { rows } = await db.query(`
+      SELECT e.id, e.etape, e.commentaire, e.created_at, (u.prenom || ' ' || u.nom) AS par
+      FROM evolution_commande_achat e LEFT JOIN utilisateurs u ON u.id = e.cree_par
+      WHERE e.commande_id = $1 ORDER BY e.created_at`, [req.params.id]);
+    res.json(rows);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Ajouter une etape d'evolution (commande export uniquement)
+router.post('/commandes/:id/evolution', auth, async (req, res, next) => {
+  if (!UUID.test(req.params.id)) return next();
+  try {
+    const { etape, commentaire } = req.body || {};
+    if (!ETAPES_EXPORT.includes(etape)) return res.status(400).json({ error: 'Étape inconnue' });
+    const c = (await db.query('SELECT type_achat FROM commandes_achat WHERE id = $1', [req.params.id])).rows[0];
+    if (!c) return res.status(404).json({ error: 'Commande introuvable' });
+    if (c.type_achat !== 'export') return res.status(400).json({ error: 'Évolution réservée aux commandes export' });
+    await db.query(
+      'INSERT INTO evolution_commande_achat (commande_id, etape, commentaire, cree_par) VALUES ($1, $2, $3, $4)',
+      [req.params.id, etape, String(commentaire || '').trim() || null, req.user?.id || null]);
+    res.status(201).json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Numero de lot du conteneur (saisi par le transitaire)
+router.put('/commandes/:id/lot-conteneur', auth, async (req, res, next) => {
+  if (!UUID.test(req.params.id)) return next();
+  try {
+    const lot = String(req.body?.numero_lot_conteneur || '').trim();
+    if (!lot) return res.status(400).json({ error: 'Numéro de lot du conteneur obligatoire' });
+    const r = await db.query(
+      "UPDATE commandes_achat SET numero_lot_conteneur = $2 WHERE id = $1 AND type_achat = 'export' RETURNING id",
+      [req.params.id, lot]);
+    if (!r.rows.length) return res.status(404).json({ error: 'Commande export introuvable' });
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // INDICATEURS
 // ══════════════════════════════════════════════════════════════
 const SQL_STOCK_BAS = `
