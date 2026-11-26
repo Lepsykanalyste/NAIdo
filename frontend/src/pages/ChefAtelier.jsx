@@ -8074,9 +8074,9 @@ function ParametresSysteme() {
     'vente','achat','qhse','gmao','rh','kpi','ia','utilisateurs','parametres'];
   const ROLES = ['directeur','chef_atelier','responsable_qhse','responsable_rh',
     'technicien_regleur','operateur','controleur_qualite','comptable',
-    'responsable_stock','commercial','technicien_gmao','emballeur'];
+    'responsable_stock','commercial','technicien_gmao','emballeur','transitaire'];
   const ROLE_LABELS = {
-    directeur:'Directeur', chef_atelier:'Chef Atelier', responsable_qhse:'Resp. QHSE',
+    directeur:'Directeur', chef_atelier:'Chef Atelier', responsable_qhse:'Resp. QHSE', transitaire:'Transitaire',
     responsable_rh:'Resp. RH', technicien_regleur:'Tech. Régleur', operateur:'Opérateur',
     controleur_qualite:'Ctrl. Qualité', comptable:'Comptable',
     responsable_stock:'Resp. Stock', commercial:'Commercial',
