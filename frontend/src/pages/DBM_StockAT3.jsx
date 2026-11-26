@@ -185,11 +185,16 @@ export function ModuleDBM() {
     return b && b.qte_necessaire != null ? parseFloat(b.qte_necessaire) * (1 + TOLERANCE_COMMANDE) : null;
   };
   const totalGroupe = (groupeId) => lignes.reduce((s, l) => String(l.groupe_id) === String(groupeId) ? s + (parseFloat(l.qte_demandee) || 0) : s, 0);
+  // Plafond global : quantite de l'OF + 10 % pour le total de TOUTES les lignes (couvre aussi les matieres ajoutees a la main, hors groupes)
+  const poidsOf = ofSel ? parseFloat(ofSel.at3_poids_cible_kg || ofSel.quantite_cible || 0) : 0;
+  const plafondOf = poidsOf > 0 ? poidsOf * (1 + TOLERANCE_COMMANDE) : null;
+  const totalOf = () => lignes.reduce((s, l) => s + (parseFloat(l.qte_demandee) || 0), 0);
   const erreurLigne = (l) => {
     const q = parseFloat(l.qte_demandee) || 0;
     if (l.article_id && q > parseFloat(l.qte_dispo_mag || 0) + 1e-6) return `Supérieur au stock magasin : maximum ${fmtKg(l.qte_dispo_mag)} kg`;
     const p = l.groupe_id ? plafondGroupe(l.groupe_id) : null;
     if (p != null && totalGroupe(l.groupe_id) > p + 1e-6) return `Supérieur au besoin de l'OF + 10 % pour ce groupe : maximum ${fmtKg(p)} kg au total`;
+    if (plafondOf != null && totalOf() > plafondOf + 1e-6) return `Supérieur à la quantité de l'OF + 10 % : maximum ${fmtKg(plafondOf)} kg au total (${fmtKg(totalOf())} kg demandés)`;
     return null;
   };
   // Controle en direct du formulaire « Ajouter une matiere »
@@ -203,6 +208,9 @@ export function ModuleDBM() {
     const p = parseFloat(gSel.qte_necessaire) * (1 + TOLERANCE_COMMANDE);
     const deja = totalGroupe(gSel.groupe_id);
     if (deja + qAjout > p + 1e-6) erreurAjout = `Supérieur au besoin de l'OF + 10 % (${gSel.groupe_libelle}) : encore ${fmtKg(Math.max(0, p - deja))} kg possible`;
+  }
+  if (!erreurAjout && plafondOf != null && aSel && qAjout > 0 && totalOf() + qAjout > plafondOf + 1e-6) {
+    erreurAjout = `Supérieur à la quantité de l'OF + 10 % : encore ${fmtKg(Math.max(0, plafondOf - totalOf()))} kg possible au total`;
   }
 
   const creerDbm = async () => {
