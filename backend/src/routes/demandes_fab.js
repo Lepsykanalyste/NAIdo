@@ -3,6 +3,7 @@ const QRCode = require('qrcode');
 const router = express.Router();
 const db = require('../config/db');
 const { auth } = require('../middleware/auth');
+const { pdfCommercial, nombre, date } = require('../utils/pdfBonAchat');
 
 // GET /api/df
 router.get('/', auth, async (req, res) => {
@@ -120,7 +121,69 @@ router.put('/:id/refuser', auth, async (req, res) => {
 module.exports = router;
 
 // GET /api/df/:id/ticket — Document de Demande de Fabrication
+// GET /api/df/:id/pdf — demande de fabrication en PDF : toutes les lignes du bon de commande, quantites en pieces et en kg, totaux
 router.get('/:id/pdf', auth, async (req, res) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT df.*, c.raison_sociale AS client_nom, a.designation AS article_nom, a.code AS article_code,
+             u1.nom||' '||u1.prenom AS demandeur_nom, u2.nom||' '||u2.prenom AS valideur_nom,
+             o.numero_of, bc.numero_bc, bc.date_livraison_souhaitee
+      FROM demandes_fabrication df
+      LEFT JOIN clients_complet c ON c.id=df.client_id
+      LEFT JOIN articles a ON a.id=df.article_id
+      LEFT JOIN utilisateurs u1 ON u1.id=df.demandeur_id
+      LEFT JOIN utilisateurs u2 ON u2.id=df.validee_par
+      LEFT JOIN ordres_fabrication o ON o.id=df.of_id
+      LEFT JOIN bons_commande bc ON bc.id=df.bc_id
+      WHERE df.id=$1`, [req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: 'DF introuvable' });
+    const d = rows[0];
+    const { rows: bcl } = d.bc_id
+      ? await db.query('SELECT bl.*, a.code AS article_code, a.designation AS article_designation FROM bc_lignes bl LEFT JOIN articles a ON a.id=bl.article_id WHERE bl.bc_id=$1 ORDER BY bl.ordre', [d.bc_id])
+      : { rows: [] };
+    const n = v => parseFloat(v) || 0;
+    let pcs = 0, kg = 0, ttc = 0;
+    let lignesPdf;
+    if (bcl.length) {
+      lignesPdf = bcl.map(l => {
+        pcs += n(l.quantite_pieces); kg += n(l.quantite_kg); ttc += n(l.montant_ttc);
+        return [l.article_code || '', l.article_designation || l.designation || '',
+                l.quantite_pieces ? nombre(l.quantite_pieces, 0) : '—',
+                l.quantite_kg ? nombre(l.quantite_kg, 2) : '—',
+                nombre(l.prix_unitaire_ht), nombre(l.montant_ttc)];
+      });
+    } else {
+      kg = n(d.quantite_demandee);
+      lignesPdf = [[d.article_code || '', d.article_nom || '', '—', nombre(kg, 2), '—', '—']];
+    }
+    const statutLabel = { en_attente: 'En attente', validee: 'Validée', refusee: 'Refusée', annulee: 'Annulée', en_cours: 'En cours', terminee: 'Terminée' }[d.statut] || d.statut;
+    const pdf = await pdfCommercial({
+      titre: 'DEMANDE DE FABRICATION',
+      numero: d.numero_df,
+      dateStr: date(d.created_at),
+      statut: statutLabel,
+      client: ['Client : ' + (d.client_nom || '—'),
+               'Livraison : ' + (d.date_livraison_souhaitee ? date(d.date_livraison_souhaitee) : '—'),
+               'Priorité : ' + (d.priorite ?? '—'),
+               'Spécifications : ' + (d.description || '—')],
+      infos: ["BC d'origine : " + (d.numero_bc || '—'),
+              'OF généré : ' + (d.numero_of || '—'),
+              'Demandeur : ' + (d.demandeur_nom || '—'),
+              'Validé par : ' + (d.valideur_nom || '—')],
+      entete: [{ t: 'Code', w: 60, al: 'left' }, { t: 'Désignation', w: 185, al: 'left' }, { t: 'Qté (pcs)', w: 70, al: 'right' },
+               { t: 'Qté (kg)', w: 70, al: 'right' }, { t: 'Prix HT', w: 60, al: 'right' }, { t: 'Montant TTC', w: 70, al: 'right' }],
+      lignes: lignesPdf,
+      totaux: [['Quantité totale', (pcs ? nombre(pcs, 0) + ' pcs · ' : '') + nombre(kg, 2) + ' kg'],
+               ['Total TTC', nombre(ttc) + ' FCFA', true]],
+    });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${d.numero_df || 'df'}.pdf"`);
+    res.send(pdf);
+  } catch (e) { console.error('[DF] pdf', e); res.status(500).json({ error: e.message }); }
+});
+
+// Ancienne version HTML (conservee pour impression)
+router.get('/:id/pdf-html', auth, async (req, res) => {
   try {
     const { rows } = await db.query(`
       SELECT df.*, 
