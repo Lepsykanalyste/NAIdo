@@ -262,6 +262,12 @@ router.get('/commandes/:id/receptions', auth, async (req, res, next) => {
 
 // GET /commandes/:id/pdf — bon de commande
 // Signature image d'une personne (importee dans son compte), ou null
+// Nom de la personne (affiche sous sa signature sur le bon)
+async function nomDe(userId) {
+  if (!userId) return '';
+  const { rows } = await db.query('SELECT prenom, nom FROM utilisateurs WHERE id = $1', [userId]);
+  return rows[0] ? ((rows[0].prenom || '') + ' ' + (rows[0].nom || '')).trim() : '';
+}
 async function signatureDe(userId) {
   if (!userId) return null;
   const { rows } = await db.query('SELECT signature_path FROM utilisateurs WHERE id = $1', [userId]);
@@ -289,7 +295,7 @@ router.get('/commandes/:id/pdf', authOuLien, async (req, res, next) => {
       'SELECT l.*, a.code AS article_code, um.code AS unite_code FROM lignes_achat l LEFT JOIN articles a ON a.id = l.article_id LEFT JOIN unites_mesure um ON um.id = l.unite_id WHERE l.commande_id = $1 ORDER BY l.created_at', [cmd.id]);
     const base = process.env.APP_BASE_URL || `${req.protocol}://${req.get('host')}`;
     const urlQr = `${base}/api/achat/commandes/${cmd.id}/pdf?t=${lienSigne.signer(cmd.id)}`;
-    const sign = { achat: await signatureDe(cmd.cree_par), direction: await signatureDe(cmd.validee_par) };
+    const sign = { achat: await signatureDe(cmd.cree_par), direction: await signatureDe(cmd.validee_par), direction_nom: await nomDe(cmd.validee_par) };
     const pdf = await pdfBonAchat(cmd, lignes, urlQr, sign);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="${cmd.numero_commande}.pdf"`);
@@ -515,7 +521,7 @@ router.post('/commandes/:id/envoyer', auth, async (req, res) => {
         + `<table style="border-collapse:collapse;width:100%" border="1" cellpadding="6"><thead><tr><th>Designation</th><th>Quantite</th><th>P.U. HT</th><th>Montant TTC</th></tr></thead><tbody>${lignesHtml}</tbody></table>`
         + `<p><b>Total HT : ${esc(cmd.montant_ht)} FCFA &mdash; Total TTC : ${esc(cmd.montant_ttc)} FCFA</b></p><p>NAI &mdash; Service achats</p></div>`;
       const baseEnvoi = process.env.APP_BASE_URL || `${req.protocol}://${req.get('host')}`;
-      const sign = { achat: await signatureDe(cmd.cree_par), direction: await signatureDe(cmd.validee_par) };
+      const sign = { achat: await signatureDe(cmd.cree_par), direction: await signatureDe(cmd.validee_par), direction_nom: await nomDe(cmd.validee_par) };
       const pdfBon = await pdfBonAchat(cmd, lignes, `${baseEnvoi}/api/achat/commandes/${cmd.id}/pdf?t=${lienSigne.signer(cmd.id)}`, sign);
       await envoyerDepuisCompte(req.user.id, { to: adresse, subject: 'Bon de commande ' + cmd.numero_commande + ' - NAI', html, attachments: [{ filename: cmd.numero_commande + '.pdf', content: pdfBon, contentType: 'application/pdf' }] });
     }

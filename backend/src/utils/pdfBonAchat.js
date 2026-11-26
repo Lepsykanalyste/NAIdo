@@ -156,17 +156,20 @@ function pdfBonAchat(cmd, lignes, urlQr, sign = {}) {
       // ----- Signatures (en bas de la page) -----
       const ySig = Math.max(y + 8, 668);
       const sigW = (largeur - 16) / 2;
-      [[G, 'SERVICE ACHAT', cmd.cree_par_nom || '', sign.achat],
-       [G + sigW + 16, 'DIRECTION', (cmd.validee_at || cmd.confirme_at) ? 'Validé le ' + date(cmd.validee_at || cmd.confirme_at) : 'En attente de validation', sign.direction]]
-        .forEach(([x, titre, sous, image]) => {
-          doc.rect(x, ySig, sigW, 76).lineWidth(0.8).strokeColor(LIGNE).stroke();
+      const hBoite = 96;
+      const validee = cmd.validee_at || cmd.confirme_at;
+      [[G, 'SERVICE ACHAT', cmd.cree_par_nom || '', '', sign.achat],
+       [G + sigW + 16, 'DIRECTION', sign.direction_nom || (validee ? 'Validé' : 'En attente de validation'), validee ? 'Validé le ' + date(validee) : '', sign.direction]]
+        .forEach(([x, titre, nom, detail, image]) => {
+          doc.rect(x, ySig, sigW, hBoite).lineWidth(0.8).strokeColor(LIGNE).stroke();
           doc.font('Helvetica-Bold').fontSize(corps).fillColor(BLEU).text(titre, x + 10, ySig + 7);
-          doc.font('Helvetica').fontSize(corps).fillColor('#111827').text(sous, x + 10, ySig + 22, { width: sigW - 20 });
+          doc.font('Helvetica-Bold').fontSize(corps).fillColor('#111827').text(nom, x + 10, ySig + 21, { width: sigW - 20 });
+          if (detail) doc.font('Helvetica').fontSize(corps - 1).fillColor(GRIS).text(detail, x + 10, ySig + 34, { width: sigW - 20 });
           if (image) {
-            // Signature importee par la personne : redimensionnee pour tenir dans la case
-            try { doc.image(image, x + 10, ySig + 34, { fit: [sigW - 20, 26] }); } catch (e) { /* image illisible : case vide */ }
+            // Signature importee par la personne : agrandie, tient dans la case
+            try { doc.image(image, x + 10, ySig + 46, { fit: [sigW - 20, 36] }); } catch (e) { /* image illisible : case vide */ }
           }
-          doc.fillColor(GRIS).fontSize(7).text('Signature', x + 10, ySig + 63);
+          doc.fillColor(GRIS).fontSize(7).text('Signature', x + 10, ySig + hBoite - 12);
         });
 
       doc.font('Helvetica').fontSize(7.5).fillColor(GRIS)
