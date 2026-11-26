@@ -362,6 +362,7 @@ function pdfCommercial({ titre, numero, dateStr, statut, infos = [], client = []
 
     // Totaux
     y += 12;
+    const yTot0 = y;
     const wT = paysage ? 340 : largeur - 300;
     const xT = L - wT;
     totaux.forEach(([lib, val, gras]) => {
@@ -372,16 +373,19 @@ function pdfCommercial({ titre, numero, dateStr, statut, infos = [], client = []
     });
 
     if (notes) {
-      y += 14;
-      doc.font('Helvetica-Bold').fontSize(9).fillColor(BLEU).text('Notes', G, y);
-      doc.font('Helvetica').fontSize(9).fillColor('#111827').text(notes, G, y + 12, { width: largeur });
+      // En paysage, les notes sont a gauche des totaux ; en portrait, sous les totaux
+      const largeurNotes = paysage ? largeur - wT - 20 : largeur;
+      const yNotes = paysage ? yTot0 : y + 14;
+      doc.font('Helvetica-Bold').fontSize(9).fillColor(BLEU).text('Notes', G, yNotes);
+      doc.font('Helvetica').fontSize(9).fillColor('#111827').text(notes, G, yNotes + 12, { width: largeurNotes });
+      y = Math.max(y, yNotes + 12 + doc.heightOfString(notes, { width: largeurNotes }));
     }
 
     // Signatures en bas de page (comme sur le bon de commande)
     if (signatures.length) {
       // Position : en bas de page, ou juste sous le contenu s'il est long (nouvelle page si necessaire)
-      let ySigC = Math.max(H - 175, y + 20);
-      if (ySigC > H - 130) { doc.addPage(); ySigC = 60; }
+      let ySigC = Math.max(H - 175, y + 16);
+      if (ySigC + 100 > H - 56) { doc.addPage(); ySigC = 60; }
       const nSig = Math.min(signatures.length, 3);
       const sigWC = (largeur - 16 * (nSig - 1)) / nSig;
       signatures.slice(0, 3).forEach((s, i) => {
