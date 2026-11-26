@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
 const { auth } = require('../middleware/auth');
+const { pdfCommercial, nombre, date } = require('../utils/pdfBonAchat');
 
 // GET /api/bc
 router.get('/', auth, async (req, res) => {
@@ -93,8 +94,55 @@ router.get('/:id/lignes', auth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// GET /api/bc/:id/pdf
+// GET /api/bc/:id/pdf — bon de commande client en PDF
 router.get('/:id/pdf', auth, async (req, res) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT bc.*, c.raison_sociale AS client_nom, c.telephone, c.email, c.adresse,
+             dv.numero_devis, df.numero_df, u.nom||' '||u.prenom AS commercial_nom
+      FROM bons_commande bc
+      LEFT JOIN clients_complet c ON c.id=bc.client_id
+      LEFT JOIN devis dv ON dv.id=bc.devis_id
+      LEFT JOIN demandes_fabrication df ON df.id=bc.df_id
+      LEFT JOIN utilisateurs u ON u.id=bc.commercial_id
+      WHERE bc.id=$1`, [req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: 'BC introuvable' });
+    const d = rows[0];
+    const { rows: lignes } = await db.query(`
+      SELECT bl.*, a.code AS article_code FROM bc_lignes bl
+      LEFT JOIN articles a ON a.id = bl.article_id
+      WHERE bl.bc_id = $1 ORDER BY bl.ordre`, [req.params.id]);
+    const n = v => parseFloat(v) || 0;
+    const lignesPdf = lignes.map(l => {
+      const qte = n(l.quantite_pieces) || n(l.quantite_kg);
+      return [l.article_code || '', l.designation || '', qte ? nombre(qte, 0) : '—', nombre(l.prix_unitaire_ht),
+              l.remise_pct ? nombre(l.remise_pct, 0) + ' %' : '—', nombre(l.montant_ttc)];
+    });
+    const statutLabel = { recu: 'Reçu', confirme: 'Confirmé', en_traitement: 'En traitement', transforme_df: 'DF créée', annule: 'Annulé' }[d.statut] || d.statut;
+    const fichier = d.bc_client_fichier ? 'joint' : (d.bc_client_a_venir ? 'à venir' : '—');
+    const pdf = await pdfCommercial({
+      titre: 'BON DE COMMANDE',
+      numero: d.numero_bc,
+      dateStr: date(d.created_at),
+      statut: statutLabel,
+      client: [d.client_nom, d.adresse, [d.telephone, d.email].filter(Boolean).join(' / ')],
+      infos: ['Réf. client : ' + (d.reference_client || '—'), 'Livraison souhaitée : ' + (d.date_livraison_souhaitee ? date(d.date_livraison_souhaitee) : '—'),
+              'Adresse de livraison : ' + (d.adresse_livraison || '—'), 'Devis : ' + (d.numero_devis || '—'), 'DF : ' + (d.numero_df || '—'),
+              'BC du client : ' + fichier, 'Commercial : ' + (d.commercial_nom || '—')],
+      entete: [{ t: 'Code', w: 60, al: 'left' }, { t: 'Désignation', w: 185, al: 'left' }, { t: 'Qté', w: 60, al: 'right' },
+               { t: 'Prix HT', w: 70, al: 'right' }, { t: 'Remise', w: 50, al: 'right' }, { t: 'Total TTC', w: 90, al: 'right' }],
+      lignes: lignesPdf,
+      totaux: [['Total HT', nombre(d.montant_ht) + ' FCFA'], ['TVA', nombre(d.montant_tva) + ' FCFA'], ['Total TTC', nombre(d.montant_total_fcfa) + ' FCFA', true]],
+      notes: d.notes || '',
+    });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${d.numero_bc || 'bc'}.pdf"`);
+    res.send(pdf);
+  } catch (e) { console.error('[BC] pdf', e); res.status(500).json({ error: e.message }); }
+});
+
+// Ancienne version HTML (conservee pour impression)
+router.get('/:id/pdf-html', auth, async (req, res) => {
   try {
     const { rows } = await db.query(`
       SELECT bc.*, c.raison_sociale AS client_nom, c.telephone, c.email, c.adresse,

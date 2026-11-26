@@ -296,5 +296,82 @@ function pdfReception({ numRec, cmd, rec, lignes, sign = null, nomRec = '' }) {
   });
 }
 
-module.exports = { pdfBonAchat, calculer, pdfReception };
+// Document commercial en PDF (devis, bon de commande client) : meme mise en page que le bon d'achat
+function pdfCommercial({ titre, numero, dateStr, statut, infos = [], client = [], entete = [], lignes = [], totaux = [], notes = '' }) {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: 'A4', margin: 40 });
+    const morceaux = [];
+    doc.on('data', m => morceaux.push(m));
+    doc.on('end', () => resolve(Buffer.concat(morceaux)));
+    doc.on('error', reject);
+    const G = 40;
+    const L = 595 - 40;
+    const largeur = L - G;
+
+    doc.rect(0, 0, 595, 90).fill(BLEU);
+    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(22).text('NAI', G, 28);
+    doc.font('Helvetica').fontSize(9).text('Service Commercial', G, 56);
+    doc.font('Helvetica-Bold').fontSize(16).text(titre, 250, 24, { width: 305, align: 'right' });
+    doc.font('Helvetica').fontSize(11).text(numero || '', 250, 46, { width: 305, align: 'right' });
+    doc.fontSize(9).text('Date : ' + (dateStr || '—') + (statut ? '  ·  ' + statut : ''), 250, 64, { width: 305, align: 'right' });
+    doc.fillColor('#000000');
+
+    const y0 = 104;
+    const demi = (largeur - 16) / 2;
+    const hBloc = 96;
+    const bloc = (x, titreB, lignesTxt) => {
+      doc.rect(x, y0, demi, hBloc).lineWidth(0.8).strokeColor(LIGNE).stroke();
+      doc.rect(x, y0, demi, 18).fill(BLEU_CLAIR);
+      doc.fillColor(BLEU).font('Helvetica-Bold').fontSize(9).text(titreB, x + 10, y0 + 5);
+      let yy = y0 + 24;
+      doc.fillColor('#111827').font('Helvetica').fontSize(8.5);
+      lignesTxt.filter(Boolean).forEach(t => {
+        doc.text(t, x + 10, yy, { width: demi - 20 });
+        yy += doc.heightOfString(t, { width: demi - 20 }) + 3;
+      });
+    };
+    bloc(G, 'CLIENT', client);
+    bloc(G + demi + 16, 'INFORMATIONS', infos);
+
+    let y = y0 + hBloc + 14;
+    doc.rect(G, y, largeur, 20).fill(BLEU);
+    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(8.5);
+    let x = G;
+    entete.forEach(c => { doc.text(c.t, x + 6, y + 6, { width: c.w - 12, align: c.al }); x += c.w; });
+    doc.fillColor('#000000');
+    y += 20;
+    lignes.forEach((vals, i) => {
+      const hauteur = Math.max(18, doc.heightOfString(String(vals[1] || ''), { width: entete[1].w - 12, fontSize: 8.5 }) + 6);
+      if (i % 2 === 1) doc.rect(G, y, largeur, hauteur).fill(ZEBRA);
+      doc.fillColor('#111827').font('Helvetica').fontSize(8.5);
+      let xx = G;
+      entete.forEach((c, k) => { doc.text(String(vals[k] ?? ''), xx + 6, y + 4, { width: c.w - 12, align: c.al }); xx += c.w; });
+      y += hauteur;
+      doc.moveTo(G, y).lineTo(L, y).lineWidth(0.4).strokeColor(LIGNE).stroke();
+    });
+
+    y += 12;
+    const xT = G + 300;
+    const wT = largeur - 300;
+    totaux.forEach(([lib, val, gras]) => {
+      doc.font(gras ? 'Helvetica-Bold' : 'Helvetica').fontSize(gras ? 10 : 9).fillColor('#111827');
+      doc.text(lib, xT + 10, y, { width: wT / 2 - 10, lineBreak: false });
+      doc.text(val, xT + wT / 2, y, { width: wT / 2 - 10, align: 'right', lineBreak: false });
+      y += gras ? 20 : 16;
+    });
+
+    if (notes) {
+      y += 14;
+      doc.font('Helvetica-Bold').fontSize(9).fillColor(BLEU).text('Notes', G, y);
+      doc.font('Helvetica').fontSize(9).fillColor('#111827').text(notes, G, y + 12, { width: largeur });
+    }
+
+    doc.font('Helvetica').fontSize(7.5).fillColor(GRIS)
+      .text(`NAI — ${numero || ''}`, G, 780, { width: largeur, align: 'center', lineBreak: false });
+    doc.end();
+  });
+}
+
+module.exports = { pdfBonAchat, calculer, pdfReception, pdfCommercial, nombre, date };
+
 

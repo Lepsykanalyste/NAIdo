@@ -16,6 +16,7 @@ const uploadBcClient = multer({
 });
 
 const { auth } = require('../middleware/auth');
+const { pdfCommercial, nombre, date } = require('../utils/pdfBonAchat');
 
 // GET /api/devis
 router.get('/', auth, async (req, res) => {
@@ -168,8 +169,54 @@ router.post('/:id/transformer-bc', auth, uploadBcClient.single('fichier_bc'), as
   finally { client.release(); }
 });
 
-// GET /api/devis/:id/pdf
+// GET /api/devis/:id/pdf — devis en PDF
 router.get('/:id/pdf', auth, async (req, res) => {
+  try {
+    const { rows: dv } = await db.query(`
+      SELECT d.*, c.raison_sociale AS client_nom, c.telephone, c.email, c.adresse,
+             u.nom||' '||u.prenom AS commercial_nom
+      FROM devis d
+      LEFT JOIN clients_complet c ON c.id=d.client_id
+      LEFT JOIN utilisateurs u ON u.id=d.commercial_id
+      WHERE d.id=$1`, [req.params.id]);
+    if (!dv.length) return res.status(404).json({ error: 'Devis introuvable' });
+    const d = dv[0];
+    const { rows: lignes } = await db.query(`
+      SELECT dl.*, a.code AS article_code FROM devis_lignes dl
+      LEFT JOIN articles a ON a.id=dl.article_id
+      WHERE dl.devis_id=$1 ORDER BY dl.ordre`, [req.params.id]);
+    const n = v => parseFloat(v) || 0;
+    let ht = 0, tva = 0;
+    const lignesPdf = lignes.map(l => {
+      const qte = n(l.quantite_pieces) || n(l.quantite_kg);
+      const pu = n(l.prix_unitaire_ht), rem = n(l.remise_pct);
+      const taux = l.taux_tva === null || l.taux_tva === undefined ? 18 : n(l.taux_tva);
+      const montant = pu * qte * (1 - rem / 100);
+      ht += montant; tva += montant * taux / 100;
+      return [l.article_code || '', l.designation || '', qte ? nombre(qte, 0) : '—', nombre(pu), rem ? nombre(rem, 0) + ' %' : '—', nombre(montant)];
+    });
+    const statutLabel = { brouillon: 'Brouillon', envoye: 'Envoyé', accepte: 'Accepté', refuse: 'Refusé', expire: 'Expiré', transforme: 'BC créé' }[d.statut] || d.statut;
+    const pdf = await pdfCommercial({
+      titre: 'DEVIS',
+      numero: d.numero_devis,
+      dateStr: date(d.created_at),
+      statut: statutLabel,
+      client: [d.client_nom, d.adresse, [d.telephone, d.email].filter(Boolean).join(' / ')],
+      infos: ['Validité : ' + (d.date_validite ? date(d.date_validite) : '—'), 'Commercial : ' + (d.commercial_nom || '—')],
+      entete: [{ t: 'Code', w: 60, al: 'left' }, { t: 'Désignation', w: 185, al: 'left' }, { t: 'Qté', w: 60, al: 'right' },
+               { t: 'Prix HT', w: 70, al: 'right' }, { t: 'Remise', w: 50, al: 'right' }, { t: 'Total HT', w: 90, al: 'right' }],
+      lignes: lignesPdf,
+      totaux: [['Total HT', nombre(ht) + ' FCFA'], ['TVA', nombre(tva) + ' FCFA'], ['Total TTC', nombre(ht + tva) + ' FCFA', true]],
+      notes: d.notes || '',
+    });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${d.numero_devis || 'devis'}.pdf"`);
+    res.send(pdf);
+  } catch (e) { console.error('[DEVIS] pdf', e); res.status(500).json({ error: e.message }); }
+});
+
+// Ancienne version HTML (conservee pour impression)
+router.get('/:id/pdf-html', auth, async (req, res) => {
   try {
     const { rows: dv } = await db.query(`
       SELECT d.*, c.raison_sociale AS client_nom, c.telephone, c.email, c.adresse,
