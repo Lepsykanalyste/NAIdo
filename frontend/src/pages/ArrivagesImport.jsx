@@ -36,7 +36,12 @@ export default function ArrivagesImport() {
 
   if (!R_LECTURE.includes(role)) return null;
   const { arrivages, quarantaine, transferts, peut_transferer } = data;
-  if (!arrivages.length && !quarantaine.length) return null;
+  if (!arrivages.length && !quarantaine.length) return (
+    <div style={{ background: '#f0f9ff', border: '2px dashed #7dd3fc', borderRadius: 12, padding: '12px 14px', marginBottom: 16, fontSize: 13, color: '#0369a1' }}>
+      <b>🚢 Arrivages conteneurs (import)</b> — aucun arrivage en cours.
+      <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>Quand une commande « Import (conteneur) » sera réceptionnée, la marchandise apparaîtra ici en zone de quarantaine, à transférer au stock du magasin MP.</div>
+    </div>
+  );
 
   const transferer = async (lots, libelle) => {
     if (!lots.length) return;
