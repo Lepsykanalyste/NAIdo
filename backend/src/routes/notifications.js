@@ -60,12 +60,36 @@ router.get('/', auth, async (req, res) => {
     ajouter('dbm', 'Demandes de matières (DBM) à livrer',
       await compter("SELECT COUNT(*)::int AS n FROM dbm WHERE statut IN ('en_attente', 'partiel')"));
     ajouter('dbm', 'Écarts de réception à traiter (reçu différent de livré)',
-      await compter("SELECT COUNT(*)::int AS n FROM dbm_livraisons WHERE receptionne = true AND qte_recue IS NOT NULL AND ABS(qte_recue - qte_livree) > 0.0005 AND ecart_vu_at IS NULL"));
+      await compter("SELECT COUNT(*)::int AS n FROM dbm_livraisons WHERE receptionne = true AND qte_recue IS NOT NULL AND ABS(qte_recue + COALESCE(qte_nc, 0) - qte_livree) > 0.0005 AND ecart_vu_at IS NULL"));
   }
   // Chef d'atelier : matieres livrees par le magasin, a receptionner (ecran 'dbm')
   if (['chef_atelier', 'super_admin'].includes(role)) {
     ajouter('dbm', 'Livraisons de matières à réceptionner',
       await compter("SELECT COUNT(DISTINCT numero_livraison)::int AS n FROM dbm_livraisons WHERE COALESCE(receptionne, false) = false AND numero_livraison IS NOT NULL"));
+  }
+  // Non-conformites matieres : une alerte a chaque etape du circuit (QHSE -> direction -> magasin -> atelier / achat)
+  if (['qhse', 'responsable_qhse', 'qualite', 'super_admin'].includes(role)) {
+    const ecranNc = role === 'qualite' ? 'nc' : 'qhse';
+    ajouter(ecranNc, 'Non-conformités matières à valider (QHSE)',
+      await compter("SELECT COUNT(*)::int AS n FROM nc_matiere WHERE statut = 'declaree'"));
+    ajouter(ecranNc, 'Non-conformités matières à clôturer',
+      await compter("SELECT COUNT(*)::int AS n FROM nc_matiere WHERE statut = 'retour_effectue'"));
+  }
+  if (ROLES_DIRECTION.includes(role)) {
+    ajouter('nc', 'Non-conformités matières à valider par la direction',
+      await compter("SELECT COUNT(*)::int AS n FROM nc_matiere WHERE statut = 'attente_direction'"));
+  }
+  if (['magasinier', 'magasinier_at3', 'magasinier_central', 'magasinier_mp', 'super_admin'].includes(role)) {
+    ajouter('dbm', 'Non-conformités : matières à retourner au fournisseur',
+      await compter("SELECT COUNT(*)::int AS n FROM nc_matiere WHERE statut = 'a_traiter_magasin'"));
+  }
+  if (['chef_atelier', 'super_admin'].includes(role)) {
+    ajouter('dbm', 'Décisions du QHSE sur vos non-conformités',
+      await compter("SELECT COUNT(*)::int AS n FROM nc_matiere WHERE origine = 'dbm' AND qhse_decision IS NOT NULL AND vu_atelier_at IS NULL"));
+  }
+  if (['achat', 'super_admin'].includes(role)) {
+    ajouter('achat', 'Non-conformités fournisseur en cours (information)',
+      await compter("SELECT COUNT(*)::int AS n FROM nc_matiere WHERE origine = 'fournisseur' AND statut IN ('a_traiter_magasin', 'retour_effectue') AND vu_achat_at IS NULL"));
   }
   if (['qualite', 'qhse', 'responsable_qhse', ...ROLES_DIRECTION].includes(role)) {
     ajouter('nc', 'Non-conformités ouvertes',

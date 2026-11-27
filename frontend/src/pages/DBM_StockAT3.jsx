@@ -14,6 +14,7 @@ import axios from 'axios';
 import toast from 'react-hot-toast';
 import { useAuth } from '../hooks/useAuth.jsx';
 import { ouvrirPdfSecurise } from '../utils/pdf';
+import NcMatieresPanel from './NcMatieres.jsx';
 
 const API = '/api';
 
@@ -723,6 +724,7 @@ export function ModuleReceptionDBM() {
         <button onClick={charger} style={{ background:'#e0f2fe', border:'1px solid #7dd3fc', color:'#0369a1', padding:'7px 12px', borderRadius:8, cursor:'pointer', fontSize:12 }}>🔄</button>
       </div>
 
+      <NcMatieresPanel />
       {/* Ecarts de reception : l'atelier a recu moins que ce qui a ete livre */}
       {ecarts.length > 0 && (
         <div style={{ background:'#fef2f2', border:'2px solid #fca5a5', borderRadius:12, padding:14, marginBottom:16 }}>
@@ -1196,6 +1198,8 @@ export function ModuleReceptionAT3() {
             qte_recue:  String(parseFloat(lv.qte_livree||0)),
             numero_lot: lv.numero_lot||'',
             observation: '',
+            qte_nc: '',
+            nc_motif: '',
           }))
         : (data.lignes||[]).map(l => ({
             ligne_id:   l.id,
@@ -1207,6 +1211,8 @@ export function ModuleReceptionAT3() {
             qte_recue:  parseFloat(l.qte_en_transit||0).toFixed(1),
             numero_lot: l.numero_lot||'',
             observation: '',
+            qte_nc: '',
+            nc_motif: '',
           }));
       setReceptions(src);
     } catch { toast.error('Erreur'); }
@@ -1216,7 +1222,10 @@ export function ModuleReceptionAT3() {
     if (!detail) return;
     // Vérifier observations obligatoires
     for (const r of receptions) {
-      if (parseFloat(r.qte_recue||0) !== parseFloat(r.qte_en_transit||0) && !r.observation?.trim()) {
+      const nc = parseFloat(r.qte_nc || 0) || 0;
+      if (nc > 0 && !(r.nc_motif || '').trim()) return toast.error(`${r.code} : indiquez le motif de la non-conformité`);
+      if (nc > 0 && (parseFloat(r.qte_recue||0) + nc) > parseFloat(r.qte_en_transit||0) + 0.0005) return toast.error(`${r.code} : quantité conforme + non conforme supérieure à la quantité livrée`);
+      if (Math.abs(parseFloat(r.qte_recue||0) + nc - parseFloat(r.qte_en_transit||0)) > 0.0005 && !r.observation?.trim()) {
         return toast.error(`${r.code} : expliquez l'écart (quantité reçue différente de la quantité livrée) dans la case Observation`);
       }
     }
@@ -1276,6 +1285,7 @@ export function ModuleReceptionAT3() {
         </div>
       )}
       {ongletRecep === 'attente' && (<>
+        <NcMatieresPanel />
 
 
       {detail && (
@@ -1320,7 +1330,7 @@ export function ModuleReceptionAT3() {
                   </td>
                   <td style={{ padding:'7px 10px', minWidth:230 }}>
                     {(() => {
-                      const diff = (parseFloat(r.qte_recue || 0) - parseFloat(r.qte_en_transit || 0));
+                      const diff = (parseFloat(r.qte_recue || 0) + (parseFloat(r.qte_nc || 0) || 0) - parseFloat(r.qte_en_transit || 0));
                       const ecart = Math.abs(diff) > 0.0005;
                       const vide = !(r.observation || '').trim();
                       return (<>
@@ -1335,6 +1345,30 @@ export function ModuleReceptionAT3() {
                         )}
                       </>);
                     })()}
+                    <div style={{ marginTop:6, paddingTop:6, borderTop:'1px dashed #fca5a5' }}>
+                      {((parseFloat(r.qte_nc) > 0) || r.nc_ouvert) ? (
+                        <div style={{ background:'#fef2f2', borderRadius:6, padding:6 }}>
+                          <div style={{ fontSize:11, fontWeight:700, color:'#b91c1c', marginBottom:4 }}>⚠ Non-conformité (envoyée au QHSE)</div>
+                          <label style={{ fontSize:10, fontWeight:600, display:'block' }}>Quantité non conforme (kg)</label>
+                          <input type="number" min="0" step="0.1" max={r.qte_en_transit} value={r.qte_nc || ''}
+                            onChange={e => {
+                              const total = parseFloat(r.qte_en_transit) || 0;
+                              const v = Math.min(Math.max(parseFloat(e.target.value) || 0, 0), total);
+                              setReceptions(prev => prev.map((x, xi) => xi === i ? { ...x, qte_nc: e.target.value === '' ? '' : String(v), qte_recue: String(Math.round((total - v) * 1000) / 1000) } : x));
+                            }}
+                            style={{ width:90, border:'2px solid #fca5a5', borderRadius:6, padding:'4px', fontSize:12, textAlign:'center', fontWeight:700, marginBottom:4 }} />
+                          <textarea rows={2} value={r.nc_motif || ''} placeholder="Motif de la non-conformité (obligatoire)"
+                            onChange={e => setReceptions(prev => prev.map((x, xi) => xi === i ? { ...x, nc_motif: e.target.value } : x))}
+                            style={{ width:'100%', border: (parseFloat(r.qte_nc) > 0 && !(r.nc_motif || '').trim()) ? '2px solid #dc2626' : '1px solid #fca5a5', borderRadius:6, padding:'5px', fontSize:12, boxSizing:'border-box', resize:'vertical', fontFamily:'inherit' }} />
+                          <div style={{ fontSize:10, color:'#6b7280' }}>Ces kg ne rentrent pas en stock : ils restent à l'atelier jusqu'à la décision du QHSE.</div>
+                          <button onClick={() => setReceptions(prev => prev.map((x, xi) => xi === i ? { ...x, nc_ouvert:false, qte_nc:'', nc_motif:'', qte_recue: String(x.qte_en_transit) } : x))}
+                            style={{ fontSize:10, background:'#fff', border:'1px solid #fca5a5', color:'#b91c1c', borderRadius:4, padding:'2px 8px', cursor:'pointer', marginTop:3 }}>Annuler la non-conformité</button>
+                        </div>
+                      ) : (
+                        <button onClick={() => setReceptions(prev => prev.map((x, xi) => xi === i ? { ...x, nc_ouvert:true } : x))}
+                          style={{ fontSize:11, background:'#fef2f2', border:'1px solid #fca5a5', color:'#b91c1c', borderRadius:6, padding:'3px 8px', cursor:'pointer', fontWeight:600 }}>⚠ Déclarer une non-conformité</button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

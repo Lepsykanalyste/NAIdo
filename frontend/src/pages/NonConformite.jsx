@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useAuth } from '../hooks/useAuth.jsx';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import NcMatieresPanel from './NcMatieres.jsx';
 
 const API = '/api';
 function fmtDate(d){return new Date(d||Date.now()).toLocaleDateString('fr-FR');}
@@ -171,6 +172,7 @@ export default function NonConformite() {
       </nav>
 
       <main style={{padding:'16px',maxWidth:720,margin:'0 auto'}}>
+        <NcMatieresPanel />
         {onglet==='nouvelle'&&(
           <div>
             <div style={S.card}>

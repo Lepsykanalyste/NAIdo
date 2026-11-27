@@ -13,6 +13,7 @@ import toast from 'react-hot-toast';
 import { confirmer, saisir } from '../utils/confirmer.jsx';
 import { ImageFichier, ouvrirFichier } from '../utils/fichiers.jsx';
 import { useAuth } from '../hooks/useAuth.jsx';
+import NcMatieresPanel from './NcMatieres.jsx';
 import { ouvrirPdfSecurise } from '../utils/pdf';
 
 const API = '/api';
@@ -367,7 +368,7 @@ function TransitPage() {
 export default function AchatsV2() {
   const { user } = useAuth();
   if (user?.role === 'transitaire') return <TransitPage />;
-  return <AchatsStandard />;
+  return (<><NcMatieresPanel /><AchatsStandard /></>);
 }
 
 // Roles qui voient les prix d'achat (le magasin ne voit que les quantites)

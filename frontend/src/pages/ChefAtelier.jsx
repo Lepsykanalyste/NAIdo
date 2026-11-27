@@ -9,6 +9,7 @@ import Atelier3Flux from './Atelier3Flux';
 import DBM_StockAT3, { DashboardMagasinMP, ModuleStockMP, ModuleStockAT3 } from './DBM_StockAT3';
 import RondeChef from './RondeChef';
 import NonConformite from './NonConformite';
+import NcMatieresPanel from './NcMatieres.jsx';
 import ControleAvantCession from './ControleAvantCession';
 import { CompositionFicheArticle, CompositionOF } from './CompositionArticle';
 import AchatsV2, { ArticlesDivers, DashboardAchat, DemandesAchatAtelier, SectionStockBas } from './Achats';
@@ -5328,6 +5329,7 @@ function QHSE() {
       {/* ══ NON-CONFORMITÉS ══ */}
       {onglet==='nc' && (
         <div>
+          <NcMatieresPanel />
           <div style={{display:'flex',gap:10,marginBottom:16,flexWrap:'wrap',alignItems:'center'}}>
             <div style={{display:'flex',gap:0}}>
               {['','ouverte','en_cours','en_verification','clos'].map(s=>(

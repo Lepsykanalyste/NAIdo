@@ -18,6 +18,7 @@ const router  = express.Router();
 const db      = require('../config/db');
 const { auth } = require('../middleware/auth');
 const { pdfCommercial } = require('../utils/pdfBonAchat');
+const { creerNc } = require('../utils/ncMatiere');
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EPS  = 0.0005;
@@ -77,24 +78,24 @@ const sendHtml = (res, html) => {
 // ══════════════════════════════════════════════════════════════
 
 // Colonnes de suivi des ecarts de reception (creees automatiquement si elles n'existent pas)
-db.query(`ALTER TABLE dbm_livraisons ADD COLUMN IF NOT EXISTS ecart_vu_at TIMESTAMPTZ, ADD COLUMN IF NOT EXISTS ecart_vu_par TEXT`)
+db.query(`ALTER TABLE dbm_livraisons ADD COLUMN IF NOT EXISTS ecart_vu_at TIMESTAMPTZ, ADD COLUMN IF NOT EXISTS ecart_vu_par TEXT, ADD COLUMN IF NOT EXISTS qte_nc NUMERIC(12,3)`)
   .catch(e => console.error('[DBM-LIV] colonnes ecart :', e.message));
 
 // GET /api/dbm/livraisons/ecarts — receptions dont la quantite recue differe de la quantite livree (a traiter par le magasin)
 router.get('/livraisons/ecarts', auth, async (req, res) => {
   try {
     const { rows } = await db.query(`
-      SELECT dv.id, dv.numero_livraison, dv.numero_lot, dv.qte_livree, dv.qte_recue, dv.observation_reception, dv.date_reception,
+      SELECT dv.id, dv.numero_livraison, dv.numero_lot, dv.qte_livree, dv.qte_recue, dv.qte_nc, dv.observation_reception, dv.date_reception,
              d.numero_dbm, o.numero_of, a.code, a.designation
       FROM dbm_livraisons dv
       JOIN dbm d ON d.id = dv.dbm_id
       LEFT JOIN ordres_fabrication o ON o.id = d.of_id
       LEFT JOIN articles a ON a.id = dv.article_id
-      WHERE dv.receptionne = true AND dv.qte_recue IS NOT NULL AND ABS(dv.qte_recue - dv.qte_livree) > $1
+      WHERE dv.receptionne = true AND dv.qte_recue IS NOT NULL AND ABS(dv.qte_recue + COALESCE(dv.qte_nc, 0) - dv.qte_livree) > $1
         AND dv.ecart_vu_at IS NULL
       ORDER BY dv.date_reception DESC NULLS LAST
       LIMIT 100`, [EPS]);
-    ok(res, rows.map(r => ({ ...r, ecart: num(r.qte_livree) - num(r.qte_recue) })));
+    ok(res, rows.map(r => ({ ...r, ecart: num(r.qte_livree) - num(r.qte_recue) - num(r.qte_nc) })));
   } catch (e) { err(res, e, 'Erreur ecarts de reception'); }
 });
 
@@ -166,9 +167,10 @@ router.get('/livraisons/:numero/pdf', auth, async (req, res) => {
     const totRecu  = lignes.reduce((s, l) => s + (l.receptionne ? num(l.qte_recue ?? l.qte_livree) : 0), 0);
     const rows = lignes.map(l => {
       const recu = l.receptionne ? num(l.qte_recue ?? l.qte_livree) : null;
-      const ecart = l.receptionne && Math.abs(recu - num(l.qte_livree)) > EPS;
+      const qnc = num(l.qte_nc);
+      const ecart = l.receptionne && Math.abs(recu + qnc - num(l.qte_livree)) > EPS;
       return [l.code || '—', l.designation || '—', l.numero_lot || '—', fmt(l.qte_livree, 3),
-              recu === null ? '—' : fmt(recu, 3), l.receptionne ? (ecart ? 'Reçu (écart)' : 'Reçu') : 'En transit'];
+              recu === null ? '—' : fmt(recu, 3), l.receptionne ? (qnc > EPS ? 'Reçu (NC ' + fmt(qnc, 1) + ')' : (ecart ? 'Reçu (écart)' : 'Reçu')) : 'En transit'];
     });
     const obs = lignes.filter(l => l.receptionne && l.observation_reception).map(l => `${l.code} : ${l.observation_reception}`).join(' | ');
     const pdf = await pdfCommercial({
@@ -440,6 +442,7 @@ router.put('/:id/receptionner', auth, async (req, res, next) => {
     if (!dbmRes.rows.length) throw userError('DBM introuvable');
     const dbm = dbmRes.rows[0];
     let nbTraitees = 0;
+    const ncCreees = [];
 
     for (const r of receptions) {
       const q = parseFloat(r.qte_recue);
@@ -458,9 +461,12 @@ router.put('/:id/receptionner', auth, async (req, res, next) => {
       const liv = livRes.rows[0];
       const envoye = liv ? num(liv.qte_livree) : num(r.qte_en_transit);
       if (!liv && envoye <= 0 && q <= 0) continue;
-      if (q > envoye + EPS) throw userError(`Quantite recue superieure a la quantite livree (${fmt(envoye, 3)} kg)`);
-      if (Math.abs(q - envoye) > EPS && !String(r.observation || '').trim())
-        throw userError(`${r.code || 'Matiere'} : la quantite recue (${fmt(q, 3)} kg) differe de la quantite livree (${fmt(envoye, 3)} kg), le motif de l'ecart est obligatoire`);
+      // Quantite non conforme : elle ne rentre pas en stock, elle reste a l'atelier en attendant la decision du QHSE
+      const nc = Math.max(0, parseFloat(r.qte_nc) || 0);
+      if (nc > EPS && !String(r.nc_motif || '').trim()) throw userError(`${r.code || 'Matiere'} : le motif de la non-conformite est obligatoire`);
+      if (q + nc > envoye + EPS) throw userError(`Quantite recue superieure a la quantite livree (${fmt(envoye, 3)} kg)`);
+      if (Math.abs(q + nc - envoye) > EPS && !String(r.observation || '').trim())
+        throw userError(`${r.code || 'Matiere'} : la quantite recue (${fmt(q + nc, 3)} kg) differe de la quantite livree (${fmt(envoye, 3)} kg), le motif de l'ecart est obligatoire`);
 
       if (liv) {
         await client.query(`UPDATE dbm_livraisons SET receptionne = true, qte_recue = $1, observation_reception = $2, date_reception = NOW() WHERE id = $3`,
@@ -468,6 +474,19 @@ router.put('/:id/receptionner', auth, async (req, res, next) => {
       }
       await client.query(`UPDATE dbm_lignes SET qte_livree = COALESCE(qte_livree,0) + $1, qte_en_transit = GREATEST(0, COALESCE(qte_en_transit,0) - $2) WHERE id = $3`,
         [q, envoye, r.ligne_id]);
+      if (nc > EPS) {
+        if (liv) {
+          await client.query('SAVEPOINT nc_liv');
+          try { await client.query('UPDATE dbm_livraisons SET qte_nc = $1 WHERE id = $2', [nc, liv.id]); await client.query('RELEASE SAVEPOINT nc_liv'); }
+          catch (e) { await client.query('ROLLBACK TO SAVEPOINT nc_liv'); }
+        }
+        const created = await creerNc(client, {
+          origine: 'dbm', article_id: ligne.article_id, famille_id: ligne.famille_id || r.famille_id, code: r.code, designation: r.designation,
+          numero_lot: lot, qte_nc: nc, motif: r.nc_motif, dbm_id: dbm.id, ligne_id: r.ligne_id, livraison_id: liv ? liv.id : null,
+          numero_livraison: r.numero_livraison, numero_dbm: dbm.numero_dbm, of_id: dbm.of_id, declarant_id: chef_id,
+        });
+        ncCreees.push(created.numero_nc);
+      }
 
       if (q > 0) {
         // Stock AT3 par lot
@@ -507,7 +526,8 @@ router.put('/:id/receptionner', auth, async (req, res, next) => {
     await client.query('UPDATE dbm SET statut = $1 WHERE id = $2', [statut, dbm.id]);
 
     await client.query('COMMIT');
-    ok(res, { message: statut === 'livre' ? 'Reception validee - DBM complete' : 'Reception validee', statut });
+    const msgNc = ncCreees.length ? ` - Non-conformite ${ncCreees.join(', ')} envoyee au QHSE` : '';
+    ok(res, { message: (statut === 'livre' ? 'Reception validee - DBM complete' : 'Reception validee') + msgNc, statut, non_conformites: ncCreees });
   } catch (e) { await client.query('ROLLBACK'); err(res, e, 'Erreur reception DBM'); }
   finally { client.release(); }
 });
