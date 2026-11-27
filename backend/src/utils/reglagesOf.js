@@ -23,6 +23,14 @@ function assurerReglages() {
           notes text
         )`);
       await db.query(`CREATE INDEX IF NOT EXISTS reglages_of_of_idx ON reglages_of (of_id, rang)`);
+      // Reprises : l'opérateur qui monte (changement de quart) reprend le réglage en cours, avec le même ticket
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS reglages_reprises (
+          id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+          of_id text NOT NULL, numero_ticket text, rang integer, session_id text,
+          operateur_id text, operateur_nom text, shift_id text, shift_nom text, mode text,
+          at timestamptz NOT NULL DEFAULT now()
+        )`);
       // Reprise de l'existant : le dernier réglage déjà validé de chaque OF devient son réglage n°1
       await db.query(`
         INSERT INTO reglages_of (of_id, numero_ticket, rang, motif, regleur_id, machine_id, valide_at, temperature, pression, vitesse, notes)
@@ -52,4 +60,27 @@ async function enregistrerReglage(client, d) {
   return { numero_ticket: numero, rang, motif };
 }
 
-module.exports = { assurerReglages, enregistrerReglage };
+// Reprise d'un réglage : même ticket, tracé au nom et au quart de l'opérateur de la session (mode : premier | modif | reprise)
+async function enregistrerReprise(client, d) {
+  await assurerReglages();
+  const rg = await client.query(`SELECT numero_ticket, rang FROM reglages_of WHERE of_id = $1 ORDER BY rang DESC LIMIT 1`, [String(d.of_id)]);
+  const s = await client.query(
+    `SELECT sp.operateur_id, sp.shift_id, sh.nom AS shift_nom, trim(COALESCE(u.prenom,'') || ' ' || COALESCE(u.nom,'')) AS operateur_nom
+     FROM sessions_production sp
+     LEFT JOIN shifts sh ON sh.id::text = sp.shift_id::text
+     LEFT JOIN utilisateurs u ON u.id::text = sp.operateur_id::text
+     WHERE sp.id::text = $1`, [String(d.session_id)]);
+  const r = rg.rows[0] || {};
+  const x = s.rows[0] || {};
+  await client.query(
+    `INSERT INTO reglages_reprises (of_id, numero_ticket, rang, session_id, operateur_id, operateur_nom, shift_id, shift_nom, mode)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [String(d.of_id), r.numero_ticket || null, r.rang || null, String(d.session_id), x.operateur_id ? String(x.operateur_id) : null,
+      x.operateur_nom || null, x.shift_id ? String(x.shift_id) : null, x.shift_nom || null, d.mode || 'reprise']);
+  if (x.operateur_id) {
+    await client.query(`UPDATE sessions_production SET regleur_id = $1, regleur_valide = true, regleur_validation_at = NOW() WHERE id::text = $2`, [x.operateur_id, String(d.session_id)]);
+  }
+  return { numero_ticket: r.numero_ticket || null, rang: r.rang || null, operateur_nom: x.operateur_nom || null, shift_nom: x.shift_nom || null };
+}
+
+module.exports = { assurerReglages, enregistrerReglage, enregistrerReprise };

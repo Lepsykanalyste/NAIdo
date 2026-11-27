@@ -38,7 +38,13 @@ const correspond = (motif, chemin) => {              // motif = debut du chemin,
 const PERSONNELS = ['/api/notifications', '/api/profil', '/api/mail', '/api/assistant', '/api/preferences'];
 const estLecture = (m) => ['GET', 'HEAD', 'OPTIONS'].includes(String(m).toUpperCase());
 const methodeOk = (regle, m) => !regle.methodes || regle.methodes.includes(String(m).toUpperCase());
-const normaliserRole = (r) => { r = String(r || '').toLowerCase().trim(); return (POLITIQUE.alias || {})[r] || r; };
+// AT3 : le régleur et l'opérateur d'extrusion sont la même personne : les comptes régleur ont les droits de l'opérateur d'extrusion
+const ALIAS_CODE = { regleur: 'operateur_ext', technicien_regleur: 'operateur_ext' };
+const normaliserRole = (r) => { r = String(r || '').toLowerCase().trim(); return ALIAS_CODE[r] || (POLITIQUE.alias || {})[r] || r; };
+// Réglage machine fait par l'opérateur d'extrusion : ticket de réglage, historique, reprise au changement de quart, signalement GMAO
+const cheminReglage = (m, c) => /^\/api\/regleur(\/|$)/.test(c)
+  || (m === 'PATCH' && /^\/api\/of\/[^/]+\/reglage$/.test(c))
+  || (m === 'POST' && /^\/api\/sessions\/[^/]+\/(reglage-repris|valider-regleur)$/.test(c));
 
 function estPublique(methode, chemin) {
   return POLITIQUE.publiques.some((r) => methodeOk(r, methode) && correspond(r.motif, chemin));
@@ -69,6 +75,7 @@ function decider(roleBrut, methode, chemin) {
   if (role === 'commercial' && cheminCommercial(String(methode).toUpperCase(), chemin)) return { autorise: true, raison: 'commercial : demande de fabrication' };
   if (NC_ROLES.includes(role) && /^\/api\/nc-matiere(\/|$)/.test(chemin)) return { autorise: true, raison: 'non-conformites matieres' };
   if (ARRIVAGES_ROLES.includes(role) && /^\/api\/arrivages-import(\/|$)/.test(chemin)) return { autorise: true, raison: 'arrivages import' };
+  if (role === 'operateur_ext' && cheminReglage(String(methode).toUpperCase(), chemin)) return { autorise: true, raison: 'operateur extrusion : reglage' };
   if (role === 'directeur') return { autorise: true, raison: 'directeur' };
   let meilleure = null;                                // regle la plus precise = celle qui a le plus de segments
   for (const r of POLITIQUE.regles) {

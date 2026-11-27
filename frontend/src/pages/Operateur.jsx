@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useAuth } from '../hooks/useAuth.jsx';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { EcranReglage, TicketImprimable as TicketReglage } from './Regleur';
 
 const API = '/api';
 
@@ -171,6 +172,7 @@ hr{border:none;border-top:1px dashed #000;margin:4px 0}.r{display:flex;justify-c
 <div class="r"><span>OPÉRATEUR</span><b>${r.operateur}</b></div><hr/>
 <div class="r" style="font-size:15px;font-weight:900"><span>NB BOBINES</span><b>${r.nb_bobines}</b></div>
 <div class="r" style="font-size:15px;font-weight:900"><span>POIDS NET</span><b>${r.poids_total} kg</b></div>
+${r.prevues?`<div class="r"><span>CUMUL OF</span><b>${r.cumul_of} / ${r.prevues}</b></div>`:''}
 <div class="r"><span>DÉCHETS</span><b>${r.poids_dechets} kg</b></div>
 ${r.duree_min?`<div class="r"><span>DURÉE</span><b>${Math.floor(r.duree_min/60)}h${String(r.duree_min%60).padStart(2,'0')}</b></div>`:''}
 <hr/>
@@ -204,6 +206,7 @@ ${r.duree_min?`<div class="r"><span>DURÉE</span><b>${Math.floor(r.duree_min/60)
           <div style={{borderTop:'1px dashed #000',margin:'5px 0'}}/>
           <div style={{display:'flex',justifyContent:'space-between',fontWeight:900,fontSize:16}}><span>NB BOBINES</span><strong>{recap.nb_bobines}</strong></div>
           <div style={{display:'flex',justifyContent:'space-between',fontWeight:900,fontSize:16}}><span>POIDS NET</span><strong>{recap.poids_total} kg</strong></div>
+          {recap.prevues&&<div style={{display:'flex',justifyContent:'space-between'}}><span style={{color:'#444'}}>CUMUL OF</span><strong>{recap.cumul_of} / {recap.prevues}</strong></div>}
           <div style={{display:'flex',justifyContent:'space-between'}}><span style={{color:'#444'}}>DÉCHETS</span><strong>{recap.poids_dechets} kg</strong></div>
           {recap.duree_min&&<div style={{display:'flex',justifyContent:'space-between'}}><span style={{color:'#444'}}>DURÉE</span><strong>{Math.floor(recap.duree_min/60)}h{String(recap.duree_min%60).padStart(2,'0')}</strong></div>}
           <div style={{borderTop:'1px dashed #000',margin:'5px 0'}}/>
@@ -307,6 +310,11 @@ export default function Operateur() {
   const [cloturant, setCloturant] = useState(false);
   const [causeArret,setCauseArret]= useState('');
   const [detailsArr,setDetailsArr]= useState('');
+  // Réglage (AT3 : l'opérateur d'extrusion fait lui-même le réglage)
+  const [reglageMode,setReglageMode]=useState(null);   // null | 'premier' | 'reprise' | 'modif' | 'pendant'
+  const [reglagesOf,setReglagesOf]=useState([]);
+  const [ticketReglageAff,setTicketReglageAff]=useState(null);
+  const [cumulOf,setCumulOf]=useState(null);           // bobines de l'OF, tous quarts confondus
 
   // Type de poste de l'opérateur (détermine ce qu'il voit)
   const typePoste = getTypePoste(user, machSel || ofSel);
@@ -357,6 +365,7 @@ export default function Operateur() {
   const chargerTickets=useCallback(async()=>{
     if(!session?.id)return;
     try{const{data}=await axios.get(`${API}/tickets/session/${session.id}`);setTickets(Array.isArray(data)?data:[]);}catch{}
+    try{const{data}=await axios.get(`${API}/tickets/of/${session.of_id}/resume`);setCumulOf(data);}catch{}
   },[session]);
 
   const chargerBobines=useCallback(()=>{
@@ -385,14 +394,40 @@ export default function Operateur() {
     setEtape('config');setTickets([]);setArretActif(null);setRecap(null);
   };
 
-  const demarrer=async()=>{
-    if(!ofSel||!shiftSel){toast.error('Sélectionnez un OF et un shift');return;}
+  const ouvrirTicketReglage=async(num,sessionId)=>{
+    const n=num||ofSel?.numero_ticket_reglage;
+    if(!n){toast.error('Aucun ticket de réglage pour cet OF');return;}
+    try{const{data}=await axios.get(`${API}/regleur/ticket/${encodeURIComponent(n)}/record`);setTicketReglageAff({...data,session_id:sessionId||session?.id||null});}
+    catch{toast.error('Ticket de réglage introuvable');}
+  };
+  const rafraichirOf=async(id)=>{
+    try{const{data}=await axios.get(`${API}/of/${id}`);const m={...ofSel,...data};setOfSel(m);saveLS('naido_of',m);return m;}
+    catch{return ofSel;}
+  };
+  // Démarre la session de l'opérateur. Extrusion : il a fait, modifié ou repris le réglage (un seul ticket par réglage, tracé à son nom et à son quart)
+  const demarrerSession=async(modeReglage,numeroTicket)=>{
     try{
       const{data}=await axios.post(`${API}/sessions`,{of_id:ofSel.id,machine_id:machineId,shift_id:shiftSel.id});
       setSession(data);saveLS('naido_session',data);
       if(ofSel.poids_mandrin_kg)setForm(p=>({...p,poids_mandrin:ofSel.poids_mandrin_kg.toString()}));
+      if(typePoste==='extrusion'){
+        if(modeReglage){try{await axios.post(`${API}/sessions/${data.id}/reglage-repris`,{of_id:ofSel.id,mode:modeReglage});}catch{}}
+        await rafraichirOf(ofSel.id);   // numéro et valeurs du réglage en vigueur
+      }
       setEtape('production');toast.success('Production démarrée !');
+      if(modeReglage&&modeReglage!=='reprise')ouvrirTicketReglage(numeroTicket,data.id);
     }catch(e){toast.error(e.response?.data?.error||'Erreur démarrage');}
+  };
+  const demarrer=async()=>{
+    if(!ofSel||!shiftSel){toast.error('Sélectionnez un OF et un shift');return;}
+    if(typePoste!=='extrusion'){demarrerSession();return;}
+    // Extrusion : pas de réglage sur l'OF -> l'opérateur le fait ; déjà réglé (autre quart) -> il le reprend ou le modifie
+    try{
+      const{data}=await axios.get(`${API}/regleur/of/${ofSel.id}/reglages`);
+      const liste=Array.isArray(data)?data:[];
+      setReglagesOf(liste);
+      setReglageMode(liste.length?'reprise':'premier');
+    }catch{toast.error('Lecture des réglages impossible');}
   };
 
   const validerTicket=async()=>{
@@ -443,7 +478,7 @@ export default function Operateur() {
       const poidsTotal=tickets.reduce((s,t)=>s+parseFloat(t.poids_net_kg||0),0);
       const poidsDechet=tickets.reduce((s,t)=>s+parseFloat(t.poids_dechets_kg||0),0);
       const dureeMin=session.created_at?Math.round((Date.now()-new Date(session.created_at).getTime())/60000):null;
-      setRecap({numero_of:ofSel?.numero_of||'—',article:ofSel?.article_nom||'—',machine:machineTicket?.code||machineTicket?.nom||'NC',shift:shiftSel?.nom||'—',operateur:`${user?.prenom||''} ${user?.nom||''}`.trim(),nb_bobines:tickets.length,poids_total:poidsTotal.toFixed(3),poids_dechets:poidsDechet.toFixed(3),duree_min:dureeMin,date:new Date().toLocaleDateString('fr-FR')});
+      setRecap({numero_of:ofSel?.numero_of||'—',article:ofSel?.article_nom||'—',machine:machineTicket?.code||machineTicket?.nom||'NC',shift:shiftSel?.nom||'—',operateur:`${user?.prenom||''} ${user?.nom||''}`.trim(),nb_bobines:tickets.length,cumul_of:cumulOf?cumulOf.nb_bobines:null,prevues:ofSel?.at3_nb_bobines_cibles||null,poids_total:poidsTotal.toFixed(3),poids_dechets:poidsDechet.toFixed(3),duree_min:dureeMin,date:new Date().toLocaleDateString('fr-FR')});
     }catch{toast.error('Erreur clôture');}
     finally{setCloturant(false);}
   };
@@ -454,6 +489,20 @@ export default function Operateur() {
   // Labels du type de poste
   const POSTE_LABELS = {extrusion:{icon:'🏭',label:'Extrusion',color:'#0369a1'},impression:{icon:'🖨',label:'Impression',color:'#0891b2'},soudure_decoupe:{icon:'🧵',label:'Soudure/Découpe',color:'#be123c'}};
   const posteInfo = POSTE_LABELS[typePoste] || POSTE_LABELS.extrusion;
+
+  // Réglage fait par l'opérateur lui-même (premier réglage, modification à la reprise, ou nouveau réglage pendant la production)
+  if(reglageMode==='premier'||reglageMode==='modif'||reglageMode==='pendant'){
+    const avant=reglageMode;
+    return <EcranReglage cible={{type:'of',data:ofSel,reprise:avant!=='premier'}} user={user}
+      onBack={()=>setReglageMode(avant==='modif'?'reprise':null)}
+      onSuccess={async(res)=>{
+        setReglageMode(null);
+        await rafraichirOf(ofSel.id);
+        const num=res&&res.numero_ticket_reglage;
+        if(avant==='pendant'){toast.success('Nouveau réglage enregistré');ouvrirTicketReglage(num,session?.id);}
+        else demarrerSession(avant,num);
+      }}/>;
+  }
 
   return(
     <div style={{minHeight:'100vh',background:'#f9fafb',fontFamily:'system-ui,sans-serif'}}>
@@ -480,6 +529,39 @@ export default function Operateur() {
             <button onClick={()=>axios.put(`${API}/alertes/${al.id}/lire`).then(chargerDonnees)} style={{background:'#f59e0b',border:'none',borderRadius:6,padding:'4px 8px',cursor:'pointer',fontSize:11,fontWeight:700}}>✓ Lu</button>
           </div>
         ))}
+
+        {/* ══ REPRISE DU RÉGLAGE (changement de quart) ══ */}
+        {reglageMode==='reprise'&&ofSel&&(()=>{
+          const dernier=reglagesOf[reglagesOf.length-1]||{};
+          let p={};try{p=JSON.parse(dernier.notes||'{}').params_complets||{};}catch{}
+          return(
+            <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:9998,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+              <div style={{background:'#fff',borderRadius:16,padding:20,width:'100%',maxWidth:440}}>
+                <div style={{fontWeight:800,fontSize:16,marginBottom:2}}>⚙️ Reprise du réglage</div>
+                <div style={{fontSize:13,color:'#6b7280',marginBottom:10}}>{ofSel.numero_of} · {ofSel.article_nom}</div>
+                <div style={{fontSize:12,color:'#374151',marginBottom:8,lineHeight:1.6}}>
+                  Réglage n°{dernier.rang} · ticket <b>{dernier.numero_ticket_reglage}</b><br/>
+                  par {dernier.regleur_nom||'—'}{dernier.valide_at?` le ${new Date(dernier.valide_at).toLocaleString('fr-FR')}`:''}
+                  {dernier.motif?<><br/>Motif : {dernier.motif}</>:null}
+                </div>
+                <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:14}}>
+                  {p.temp_zone1&&<Pill l="T°Z1" v={`${p.temp_zone1}°C`}/>}
+                  {p.pression_bar&&<Pill l="P" v={`${p.pression_bar}bar`}/>}
+                  {p.largeur_mm&&<Pill l="L" v={`${p.largeur_mm}mm`}/>}
+                  {p.epaisseur_um&&<Pill l="Ép" v={`${p.epaisseur_um}µm`}/>}
+                  {p.vitesse_vis&&<Pill l="V" v={`${p.vitesse_vis}tr/min`}/>}
+                  {p.corona==='Oui'&&<Pill l="Corona" v="✓"/>}
+                </div>
+                <button onClick={()=>{setReglageMode(null);demarrerSession('reprise',dernier.numero_ticket_reglage);}}
+                  style={{background:'#16a34a',color:'#fff',border:'none',padding:'14px',borderRadius:10,cursor:'pointer',fontWeight:700,fontSize:15,width:'100%',marginBottom:8}}>✓ Je reprends ce réglage</button>
+                <button onClick={()=>setReglageMode('modif')}
+                  style={{background:'#f59e0b',color:'#1c1917',border:'none',padding:'14px',borderRadius:10,cursor:'pointer',fontWeight:700,fontSize:15,width:'100%',marginBottom:8}}>✎ Je modifie le réglage</button>
+                <button onClick={()=>setReglageMode(null)}
+                  style={{background:'#f3f4f6',color:'#374151',border:'none',padding:'12px',borderRadius:10,cursor:'pointer',fontWeight:600,width:'100%'}}>← Annuler</button>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* ══ CONFIG ══ */}
         {etape==='config'&&(
@@ -563,6 +645,7 @@ export default function Operateur() {
                 <div style={{textAlign:'right'}}>
                   <div style={{fontSize:11,color:'#a8a29e'}}>Bobines</div>
                   <div style={{fontWeight:800,fontSize:30,color:'#f59e0b'}}>{tickets.length}</div>
+                  {cumulOf&&typePoste==='extrusion'&&<div style={{fontSize:11,color:'#d6d3d1'}}>OF : {cumulOf.nb_bobines}{ofSel.at3_nb_bobines_cibles?` / ${ofSel.at3_nb_bobines_cibles}`:''} bobines</div>}
                 </div>
               </div>
               {/* Décompte */}
@@ -757,6 +840,14 @@ export default function Operateur() {
               </div>
             )}
 
+            {/* Réglage : nouveau réglage pendant la production, ticket de réglage */}
+            {!arretActif&&typePoste==='extrusion'&&(
+              <div style={{display:'flex',gap:10}}>
+                <button onClick={()=>setReglageMode('pendant')} style={{flex:1,background:'#fff',color:'#4338ca',border:'2px solid #c7d2fe',padding:'14px',borderRadius:12,cursor:'pointer',fontWeight:700,fontSize:13}}>⚙️ Nouveau réglage</button>
+                <button onClick={()=>ouvrirTicketReglage()} style={{flex:1,background:'#fff',color:'#4338ca',border:'2px solid #c7d2fe',padding:'14px',borderRadius:12,cursor:'pointer',fontWeight:700,fontSize:13}}>🖨️ Ticket de réglage</button>
+              </div>
+            )}
+
             {/* Arrêt + fin shift */}
             {!arretActif&&(
               <div style={{display:'flex',gap:10}}>
@@ -828,6 +919,7 @@ export default function Operateur() {
 
       {recap&&<RecapShift recap={recap} onNouveau={resetSession}/>}
       {ticketAff&&<TicketBobine ticket={ticketAff} of={ofSel} machine={machineTicket} shift={shiftSel} user={user} onClose={()=>setTicketAff(null)}/>}
+      {ticketReglageAff&&<TicketReglage record={ticketReglageAff} onClose={()=>setTicketReglageAff(null)}/>}
     </div>
   );
 }

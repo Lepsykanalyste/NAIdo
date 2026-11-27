@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
 const { auth, role } = require('../middleware/auth');
-const { enregistrerReglage, assurerReglages } = require('../utils/reglagesOf');
+const { enregistrerReglage, enregistrerReprise, assurerReglages } = require('../utils/reglagesOf');
 assurerReglages().catch(e => console.error('[SESSIONS] historique des reglages :', e.message));
 
 // POST /api/sessions — Démarrer une session
@@ -38,7 +38,7 @@ router.post('/', auth, async (req, res) => {
 });
 
 // POST /api/sessions/:id/valider-regleur — Régleur valide les paramètres
-router.post('/:id/valider-regleur', auth, role('regleur', 'technicien_regleur', 'chef_atelier'), async (req, res) => {
+router.post('/:id/valider-regleur', auth, role('regleur', 'technicien_regleur', 'operateur_ext', 'chef_atelier'), async (req, res) => {
   try {
     const { temperature, pression, vitesse, notes, of_id, motif } = req.body;
     const { rows } = await db.query(`
@@ -108,6 +108,21 @@ router.put('/:id/terminer', auth, async (req, res) => {
       WHERE id=$1 RETURNING *
     `, [req.params.id]);
     res.json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/sessions/:id/reglage-repris — l'opérateur démarre son quart sur le réglage de l'OF (qu'il vienne de le faire, de le modifier ou de le reprendre tel quel).
+// Le ticket de réglage reste le même ; il est tracé au nom de l'opérateur et à son quart.
+router.post('/:id/reglage-repris', auth, role('operateur_ext', 'regleur', 'technicien_regleur', 'chef_atelier'), async (req, res) => {
+  try {
+    const { of_id, mode } = req.body || {};
+    if (!of_id) return res.status(400).json({ error: 'OF obligatoire' });
+    const s = await db.query('SELECT operateur_id FROM sessions_production WHERE id::text = $1', [req.params.id]);
+    if (!s.rows.length) return res.status(404).json({ error: 'Session introuvable' });
+    if (req.user.role !== 'chef_atelier' && String(s.rows[0].operateur_id) !== String(req.user.id))
+      return res.status(403).json({ error: 'Cette session n\'est pas la vôtre' });
+    const r = await enregistrerReprise(db, { of_id, session_id: req.params.id, mode: ['premier', 'modif', 'reprise'].includes(mode) ? mode : 'reprise' });
+    res.json({ ok: true, ...r });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

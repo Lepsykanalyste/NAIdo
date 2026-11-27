@@ -62,13 +62,15 @@ const TOTAL_CHAMPS = SECTIONS.reduce((a, s) =>
 // import QRCode from 'qrcode';
 
 // ─── TICKET STYLE CAISSE + QR ────────────────────────────────────────────────
-function TicketImprimable({ record, onClose }) {
+export function TicketImprimable({ record, onClose }) {
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [sig, setSig] = useState(null);   // nom, fonction, matricule et signature du régleur (profil)
   useEffect(() => {
     if (!record.numero_ticket_reglage) return;
-    axios.get(`${API}/regleur/ticket/${encodeURIComponent(record.numero_ticket_reglage)}/signataire`).then(r => setSig(r.data || null)).catch(() => {});
-  }, [record.numero_ticket_reglage]);
+    // nom, signature et quart de l'opérateur qui imprime (session de production), le numéro de ticket ne change pas
+    const q = record.session_id ? `?session=${encodeURIComponent(record.session_id)}` : '';
+    axios.get(`${API}/regleur/ticket/${encodeURIComponent(record.numero_ticket_reglage)}/signataire${q}`).then(r => setSig(r.data || null)).catch(() => {});
+  }, [record.numero_ticket_reglage, record.session_id]);
   const nomRegleur = (sig && sig.nom) || record.regleur_nom || '';
   const fonctionRegleur = [sig && sig.fonction, sig && sig.matricule].filter(Boolean).join(' · ');
   const h = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
@@ -116,6 +118,7 @@ function TicketImprimable({ record, onClose }) {
     { l: 'VIT. VIS',     v: params.vitesse_vis   ? `${params.vitesse_vis} tr/min`: `${record.vitesse || '—'} tr/min` },
     { l: 'VIT. TIRAGE',  v: params.vitesse_tirage ? `${params.vitesse_tirage} m/min` : '—' },
     { l: 'CORONA',       v: params.corona || '—' },
+    ...(sig && sig.quart ? [null, { l: 'QUART', v: sig.quart }] : []),
   ];
 
   const printContent = `
@@ -160,7 +163,7 @@ function TicketImprimable({ record, onClose }) {
       </div>
       <hr class="hr-dash"/>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:3mm;">
-        <div class="sig"><div class="sig-label">Régleur</div>${sig && sig.signature ? `<img src="${sig.signature}" style="max-height:14mm;max-width:100%;display:block;margin:1mm 0"/>` : '<br/><br/>'}<b>${h(nomRegleur)}</b><br/>${h(fonctionRegleur)}${sig && sig.signature ? '' : '<br/>Signature :'}</div>
+        <div class="sig"><div class="sig-label">Opérateur</div>${sig && sig.signature ? `<img src="${sig.signature}" style="max-height:14mm;max-width:100%;display:block;margin:1mm 0"/>` : '<br/><br/>'}<b>${h(nomRegleur)}</b><br/>${h(fonctionRegleur)}${sig && sig.signature ? '' : '<br/>Signature :'}</div>
         <div class="sig"><div class="sig-label">Chef atelier</div><br/><br/><br/>Signature :</div>
       </div>
       <div class="footer">
@@ -230,10 +233,10 @@ function TicketImprimable({ record, onClose }) {
 
           {/* SIGNATURES */}
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-            {['Régleur', 'Chef atelier'].map(s => (
+            {['Opérateur', 'Chef atelier'].map(s => (
               <div key={s} style={{ border:'1px solid #000', borderRadius:3, padding:'4px 6px', minHeight:40 }}>
                 <div style={{ fontSize:8, fontWeight:700, textTransform:'uppercase' }}>{s}</div>
-                {s === 'Régleur' && (<>
+                {s === 'Opérateur' && (<>
                   {sig && sig.signature && <img src={sig.signature} alt="Signature" style={{ display:'block', maxHeight:44, maxWidth:'100%', margin:'3px 0' }} />}
                   <div style={{ fontSize:9, color:'#333', marginTop:2, fontWeight:700 }}>{nomRegleur}</div>
                   {fonctionRegleur && <div style={{ fontSize:8, color:'#555' }}>{fonctionRegleur}</div>}
@@ -618,7 +621,7 @@ function Chip({ l, v }) {
 // ═════════════════════════════════════════════════════════════════════════════
 // FORMULAIRE RÉGLAGE
 // ═════════════════════════════════════════════════════════════════════════════
-function EcranReglage({ cible, user, onBack, onSuccess }) {
+export function EcranReglage({ cible, user, onBack, onSuccess }) {
   const estSession = cible.type === 'session';
   const item = cible.data;
 
@@ -667,14 +670,17 @@ function EcranReglage({ cible, user, onBack, onSuccess }) {
         of_id:       estSession ? item.of_id : item.id,
         ...(reprise ? { motif: motif.trim(), reprise: true } : {}),
       };
+      let resultat = null;
       if (estSession) {
-        await axios.post(`${API}/sessions/${item.id}/valider-regleur`, payload);
+        const rs = await axios.post(`${API}/sessions/${item.id}/valider-regleur`, payload);
+        resultat = rs.data;
       } else {
         const rp = await axios.patch(`${API}/of/${item.id}/reglage`, payload);
+        resultat = rp.data;
         if (rp.data && rp.data.rang > 1) toast(`Réglage n°${rp.data.rang} enregistré — nouveau ticket ${rp.data.numero_ticket_reglage}`, { icon: '🖨️' });
       }
-      toast.success("✅ Réglage validé — l'opérateur peut démarrer");
-      onSuccess();
+      toast.success('✅ Réglage enregistré');
+      onSuccess(resultat);
     } catch (err) {
       toast.error(err.response?.data?.error || 'Erreur validation');
     } finally { setSubmitting(false); setConfirmer(false); }

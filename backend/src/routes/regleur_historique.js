@@ -12,7 +12,7 @@ const fs = require('fs');
 const path = require('path');
 
 // Signataire d'un ticket : nom, fonction, matricule et signature (image du profil, comme sur les autres documents)
-const FONCTIONS = { regleur: 'Régleur', technicien_regleur: 'Technicien régleur', chef_atelier: "Chef d'atelier", operateur: 'Opérateur' };
+const FONCTIONS = { regleur: 'Opérateur extrusion', technicien_regleur: 'Opérateur extrusion', operateur_ext: 'Opérateur extrusion', chef_atelier: "Chef d'atelier", operateur: 'Opérateur' };
 async function signataire(userId) {
   if (!userId) return null;
   const { rows } = await db.query(`SELECT trim(COALESCE(prenom,'') || ' ' || COALESCE(nom,'')) AS nom, matricule, role, signature_path FROM utilisateurs WHERE id::text = $1`, [String(userId)]);
@@ -33,12 +33,30 @@ async function signataire(userId) {
   return { nom: u.nom || null, matricule: u.matricule || null, role: u.role || null, fonction: FONCTIONS[u.role] || u.role || null, signature };
 }
 
-// GET /api/regleur/ticket/:numero/signataire — nom, fonction et signature du régleur (ticket affiché dans l'application)
+// Qui apparaît sur le ticket : l'opérateur de la session demandée (impression pendant son quart), sinon le dernier qui a repris le réglage, sinon son auteur.
+// Le numéro de ticket ne change pas ; seuls le nom, la signature et le quart changent selon celui qui imprime.
+async function signataireTicket(numero, sessionId) {
+  await assurerReglages();
+  if (sessionId) {
+    const s = await db.query(`SELECT sp.operateur_id, sh.nom AS quart FROM sessions_production sp LEFT JOIN shifts sh ON sh.id::text = sp.shift_id::text WHERE sp.id::text = $1`, [String(sessionId)]);
+    if (s.rows[0]) {
+      const sg = await signataire(s.rows[0].operateur_id);
+      if (sg) return { ...sg, quart: s.rows[0].quart || null };
+    }
+  }
+  const p = await db.query(`SELECT operateur_id, shift_nom FROM reglages_reprises WHERE numero_ticket = $1 ORDER BY at DESC LIMIT 1`, [numero]);
+  if (p.rows[0] && p.rows[0].operateur_id) {
+    const sg = await signataire(p.rows[0].operateur_id);
+    if (sg) return { ...sg, quart: p.rows[0].shift_nom || null };
+  }
+  const a = await db.query(`SELECT regleur_id FROM reglages_of WHERE numero_ticket = $1`, [numero]);
+  return a.rows[0] ? signataire(a.rows[0].regleur_id) : null;
+}
+
+// GET /api/regleur/ticket/:numero/signataire — nom, fonction, quart et signature de l'opérateur (ticket affiché dans l'application)
 router.get('/ticket/:numero/signataire', auth, async (req, res) => {
   try {
-    await assurerReglages();
-    const r = await db.query('SELECT regleur_id FROM reglages_of WHERE numero_ticket = $1', [req.params.numero]);
-    const s = r.rows[0] ? await signataire(r.rows[0].regleur_id) : null;
+    const s = await signataireTicket(req.params.numero, req.query.session);
     res.json(s || {});
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -114,7 +132,7 @@ router.get('/ticket/:numero/view', async (req, res) => {
     `, [req.params.numero]);
     if (!rows.length) return res.status(404).send('<h1>Ticket introuvable</h1>');
     const r = rows[0];
-    const sg = await signataire(r.regleur_id);
+    const sg = (await signataireTicket(r.numero_ticket_reglage, req.query.session)) || (await signataire(r.regleur_id));
 
     let params = {};
     try { params = JSON.parse(r.notes || '{}').params_complets || {}; } catch {}
@@ -142,7 +160,7 @@ router.get('/ticket/:numero/view', async (req, res) => {
       { l: 'VIT. VIS', v: params.vitesse_vis ? `${params.vitesse_vis} tr/min` : '—' },
       { l: 'VIT. TIRAGE', v: params.vitesse_tirage ? `${params.vitesse_tirage} m/min` : '—' },
       { l: 'CORONA', v: params.corona || '—' }, null,
-      { l: 'RÉGLEUR', v: (sg && sg.nom) || r.regleur_nom || '—' },
+      { l: 'OPÉRATEUR', v: (sg && sg.nom) || r.regleur_nom || '—' }, ...(sg && sg.quart ? [{ l: 'QUART', v: sg.quart }] : []),
       { l: 'DATE', v: fmtDate(r.valide_at) }, { l: 'HEURE', v: r.valide_at ? new Date(r.valide_at).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : '—' },
     ];
 
@@ -170,7 +188,7 @@ ${rowsHtml}
 <div class="qr">${qrImg ? `<img src="${qrImg}" width="120" height="120"/>` : ''}
 <div style="font-size:8px;color:#666">${esc(r.numero_ticket_reglage)}</div></div><hr/>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:3mm">
-<div class="sig"><div style="font-size:8px;font-weight:bold">RÉGLEUR</div>${sg && sg.signature ? `<img src="${sg.signature}" style="max-height:14mm;max-width:100%;display:block;margin:1mm 0"/>` : '<br/><br/>'}<b>${esc((sg && sg.nom) || r.regleur_nom || '—')}</b><br/><span style="font-size:8px">${esc((sg && sg.fonction) || '')}${sg && sg.matricule ? ' · ' + esc(sg.matricule) : ''}</span>${sg && sg.signature ? '' : '<br/>Signature:'}</div>
+<div class="sig"><div style="font-size:8px;font-weight:bold">OPÉRATEUR</div>${sg && sg.signature ? `<img src="${sg.signature}" style="max-height:14mm;max-width:100%;display:block;margin:1mm 0"/>` : '<br/><br/>'}<b>${esc((sg && sg.nom) || r.regleur_nom || '—')}</b><br/><span style="font-size:8px">${esc((sg && sg.fonction) || '')}${sg && sg.matricule ? ' · ' + esc(sg.matricule) : ''}</span>${sg && sg.signature ? '' : '<br/>Signature:'}</div>
 <div class="sig"><div style="font-size:8px;font-weight:bold">CHEF DE QUART</div><br/><br/>Signature:</div>
 </div>
 <div style="font-size:8px;color:#666;text-align:center;margin-top:3mm;border-top:1px dashed #999;padding-top:2mm">NAIdo — NAI</div>
@@ -182,6 +200,42 @@ ${rowsHtml}
     console.error('Erreur ticket reglage view:', err.message);
     res.status(500).send('<h1>Erreur serveur</h1>');
   }
+});
+
+// GET /api/regleur/ticket/:numero/record — un réglage (même contenu qu'une ligne de l'historique), pour imprimer son ticket depuis l'application
+router.get('/ticket/:numero/record', auth, async (req, res) => {
+  try {
+    await assurerReglages();
+    const { rows } = await db.query(`
+      SELECT r.id, r.valide_at, r.temperature, r.pression, r.vitesse, r.notes,
+             r.numero_ticket AS numero_ticket_reglage, r.rang, r.motif, r.of_id,
+             o.numero_of, o.quantite_cible, o.quantite_pieces, o.date_livraison_prevue,
+             a.designation AS article, a.couleur, a.largeur_mm,
+             COALESCE(NULLIF(o.at3_poids_cible_kg, 0), ROUND((o.quantite_cible * COALESCE(a.poids_theorique_kg, 0))::numeric, 1)) AS poids_total_kg,
+             um.code AS unite_code, um.libelle AS unite_libelle,
+             c.raison_sociale AS client_nom,
+             m.code AS machine_code, m.nom AS machine_nom,
+             trim(COALESCE(ur.prenom,'') || ' ' || COALESCE(ur.nom,'')) AS regleur_nom
+      FROM reglages_of r
+      JOIN ordres_fabrication o ON o.id::text = r.of_id
+      JOIN articles a ON a.id = o.article_id
+      LEFT JOIN clients_complet c ON c.id = o.client_id
+      LEFT JOIN machines m ON m.id::text = COALESCE(r.machine_id, o.machine_id::text)
+      LEFT JOIN unites_mesure um ON um.id = o.unite_id
+      LEFT JOIN utilisateurs ur ON ur.id::text = r.regleur_id
+      WHERE r.numero_ticket = $1`, [req.params.numero]);
+    if (!rows.length) return res.status(404).json({ error: 'Ticket de réglage introuvable' });
+    res.json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/regleur/of/:of_id/reprises — qui a repris le réglage de l'OF, à quel quart
+router.get('/of/:of_id/reprises', auth, async (req, res) => {
+  try {
+    await assurerReglages();
+    const { rows } = await db.query(`SELECT numero_ticket, rang, operateur_nom, shift_nom, mode, at FROM reglages_reprises WHERE of_id = $1 ORDER BY at`, [String(req.params.of_id)]);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // GET /api/regleur/equipements — machines et équipements de la GMAO, pour signaler un problème depuis l'écran du poste

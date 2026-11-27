@@ -6,6 +6,10 @@ const { auth } = require('../middleware/auth');
 // Protege les textes inseres dans les pages HTML publiques (QR code)
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const baseUrl = (req) => process.env.APP_BASE_URL || `${req.protocol}://${req.get('host')}`;
+const { assurerReglages } = require('../utils/reglagesOf');
+// Chaque bobine garde le numéro du ticket de réglage en vigueur quand elle a été faite (un OF peut avoir plusieurs réglages)
+const colonneReglage = db.query('ALTER TABLE tickets_production ADD COLUMN IF NOT EXISTS numero_ticket_reglage text').catch(e => console.error('[TICKETS] colonne reglage :', e.message));
+assurerReglages().catch(e => console.error('[TICKETS] historique des reglages :', e.message));
 
 // POST /api/tickets
 router.post('/', auth, async (req, res) => {
@@ -50,6 +54,11 @@ router.post('/', auth, async (req, res) => {
       'UPDATE ordres_fabrication SET quantite_produite = quantite_produite + $1 WHERE id = $2',
       [poids_net, of_id]
     );
+
+    try {
+      await colonneReglage;
+      await db.query('UPDATE tickets_production SET numero_ticket_reglage = (SELECT numero_ticket_reglage FROM ordres_fabrication WHERE id = $2) WHERE id = $1', [rows[0].id, of_id]);
+    } catch (e) { console.error('[TICKETS] reglage de la bobine :', e.message); }
 
     res.status(201).json(rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -131,6 +140,18 @@ router.get('/:id/view', async (req, res) => {
 
     let reglageP = {};
     try { reglageP = JSON.parse(t.regleur_notes || '{}').params_complets || {}; } catch {}
+    // Valeurs du réglage en vigueur quand la bobine a été faite (si l'OF a eu plusieurs réglages)
+    let rangReglage = null;
+    if (t.numero_ticket_reglage) {
+      try {
+        const rg = await db.query('SELECT rang, notes FROM reglages_of WHERE numero_ticket = $1', [t.numero_ticket_reglage]);
+        if (rg.rows[0]) {
+          rangReglage = rg.rows[0].rang;
+          const p = JSON.parse(rg.rows[0].notes || '{}').params_complets;
+          if (p) reglageP = p;
+        }
+      } catch {}
+    }
 
     const QRCode = require('qrcode');
     const qrUrl = `${baseUrl(req)}/api/tickets/${t.id}/view`;
@@ -144,7 +165,8 @@ router.get('/:id/view', async (req, res) => {
     const rows_ = [
       { l: 'N° BOBINE', v: t.numero_ticket || '—', bold: true }, null,
       { l: 'OF', v: t.numero_of || '—' }, { l: 'ARTICLE', v: t.article_nom || '—' },
-      { l: 'CLIENT', v: t.client_nom || '—' }, { l: 'MACHINE', v: t.machine_code || t.machine_nom || '—' }, { l: 'SHIFT', v: t.shift_nom || '—' }, null,
+      { l: 'CLIENT', v: t.client_nom || '—' }, { l: 'MACHINE', v: t.machine_code || t.machine_nom || '—' }, { l: 'SHIFT', v: t.shift_nom || '—' },
+      ...(t.numero_ticket_reglage ? [{ l: 'RÉGLAGE', v: `${t.numero_ticket_reglage}${rangReglage ? ' (n°' + rangReglage + ')' : ''}` }] : []), null,
       { l: 'LARGEUR', v: (reglageP.largeur_mm || t.largeur_mm) ? `${reglageP.largeur_mm || t.largeur_mm} mm` : '—' },
       { l: 'SOUFFLET', v: reglageP.soufflet_mm ? `${reglageP.soufflet_mm} mm` : '—' },
       { l: 'ÉPAISSEUR', v: (reglageP.epaisseur_um || t.epaisseur_mm) ? `${reglageP.epaisseur_um || t.epaisseur_mm} µm` : '—' }, null,
@@ -212,6 +234,16 @@ router.get('/disponibles', auth, async (req, res) => {
       ORDER BY t.created_at ASC
     `, [of_id, zone]);
     res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/tickets/of/:of_id/resume — bobines d'extrusion de l'OF tous quarts confondus (cumul affiché à l'opérateur)
+router.get('/of/:of_id/resume', auth, async (req, res) => {
+  try {
+    const { rows } = await db.query(
+      `SELECT COUNT(*)::int AS nb_bobines, COALESCE(SUM(poids_net_kg), 0) AS poids_net_total
+       FROM tickets_production WHERE of_id::text = $1 AND COALESCE(type_ticket, 'extrusion') = 'extrusion'`, [String(req.params.of_id)]);
+    res.json(rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
