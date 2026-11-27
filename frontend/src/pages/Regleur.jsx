@@ -63,6 +63,14 @@ const TOTAL_CHAMPS = SECTIONS.reduce((a, s) =>
 // ─── TICKET STYLE CAISSE + QR ────────────────────────────────────────────────
 function TicketImprimable({ record, onClose }) {
   const [qrDataUrl, setQrDataUrl] = useState('');
+  const [sig, setSig] = useState(null);   // nom, fonction, matricule et signature du régleur (profil)
+  useEffect(() => {
+    if (!record.numero_ticket_reglage) return;
+    axios.get(`${API}/regleur/ticket/${encodeURIComponent(record.numero_ticket_reglage)}/signataire`).then(r => setSig(r.data || null)).catch(() => {});
+  }, [record.numero_ticket_reglage]);
+  const nomRegleur = (sig && sig.nom) || record.regleur_nom || '';
+  const fonctionRegleur = [sig && sig.fonction, sig && sig.matricule].filter(Boolean).join(' · ');
+  const h = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
   useEffect(() => {
     const qrStr = window.location.origin + '/api/regleur/ticket/' + encodeURIComponent(record.numero_ticket_reglage || '') + '/view';
     import('qrcode').then(QRCode => {
@@ -89,8 +97,8 @@ function TicketImprimable({ record, onClose }) {
     { l: 'CLIENT',    v: record.client_nom || '—' },
     { l: 'MACHINE',   v: record.machine_nom || record.machine_code || '—' },
     null,
-    { l: 'QUANTITE',  v: `${fmt(record.quantite_cible)} ${record.unite_libelle || record.unite_code || ''}`, bold: true },
-    { l: 'POIDS',     v: record.poids_total_kg ? `${fmt(record.poids_total_kg, 1)} kg` : '—', bold: true },
+    { l: 'QUANTITE',  v: parseFloat(record.quantite_pieces) > 0 ? `${fmt(record.quantite_pieces)} pcs` : `${fmt(record.quantite_cible)} ${record.unite_libelle || record.unite_code || ''}`, bold: true },
+    { l: 'POIDS CIBLE', v: record.poids_total_kg ? `${fmt(record.poids_total_kg, 1)} kg` : '—', bold: true },
     { l: 'LIVRAISON', v: record.date_livraison_prevue ? new Date(record.date_livraison_prevue).toLocaleDateString('fr-FR') : '—' },
     null,
     { l: 'LARGEUR',      v: params.largeur_mm    ? `${params.largeur_mm} mm`    : '—' },
@@ -149,11 +157,11 @@ function TicketImprimable({ record, onClose }) {
       </div>
       <hr class="hr-dash"/>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:3mm;">
-        <div class="sig"><div class="sig-label">Régleur</div>${record.regleur_nom || ''}<br/><br/><br/>Signature :</div>
+        <div class="sig"><div class="sig-label">Régleur</div>${sig && sig.signature ? `<img src="${sig.signature}" style="max-height:14mm;max-width:100%;display:block;margin:1mm 0"/>` : '<br/><br/>'}<b>${h(nomRegleur)}</b><br/>${h(fonctionRegleur)}${sig && sig.signature ? '' : '<br/>Signature :'}</div>
         <div class="sig"><div class="sig-label">Chef atelier</div><br/><br/><br/>Signature :</div>
       </div>
       <div class="footer">
-        <div>${record.regleur_nom || ''} — ${record.valide_at ? new Date(record.valide_at).toLocaleString('fr-FR') : ''}</div>
+        <div>${h(nomRegleur)} — ${record.valide_at ? new Date(record.valide_at).toLocaleString('fr-FR') : ''}</div>
         <div>© NAIdo — NAI</div>
       </div>
     </body></html>
@@ -222,13 +230,17 @@ function TicketImprimable({ record, onClose }) {
             {['Régleur', 'Chef atelier'].map(s => (
               <div key={s} style={{ border:'1px solid #000', borderRadius:3, padding:'4px 6px', minHeight:40 }}>
                 <div style={{ fontSize:8, fontWeight:700, textTransform:'uppercase' }}>{s}</div>
-                {s === 'Régleur' && <div style={{ fontSize:9, color:'#333', marginTop:2 }}>{record.regleur_nom}</div>}
+                {s === 'Régleur' && (<>
+                  {sig && sig.signature && <img src={sig.signature} alt="Signature" style={{ display:'block', maxHeight:44, maxWidth:'100%', margin:'3px 0' }} />}
+                  <div style={{ fontSize:9, color:'#333', marginTop:2, fontWeight:700 }}>{nomRegleur}</div>
+                  {fonctionRegleur && <div style={{ fontSize:8, color:'#555' }}>{fonctionRegleur}</div>}
+                </>)}
               </div>
             ))}
           </div>
 
           <div style={{ borderTop:'1px dashed #999', marginTop:8, paddingTop:4, fontSize:8, color:'#666', textAlign:'center' }}>
-            <div>{record.regleur_nom} — {record.valide_at ? new Date(record.valide_at).toLocaleString('fr-FR') : ''}</div>
+            <div>{nomRegleur} — {record.valide_at ? new Date(record.valide_at).toLocaleString('fr-FR') : ''}</div>
             <div>© NAIdo — NAI</div>
           </div>
         </div>

@@ -70,9 +70,9 @@ router.post('/:id/valider-regleur', auth, role('regleur', 'technicien_regleur', 
 router.get('/actives', auth, async (req, res) => {
   try {
     const { rows } = await db.query(`
-      SELECT sp.*, o.numero_of, o.numero_ticket_reglage, o.quantite_cible,
+      SELECT sp.*, o.numero_of, o.numero_ticket_reglage, o.quantite_cible, o.quantite_pieces,
              o.date_livraison_prevue,
-             ROUND((o.quantite_cible * COALESCE(a.poids_theorique_kg, 0))::numeric, 1) AS poids_total_kg,
+             COALESCE(NULLIF(o.at3_poids_cible_kg, 0), ROUND((o.quantite_cible * COALESCE(a.poids_theorique_kg, 0))::numeric, 1)) AS poids_total_kg,
              a.designation AS article, a.couleur, a.largeur_mm,
              um.code AS unite_code, um.libelle AS unite_libelle,
              c.raison_sociale AS client_nom,
