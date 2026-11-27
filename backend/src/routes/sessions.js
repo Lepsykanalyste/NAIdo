@@ -100,6 +100,38 @@ router.get('/actives', auth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Poids des sacs vides de matiere declare a la fin du shift : il part en quarantaine, en attente de recyclage
+const structureSacs = db.query(`CREATE TABLE IF NOT EXISTS sacs_vides_matiere (
+  id serial PRIMARY KEY, session_id text, of_id text, shift_id text, operateur_id text,
+  poids_kg numeric NOT NULL, statut text NOT NULL DEFAULT 'quarantaine', created_at timestamptz DEFAULT now())`)
+  .catch(e => console.error('[SESSIONS] sacs vides :', e.message));
+
+// POST /api/sessions/sacs-vides
+router.post('/sacs-vides', auth, async (req, res) => {
+  try {
+    const poids = parseFloat(req.body && req.body.poids_kg);
+    if (!(poids > 0)) return res.status(400).json({ error: 'Poids des sacs vides invalide' });
+    await structureSacs;
+    const b = req.body;
+    const { rows } = await db.query(
+      `INSERT INTO sacs_vides_matiere (session_id, of_id, shift_id, operateur_id, poids_kg) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+      [b.session_id ? String(b.session_id) : null, b.of_id ? String(b.of_id) : null, b.shift_id ? String(b.shift_id) : null, String(req.user.id), poids]);
+    res.status(201).json(rows[0]);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/sessions/sacs-vides — sacs vides en quarantaine (a recycler)
+router.get('/sacs-vides', auth, async (req, res) => {
+  try {
+    await structureSacs;
+    const { rows } = await db.query(
+      `SELECT s.*, u.nom AS operateur_nom, u.prenom AS operateur_prenom
+       FROM sacs_vides_matiere s LEFT JOIN utilisateurs u ON u.id::text = s.operateur_id
+       ORDER BY s.created_at DESC LIMIT 200`);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // PUT /api/sessions/:id/terminer
 router.put('/:id/terminer', auth, async (req, res) => {
   try {

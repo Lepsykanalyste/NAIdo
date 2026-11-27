@@ -10,6 +10,9 @@ const API = '/api';
 function fmt(n,d=3){if(!n&&n!==0)return'—';return parseFloat(n).toLocaleString('fr-FR',{minimumFractionDigits:d,maximumFractionDigits:d});}
 function fmtDate(d){return new Date(d||Date.now()).toLocaleDateString('fr-FR');}
 function fmtTime(d){return new Date(d||Date.now()).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});}
+function libShift(s){if(!s)return'—';const h=x=>{const[a,b]=String(x||'').split(':');return parseInt(a,10)+'h'+(b&&b!=='00'?b:'');};return(s.heure_debut&&s.heure_fin)?`${s.nom} (${h(s.heure_debut)}-${h(s.heure_fin)})`:(s.nom||'—');}
+// poids d'un ticket : bobine = poids net ; colis soudure/decoupe = poids net du colis (pese - emballage)
+function poidsTicket(t){const c=parseFloat(t&&t.poids_colis_net_kg);return c>0?c:parseFloat((t&&t.poids_net_kg)||0);}
 function loadLS(k){try{const v=localStorage.getItem(k);return v?JSON.parse(v):null;}catch{return null;}}
 function saveLS(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch{}}
 function clearLS(...keys){keys.forEach(k=>{try{localStorage.removeItem(k);}catch{}});}
@@ -49,18 +52,20 @@ function TicketBobine({ ticket, of, machine, shift, user, onClose }) {
   const rows=isSD?[
     {l:'N° TICKET',v:ticket.numero_ticket||'—',bold:true},null,
     {l:'OF',v:of?.numero_of||'—'},{l:'ARTICLE',v:of?.article_nom||of?.article||'—'},
-    {l:'CLIENT',v:of?.client_nom||'—'},{l:'MACHINE',v:machine?.code||machine?.nom||'—'},{l:'SHIFT',v:shift?.nom||'—'},null,
+    {l:'CLIENT',v:of?.client_nom||'—'},{l:'MACHINE',v:machine?.code||machine?.nom||'—'},{l:'SHIFT',v:libShift(shift)},null,
     {l:'QTE PIECES ★',v:`${fmt(ticket.qte_pieces,0)}`,bold:true,big:true},
     ...(ticket.numero_colis?[{l:'N° COLIS',v:ticket.numero_colis}]:[]),
-    ...(parseFloat(ticket.poids_carton_kg)>0?[{l:'POIDS COLIS',v:`${fmt(ticket.poids_carton_kg)} kg`}]:[]),
-    ...(parseFloat(ticket.poids_rebuts_kg)>0?[{l:'REBUTS',v:`${fmt(ticket.poids_rebuts_kg)} kg`}]:[]),
+    ...(parseFloat(ticket.poids_colis_brut_kg)>0?[{l:'COLIS PESÉ',v:`${fmt(ticket.poids_colis_brut_kg)} kg`},{l:'EMBALLAGE',v:`${fmt(ticket.poids_emballage_kg)} kg${ticket.type_emballage?' ('+ticket.type_emballage+')':''}`},{l:'POIDS NET COLIS ★',v:`${fmt(ticket.poids_colis_net_kg)} kg`,bold:true,big:true}]
+      :(parseFloat(ticket.poids_carton_kg)>0?[{l:'POIDS COLIS',v:`${fmt(ticket.poids_carton_kg)} kg`}]:[])),
+    ...(parseFloat(ticket.reliquat_repris_kg)>0?[{l:'RELIQUAT REPRIS',v:`${fmt(ticket.reliquat_repris_kg)} kg`}]:[]),
+    ...(parseFloat(ticket.poids_dechets_kg)>0?[{l:'DÉCHETS',v:`${fmt(ticket.poids_dechets_kg)} kg`}]:[]),
     ...(ticket.etape_dest?[null,{l:'DESTINATION',v:ticket.etape_dest,bold:true}]:[]),null,
     {l:'OPÉRATEUR',v:`${user?.prenom||''} ${user?.nom||''}`.trim()},
     {l:'DATE',v:fmtDate(ticket.created_at)},{l:'HEURE',v:fmtTime(ticket.created_at)},
   ].filter(x=>x!==undefined):[
     {l:'N° BOBINE',v:ticket.numero_ticket||'—',bold:true},null,
     {l:'OF',v:of?.numero_of||'—'},{l:'ARTICLE',v:of?.article_nom||of?.article||'—'},
-    {l:'CLIENT',v:of?.client_nom||'—'},{l:'MACHINE',v:machine?.code||machine?.nom||'—'},{l:'SHIFT',v:shift?.nom||'—'},null,
+    {l:'CLIENT',v:of?.client_nom||'—'},{l:'MACHINE',v:machine?.code||machine?.nom||'—'},{l:'SHIFT',v:libShift(shift)},null,
     {l:'LARGEUR',v:(reglageP.largeur_mm||of?.largeur_mm)?`${reglageP.largeur_mm||of?.largeur_mm} mm`:'—'},
     {l:'SOUFFLET',v:(reglageP.soufflet_mm||of?.soufflet_mm)?`${reglageP.soufflet_mm||of?.soufflet_mm} mm`:'—'},
     {l:'ÉPAISSEUR',v:(reglageP.epaisseur_um||of?.epaisseur_um)?`${reglageP.epaisseur_um||of?.epaisseur_um} µm`:'—'},null,
@@ -147,14 +152,28 @@ ${rows.map(r=>r===null?'<hr/>':
 // ═══════════════════════════════════════════════════════════════════════════
 function RecapShift({ recap, onNouveau }) {
   const [qrRecap, setQrRecap] = React.useState('');
+  const ofs = recap.ofs || [];
+  const unite = recap.unite || 'bobines';
+  const tot = ofs.reduce((a, o) => ({ nb: a.nb + (o.nb_bobines || 0), kg: a.kg + parseFloat(o.poids_total || 0), dech: a.dech + parseFloat(o.poids_dechets || 0), pcs: a.pcs + (o.pieces || 0) }), { nb: 0, kg: 0, dech: 0, pcs: 0 });
+  const duree = (m) => `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}`;
   React.useEffect(() => {
-    const str = `NAI-SHIFT|${recap.numero_of}|${recap.shift}|${recap.operateur}|${recap.date}|BOB:${recap.nb_bobines}|${recap.poids_total}kg`;
+    const str = `NAI-SHIFT|${ofs.map(o => o.numero_of).join(',')}|${recap.shift}|${recap.operateur}|${recap.date}|${unite.toUpperCase()}:${tot.nb}|${tot.kg.toFixed(3)}kg`;
     import('qrcode').then(Q => Q.default.toDataURL(str, { width:120, margin:1, color:{dark:'#1c1917',light:'#fff'} })).then(setQrRecap).catch(()=>{});
   }, [recap]);
 
   const imprimer=()=>{
     const r=recap;
     const w=window.open('','_blank','width=400,height=600');
+    const blocs = ofs.map(o => `<hr/>
+<div class="r"><span>OF</span><b>${o.numero_of}</b></div>
+<div class="r"><span>ARTICLE</span><b>${o.article}</b></div>
+<div class="r"><span>MACHINE</span><b>${o.machine}</b></div>
+<div class="r"><span>${unite.toUpperCase()}</span><b>${o.nb_bobines}</b></div>
+${o.pieces?`<div class="r"><span>PIÈCES</span><b>${o.pieces}</b></div>`:''}
+<div class="r"><span>POIDS NET</span><b>${o.poids_total} kg</b></div>
+${o.prevues?`<div class="r"><span>CUMUL OF</span><b>${o.cumul_of} / ${o.prevues}</b></div>`:''}
+<div class="r"><span>DÉCHETS</span><b>${o.poids_dechets} kg</b></div>
+${o.duree_min?`<div class="r"><span>DURÉE</span><b>${duree(o.duree_min)}</b></div>`:''}`).join('');
     w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/><title>Récap</title>
 <style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Courier New',monospace;font-size:11px;width:72mm;margin:0 auto;padding:4mm}
 hr{border:none;border-top:1px dashed #000;margin:4px 0}.r{display:flex;justify-content:space-between;padding:1.5px 0}
@@ -162,19 +181,18 @@ hr{border:none;border-top:1px dashed #000;margin:4px 0}.r{display:flex;justify-c
 @media print{@page{size:72mm auto;margin:0}}</style></head>
 <body onload="window.print()">
 <div style="text-align:center;font-size:15px;font-weight:900">NAI</div>
-<div style="text-align:center;font-size:9px;color:#555">AT3 — EXTRUSION</div>
+<div style="text-align:center;font-size:9px;color:#555">AT3 — ${unite==='colis'?'SOUDURE/DECOUPE':'PRODUCTION'}</div>
 <hr/><div style="text-align:center;font-weight:800;font-size:12px">RÉCAP DE SHIFT</div>
 <div style="text-align:center;font-size:8px">ENR.ALP1-007</div><hr/>
-<div class="r"><span>OF</span><b>${r.numero_of}</b></div>
-<div class="r"><span>ARTICLE</span><b>${r.article}</b></div>
-<div class="r"><span>MACHINE</span><b>${r.machine}</b></div>
 <div class="r"><span>SHIFT</span><b>${r.shift}</b></div>
-<div class="r"><span>OPÉRATEUR</span><b>${r.operateur}</b></div><hr/>
-<div class="r" style="font-size:15px;font-weight:900"><span>NB BOBINES</span><b>${r.nb_bobines}</b></div>
-<div class="r" style="font-size:15px;font-weight:900"><span>POIDS NET</span><b>${r.poids_total} kg</b></div>
-${r.prevues?`<div class="r"><span>CUMUL OF</span><b>${r.cumul_of} / ${r.prevues}</b></div>`:''}
-<div class="r"><span>DÉCHETS</span><b>${r.poids_dechets} kg</b></div>
-${r.duree_min?`<div class="r"><span>DURÉE</span><b>${Math.floor(r.duree_min/60)}h${String(r.duree_min%60).padStart(2,'0')}</b></div>`:''}
+<div class="r"><span>OPÉRATEUR</span><b>${r.operateur}</b></div>
+<div class="r"><span>DATE</span><b>${r.date}</b></div>
+${blocs}
+<hr/>
+<div class="r" style="font-size:14px;font-weight:900"><span>TOTAL ${unite.toUpperCase()}</span><b>${tot.nb}</b></div>
+<div class="r" style="font-size:14px;font-weight:900"><span>POIDS NET</span><b>${tot.kg.toFixed(3)} kg</b></div>
+<div class="r"><span>DÉCHETS</span><b>${tot.dech.toFixed(3)} kg</b></div>
+${r.sacs_vides>0?`<div class="r"><span>SACS VIDES (quarantaine)</span><b>${r.sacs_vides} kg</b></div>`:''}
 <hr/>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:3mm">
 <div class="sig"><div style="font-size:8px;font-weight:bold">OPÉRATEUR</div>${r.operateur}<br/><br/>Signature:</div>
@@ -195,20 +213,32 @@ ${r.duree_min?`<div class="r"><span>DURÉE</span><b>${Math.floor(r.duree_min/60)
         </div>
         <div style={{padding:'14px 16px',fontSize:11}}>
           <div style={{textAlign:'center',fontWeight:900,fontSize:15}}>NAI</div>
-          <div style={{textAlign:'center',fontSize:9,color:'#555'}}>AT3 — EXTRUSION</div>
+          <div style={{textAlign:'center',fontSize:9,color:'#555'}}>AT3 — {unite==='colis'?'SOUDURE/DECOUPE':'PRODUCTION'}</div>
           <div style={{borderTop:'2px solid #000',margin:'5px 0'}}/>
           <div style={{textAlign:'center',fontWeight:800,fontSize:13}}>RÉCAP DE SHIFT</div>
           <div style={{textAlign:'center',fontSize:8,color:'#666'}}>ENR.ALP1-007</div>
           <div style={{borderTop:'1px dashed #000',margin:'5px 0'}}/>
-          {[['OF',recap.numero_of],['ARTICLE',recap.article],['MACHINE',recap.machine],['SHIFT',recap.shift],['OPÉRATEUR',recap.operateur]].map(([l,v])=>(
+          {[['SHIFT',recap.shift],['OPÉRATEUR',recap.operateur],['DATE',recap.date]].map(([l,v])=>(
             <div key={l} style={{display:'flex',justifyContent:'space-between',padding:'1.5px 0'}}><span style={{color:'#444'}}>{l}</span><strong>{v}</strong></div>
           ))}
-          <div style={{borderTop:'1px dashed #000',margin:'5px 0'}}/>
-          <div style={{display:'flex',justifyContent:'space-between',fontWeight:900,fontSize:16}}><span>NB BOBINES</span><strong>{recap.nb_bobines}</strong></div>
-          <div style={{display:'flex',justifyContent:'space-between',fontWeight:900,fontSize:16}}><span>POIDS NET</span><strong>{recap.poids_total} kg</strong></div>
-          {recap.prevues&&<div style={{display:'flex',justifyContent:'space-between'}}><span style={{color:'#444'}}>CUMUL OF</span><strong>{recap.cumul_of} / {recap.prevues}</strong></div>}
-          <div style={{display:'flex',justifyContent:'space-between'}}><span style={{color:'#444'}}>DÉCHETS</span><strong>{recap.poids_dechets} kg</strong></div>
-          {recap.duree_min&&<div style={{display:'flex',justifyContent:'space-between'}}><span style={{color:'#444'}}>DURÉE</span><strong>{Math.floor(recap.duree_min/60)}h{String(recap.duree_min%60).padStart(2,'0')}</strong></div>}
+          {ofs.map((o,i)=>(
+            <div key={i} data-recap-of={o.numero_of} style={{borderTop:'1px dashed #000',marginTop:6,paddingTop:5}}>
+              {[['OF',o.numero_of],['ARTICLE',o.article],['MACHINE',o.machine]].map(([l,v])=>(
+                <div key={l} style={{display:'flex',justifyContent:'space-between',padding:'1.5px 0'}}><span style={{color:'#444'}}>{l}</span><strong style={{textAlign:'right'}}>{v}</strong></div>
+              ))}
+              <div style={{display:'flex',justifyContent:'space-between'}}><span style={{color:'#444'}}>{unite.toUpperCase()}</span><strong>{o.nb_bobines}</strong></div>
+              {o.pieces>0&&<div style={{display:'flex',justifyContent:'space-between'}}><span style={{color:'#444'}}>PIÈCES</span><strong>{o.pieces}</strong></div>}
+              <div style={{display:'flex',justifyContent:'space-between'}}><span style={{color:'#444'}}>POIDS NET</span><strong>{o.poids_total} kg</strong></div>
+              {o.prevues&&<div style={{display:'flex',justifyContent:'space-between'}}><span style={{color:'#444'}}>CUMUL OF</span><strong>{o.cumul_of} / {o.prevues}</strong></div>}
+              <div style={{display:'flex',justifyContent:'space-between'}}><span style={{color:'#444'}}>DÉCHETS</span><strong>{o.poids_dechets} kg</strong></div>
+              {o.duree_min>0&&<div style={{display:'flex',justifyContent:'space-between'}}><span style={{color:'#444'}}>DURÉE</span><strong>{duree(o.duree_min)}</strong></div>}
+            </div>
+          ))}
+          <div style={{borderTop:'2px solid #000',margin:'8px 0 5px'}}/>
+          <div style={{display:'flex',justifyContent:'space-between',fontWeight:900,fontSize:15}}><span>TOTAL {unite.toUpperCase()}</span><strong>{tot.nb}</strong></div>
+          <div style={{display:'flex',justifyContent:'space-between',fontWeight:900,fontSize:15}}><span>POIDS NET</span><strong>{tot.kg.toFixed(3)} kg</strong></div>
+          <div style={{display:'flex',justifyContent:'space-between'}}><span style={{color:'#444'}}>DÉCHETS</span><strong>{tot.dech.toFixed(3)} kg</strong></div>
+          {recap.sacs_vides>0&&<div style={{display:'flex',justifyContent:'space-between'}}><span style={{color:'#444'}}>SACS VIDES (quarantaine)</span><strong>{recap.sacs_vides} kg</strong></div>}
           <div style={{borderTop:'1px dashed #000',margin:'5px 0'}}/>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
             {['Opérateur','Chef atelier'].map(s=>(
@@ -221,7 +251,7 @@ ${r.duree_min?`<div class="r"><span>DURÉE</span><b>${Math.floor(r.duree_min/60)
           {qrRecap&&(
             <div style={{textAlign:'center',marginTop:8}}>
               <img src={qrRecap} width={90} height={90} alt="QR" style={{borderRadius:4}}/>
-              <div style={{fontSize:8,color:'#666',marginTop:2}}>{recap.numero_of} · {recap.shift}</div>
+              <div style={{fontSize:8,color:'#666',marginTop:2}}>{ofs.map(o=>o.numero_of).join(' · ')} · {recap.shift}</div>
             </div>
           )}
           <div style={{textAlign:'center',fontSize:8,color:'#666',marginTop:6,borderTop:'1px dashed #999',paddingTop:3}}>NAIdo — NAI · {recap.date}</div>
@@ -263,7 +293,7 @@ function HistoriqueBobines({ user }) {
         {loading?<div style={{textAlign:'center',color:'#9ca3af',padding:16}}>Chargement...</div>
         :bobines.length===0?<div style={{textAlign:'center',color:'#9ca3af',padding:16}}>Aucune bobine</div>
         :<>
-          <div style={{fontSize:11,color:'#9ca3af',marginBottom:8}}>{bobines.length} bobines — {bobines.reduce((s,b)=>s+parseFloat(b.poids_net_kg||0),0).toFixed(3)} kg net</div>
+          <div style={{fontSize:11,color:'#9ca3af',marginBottom:8}}>{bobines.length} tickets — {bobines.reduce((s,b)=>s+poidsTicket(b),0).toFixed(3)} kg net</div>
           {bobines.map(b=>(
             <div key={b.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'7px 0',borderBottom:'1px solid #f3f4f6',fontSize:12}}>
               <div>
@@ -271,7 +301,7 @@ function HistoriqueBobines({ user }) {
                 <span style={{color:'#9ca3af',marginLeft:6,fontSize:10}}>{b.created_at?new Date(b.created_at).toLocaleDateString('fr-FR'):''}</span>
               </div>
               <div style={{display:'flex',gap:6,alignItems:'center'}}>
-                <span style={{fontWeight:700,color:'#15803d'}}>{b.poids_net_kg} kg</span>
+                <span style={{fontWeight:700,color:'#15803d'}}>{fmt(poidsTicket(b))} kg{parseInt(b.qte_pieces)>0?` · ${b.qte_pieces} pcs`:''}</span>
                 <button onClick={()=>setTicketSel(b)} style={{background:'#f0fdf4',color:'#15803d',border:'1px solid #86efac',borderRadius:5,padding:'1px 6px',cursor:'pointer',fontSize:10,fontWeight:700}}>🖨️</button>
               </div>
             </div>
@@ -316,6 +346,11 @@ export default function Operateur() {
   const [ticketReglageAff,setTicketReglageAff]=useState(null);
   const [cumulOf,setCumulOf]=useState(null);           // bobines de l'OF, tous quarts confondus
   const [monProfil,setMonProfil]=useState(false);     // photo et signature de l'opérateur
+  const [shiftOfs,setShiftOfs]=useState(()=>loadLS('naido_shift_ofs')||[]);   // OF déjà terminés pendant ce shift (récap multi-OF)
+  const [finShift,setFinShift]=useState(false);       // fenêtre de fin de shift (poids des sacs vides)
+  const [sacsVides,setSacsVides]=useState('');
+  const [rechBobine,setRechBobine]=useState('');      // soudure : recherche d'une bobine
+  const [reliquatDispo,setReliquatDispo]=useState(0);  // soudure : reliquat des bobines précédentes à reprendre
 
   // Type de poste de l'opérateur (détermine ce qu'il voit)
   const typePoste = getTypePoste(user, machSel || ofSel);
@@ -337,13 +372,22 @@ export default function Operateur() {
   const [form,setForm]=useState({
     poids_brut:'',poids_mandrin:'',poids_dechets:'',motif_dechet:'',
     destination: destinations[0]?.v || '',
-    lot_id:'',nom_matiere:'',qte_pieces:'',numero_colis:'',poids_carton:'',rebuts:'',motif_rebut:''
+    lot_id:'',nom_matiere:'',qte_pieces:'',numero_colis:'',poids_carton:'',rebuts:'',motif_rebut:'',
+    poids_colis:'',poids_emballage:(loadLS('naido_emballage')||{}).poids||'',type_emballage:(loadLS('naido_emballage')||{}).type||''
   });
 
   const poidsNet = form.poids_brut ? Math.max(0,parseFloat(form.poids_brut)-parseFloat(form.poids_mandrin||0)).toFixed(3) : '';
+  // Soudure/découpe : poids net du colis = poids pesé - emballage ; c'est lui qui est déduit de la bobine (moins le reliquat repris)
+  const bobinesFiltrees=bobinesDispo.filter(b=>!rechBobine.trim()||String(b.numero_ticket||'').toLowerCase().includes(rechBobine.trim().toLowerCase()));
+  const parentSel=bobinesDispo.find(b=>b.id===form.bobine_parent_id)||null;
+  const colisNet=Math.max(0,(parseFloat(form.poids_colis)||0)-(parseFloat(form.poids_emballage)||0));
+  const reprisPrevu=parentSel?Math.min(reliquatDispo,colisNet):0;
+  const deduitBobine=Math.max(0,colisNet-reprisPrevu);
+  const restantApres=parentSel?parseFloat(parentSel.poids_restant_kg)-deduitBobine:null;
 
   // Décompte production
-  const cibleKg   = parseFloat(ofSel?.poids_theorique_total_kg||0);
+  // Poids cible : celui fixé par le chef d'atelier ; à défaut, quantité x poids théorique de l'article
+  const cibleKg   = parseFloat(ofSel?.at3_poids_cible_kg)||parseFloat(ofSel?.poids_theorique_total_kg)||0;
   const produitKg = tickets.reduce((s,t)=>s+parseFloat(t.poids_net_kg||0),0);
   const restantKg = Math.max(0,cibleKg-produitKg);
   const pctProd   = cibleKg>0?Math.min(100,Math.round(produitKg/cibleKg*100)):0;
@@ -370,10 +414,15 @@ export default function Operateur() {
   },[session]);
 
   const chargerBobines=useCallback(()=>{
-    if(typePoste==='soudure_decoupe'&&ofSel?.id){axios.get(`${API}/tickets/disponibles`,{params:{of_id:ofSel.id,zone:'AT3-SOUD'}}).then(r=>setBobinesDispo(Array.isArray(r.data)?r.data:[])).catch(()=>{});}
+    if(typePoste==='soudure_decoupe'&&ofSel?.id){
+      axios.get(`${API}/tickets/disponibles`,{params:{of_id:ofSel.id,zone:'AT3-SOUD'}}).then(r=>setBobinesDispo(Array.isArray(r.data)?r.data:[])).catch(()=>{});
+      axios.get(`${API}/tickets/reliquats`,{params:{of_id:ofSel.id}}).then(r=>setReliquatDispo(parseFloat(r.data&&r.data.total_kg)||0)).catch(()=>{});
+    }
   },[typePoste,ofSel]);
 
   useEffect(()=>{chargerDonnees();},[chargerDonnees]);
+  // la bobine choisie disparaît de la liste quand elle est terminée
+  useEffect(()=>{if(form.bobine_parent_id&&bobinesDispo.length&&!bobinesDispo.find(b=>b.id===form.bobine_parent_id))setForm(p=>({...p,bobine_parent_id:''}));},[bobinesDispo]);
   useEffect(()=>{
     if(session){
       chargerTickets();
@@ -390,8 +439,8 @@ export default function Operateur() {
   },[typePoste]);
 
   const resetSession=()=>{
-    clearLS('naido_session','naido_of','naido_shift','naido_mach');
-    setSession(null);setOfSel(null);setShiftSel(null);setMachSel(null);
+    clearLS('naido_session','naido_of','naido_shift','naido_mach','naido_mach_choisie','naido_shift_ofs');
+    setSession(null);setOfSel(null);setShiftSel(null);setMachSel(null);setShiftOfs([]);setSacsVides('');setFinShift(false);
     setEtape('config');setTickets([]);setArretActif(null);setRecap(null);
   };
 
@@ -431,8 +480,17 @@ export default function Operateur() {
     }catch{toast.error('Lecture des réglages impossible');}
   };
 
+  // Soudure : la bobine est finie ; ce qui n'a pas été colisé devient un reliquat repris sur la bobine suivante
+  const cloturerBobine=async()=>{
+    if(!parentSel)return;
+    try{
+      const{data}=await axios.post(`${API}/tickets/${parentSel.id}/cloturer-bobine`,{session_id:session?.id});
+      toast.success(data.reliquat_kg>0?`Bobine terminée — reliquat de ${fmt(data.reliquat_kg)} kg repris sur la prochaine bobine`:'Bobine terminée');
+      setForm(p=>({...p,bobine_parent_id:''}));chargerBobines();
+    }catch(e){toast.error(e.response?.data?.error||'Erreur clôture bobine');}
+  };
   const validerTicket=async()=>{
-    if(typePoste==='soudure_decoupe'){if(!form.qte_pieces)return toast.error('Saisissez le nombre de pieces');if(!machSD?.id)return toast.error('Selectionnez la machine soudeuse');}else if(!machineId)return toast.error('Choisissez la machine (elle n\'est pas assignee a cet OF)');else if(!form.poids_brut)return toast.error('Saisissez le poids brut');
+    if(typePoste==='soudure_decoupe'){if(!form.qte_pieces)return toast.error('Saisissez le nombre de pieces');if(!form.poids_colis)return toast.error('Saisissez le poids du colis pesé');if(!machSD?.id)return toast.error('Selectionnez la machine soudeuse');}else if(!machineId)return toast.error('Choisissez la machine (elle n\'est pas assignee a cet OF)');else if(!form.poids_brut)return toast.error('Saisissez le poids brut');
     setSubmitting(true);
     try{
       const isSD=typePoste==='soudure_decoupe';
@@ -441,19 +499,22 @@ export default function Operateur() {
         machine_id:machineId,
         article_id:ofSel.article_id||null,
         poids_brut_kg:parseFloat(form.poids_brut||0),poids_mandrin_kg:parseFloat(form.poids_mandrin||0),
-        poids_dechets_kg:parseFloat(form.poids_dechets||0),poids_rebuts_kg:parseFloat(form.rebuts||0),
+        poids_dechets_kg:parseFloat(form.poids_dechets||0),poids_rebuts_kg:0,
         motif_dechet:form.motif_dechet||null,motif_rebut:form.motif_rebut||null,
         type_ticket:typePoste,etape_source:isSD?'AT3-SOUD':typePoste,etape_dest:form.destination||null,
         zone_actuelle:isSD?'AT3-SOUD':undefined,
         ticket_parent_id:isSD?(form.bobine_parent_id||null):undefined,
         lot_id:form.lot_id||null,nom_matiere:form.nom_matiere||null,
         qte_pieces:parseInt(form.qte_pieces||0),numero_sequence:tickets.length+1,
-        numero_colis:form.numero_colis||null,poids_carton_kg:parseFloat(form.poids_carton||0),
+        numero_colis:isSD?(form.numero_colis||String(tickets.length+1)):(form.numero_colis||null),
+        poids_carton_kg:isSD?colisNet:0,
+        poids_colis_brut_kg:isSD?parseFloat(form.poids_colis||0):undefined,poids_emballage_kg:isSD?parseFloat(form.poids_emballage||0):undefined,type_emballage:isSD?(form.type_emballage||null):undefined,
       };
       const{data}=await axios.post(`${API}/tickets`,payload);
       toast.success(`Bobine ${data.numero_ticket} enregistrée !`);
       setTicketAff({...data,etape_dest:form.destination});
-      setForm(p=>({...p,poids_brut:'',poids_mandrin:'',poids_dechets:'',motif_dechet:'',rebuts:'',motif_rebut:'',lot_id:'',nom_matiere:'',qte_pieces:'',numero_colis:'',poids_carton:'',bobine_parent_id:'',bobine_manuelle:''}));
+      if(isSD)saveLS('naido_emballage',{poids:form.poids_emballage,type:form.type_emballage});
+      setForm(p=>({...p,poids_brut:'',poids_mandrin:'',poids_dechets:'',motif_dechet:'',rebuts:'',motif_rebut:'',lot_id:'',nom_matiere:'',qte_pieces:'',numero_colis:'',poids_carton:'',poids_colis:'',bobine_parent_id:isSD?p.bobine_parent_id:'',bobine_manuelle:''}));
       chargerTickets();chargerBobines();
     }catch(e){toast.error(e.response?.data?.error||e.message||'Erreur enregistrement');}
     finally{setSubmitting(false);}
@@ -472,14 +533,42 @@ export default function Operateur() {
     catch{toast.error('Erreur relance');}
   };
 
-  const cloturerShift=async()=>{
+  // Résumé de l'OF en cours pour le récap de shift (un shift peut compter plusieurs OF)
+  const resumeOfCourant=()=>{
+    const isSD=typePoste==='soudure_decoupe';
+    const poids=tickets.reduce((s,t)=>s+(isSD?poidsTicket(t):parseFloat(t.poids_net_kg||0)),0);
+    const dech=tickets.reduce((s,t)=>s+parseFloat(t.poids_dechets_kg||0),0);
+    const pieces=tickets.reduce((s,t)=>s+parseInt(t.qte_pieces||0),0);
+    const dureeMin=session?.created_at?Math.round((Date.now()-new Date(session.created_at).getTime())/60000):null;
+    return{numero_of:ofSel?.numero_of||'—',article:ofSel?.article_nom||'—',machine:machineTicket?.code||machineTicket?.nom||'NC',nb_bobines:tickets.length,cumul_of:cumulOf?cumulOf.nb_bobines:null,prevues:isSD?null:(ofSel?.at3_nb_bobines_cibles||null),poids_total:poids.toFixed(3),poids_dechets:dech.toFixed(3),pieces,duree_min:dureeMin,session_id:session?.id||null};
+  };
+  // Fin d'OF : la session de cet OF est terminée, l'opérateur choisit un autre OF (le shift continue)
+  const finirOf=async()=>{
     if(!session)return;setCloturant(true);
     try{
       await axios.put(`${API}/sessions/${session.id}/terminer`);
-      const poidsTotal=tickets.reduce((s,t)=>s+parseFloat(t.poids_net_kg||0),0);
-      const poidsDechet=tickets.reduce((s,t)=>s+parseFloat(t.poids_dechets_kg||0),0);
-      const dureeMin=session.created_at?Math.round((Date.now()-new Date(session.created_at).getTime())/60000):null;
-      setRecap({numero_of:ofSel?.numero_of||'—',article:ofSel?.article_nom||'—',machine:machineTicket?.code||machineTicket?.nom||'NC',shift:shiftSel?.nom||'—',operateur:`${user?.prenom||''} ${user?.nom||''}`.trim(),nb_bobines:tickets.length,cumul_of:cumulOf?cumulOf.nb_bobines:null,prevues:ofSel?.at3_nb_bobines_cibles||null,poids_total:poidsTotal.toFixed(3),poids_dechets:poidsDechet.toFixed(3),duree_min:dureeMin,date:new Date().toLocaleDateString('fr-FR')});
+      const liste=[...shiftOfs,resumeOfCourant()];
+      setShiftOfs(liste);saveLS('naido_shift_ofs',liste);
+      clearLS('naido_session','naido_of','naido_mach','naido_mach_choisie');
+      setSession(null);setOfSel(null);setMachSel(null);setTickets([]);setCumulOf(null);setArretActif(null);setBobinesDispo([]);
+      setEtape('of');chargerDonnees();
+      toast.success('OF terminé — choisissez le prochain OF');
+    }catch{toast.error("Erreur fin d'OF");}
+    finally{setCloturant(false);}
+  };
+  // Fin de shift : récap de tous les OF du shift + poids des sacs vides de matière (mis en quarantaine pour le recyclage)
+  const cloturerShift=async()=>{
+    if(!session&&!shiftOfs.length)return;setCloturant(true);
+    try{
+      const liste=[...shiftOfs];
+      if(session){await axios.put(`${API}/sessions/${session.id}/terminer`);liste.push(resumeOfCourant());}
+      const sv=parseFloat(sacsVides)||0;
+      if(sv>0){
+        try{await axios.post(`${API}/sessions/sacs-vides`,{poids_kg:sv,session_id:session?.id||liste[liste.length-1]?.session_id||null,of_id:ofSel?.id||null,shift_id:shiftSel?.id||null});}
+        catch{toast.error('Poids des sacs vides non enregistré');}
+      }
+      setRecap({shift:libShift(shiftSel),operateur:`${user?.prenom||''} ${user?.nom||''}`.trim(),date:new Date().toLocaleDateString('fr-FR'),ofs:liste,unite:typePoste==='soudure_decoupe'?'colis':'bobines',sacs_vides:sv});
+      setFinShift(false);
     }catch{toast.error('Erreur clôture');}
     finally{setCloturant(false);}
   };
@@ -593,6 +682,12 @@ export default function Operateur() {
         {etape==='of'&&(
           <div style={{display:'flex',flexDirection:'column',gap:14}}>
             <HistoriqueBobines user={user}/>
+            {shiftOfs.length>0&&(
+              <div style={{background:'#ecfdf5',border:'1px solid #a7f3d0',borderRadius:12,padding:'10px 14px',fontSize:12,color:'#065f46'}}>
+                <b>OF terminés pendant ce shift :</b> {shiftOfs.map(o=>`${o.numero_of} (${o.nb_bobines})`).join(' · ')}
+                <button onClick={()=>setFinShift(true)} style={{display:'block',marginTop:8,background:'#1c1917',color:'#f59e0b',border:'none',padding:'10px 14px',borderRadius:10,cursor:'pointer',fontWeight:700,fontSize:13}}>🏁 Fin de shift</button>
+              </div>
+            )}
             <div style={{background:'#fff',borderRadius:14,padding:18,border:'1px solid #e5e7eb'}}>
               <h3 style={{margin:'0 0 14px',fontSize:15,fontWeight:700}}>Choisir l'Ordre de Fabrication</h3>
               {ofs.length===0
@@ -645,7 +740,7 @@ export default function Operateur() {
                   <div style={{fontSize:11,color:'#a8a29e'}}>{ofSel.client_nom}</div>
                 </div>
                 <div style={{textAlign:'right'}}>
-                  <div style={{fontSize:11,color:'#a8a29e'}}>Bobines</div>
+                  <div style={{fontSize:11,color:'#a8a29e'}}>{typePoste==='soudure_decoupe'?'Colis':'Bobines'}</div>
                   <div style={{fontWeight:800,fontSize:30,color:'#f59e0b'}}>{tickets.length}</div>
                   {cumulOf&&typePoste==='extrusion'&&<div style={{fontSize:11,color:'#d6d3d1'}}>OF : {cumulOf.nb_bobines}{ofSel.at3_nb_bobines_cibles?` / ${ofSel.at3_nb_bobines_cibles}`:''} bobines</div>}
                 </div>
@@ -679,6 +774,15 @@ export default function Operateur() {
                 </div>
               ):null;})()}
             </div>
+
+            {/* OF terminé : passer à un autre OF */}
+            {(atteint||depasse)&&typePoste!=='soudure_decoupe'&&!arretActif&&(
+              <div style={{background:'#ecfdf5',border:'2px solid #34d399',borderRadius:14,padding:'14px 16px'}}>
+                <div style={{fontWeight:800,color:'#047857',fontSize:15}}>🏁 L'OF {ofSel.numero_of} est terminé</div>
+                <div style={{fontSize:12,color:'#065f46',margin:'4px 0 10px'}}>La quantité de l'OF est atteinte. Terminez cet OF et passez à un autre OF.</div>
+                <button onClick={finirOf} disabled={cloturant} style={{background:'#059669',color:'#fff',border:'none',padding:'14px',borderRadius:10,cursor:cloturant?'not-allowed':'pointer',fontWeight:700,fontSize:15,width:'100%'}}>➡ Terminer l'OF et choisir un autre OF</button>
+              </div>
+            )}
 
             {/* Arrêt actif */}
             {arretActif&&(
@@ -729,18 +833,12 @@ export default function Operateur() {
                   <span style={{fontSize:13,fontWeight:600,color:'#15803d'}}>POIDS NET</span>
                   <span style={{fontSize:26,fontWeight:800,color:'#15803d'}}>{poidsNet||'—'} kg</span>
                 </div>
-                {/* Déchets/Rebuts */}
-                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
+                {/* Déchet (un seul type de déchet) */}
+                <div style={{display:'grid',gridTemplateColumns:'1fr',gap:10,marginBottom:10}}>
                   <div>
                     <label style={{fontSize:11,fontWeight:600,color:'#374151',display:'block',marginBottom:3}}>Déchets (kg)</label>
                     <input type="number" step="0.001" value={form.poids_dechets} inputMode="decimal"
                       onChange={e=>setForm(p=>({...p,poids_dechets:e.target.value}))}
-                      style={{...inp,fontSize:16,border:'1px solid #fca5a5'}} placeholder="0.000"/>
-                  </div>
-                  <div>
-                    <label style={{fontSize:11,fontWeight:600,color:'#374151',display:'block',marginBottom:3}}>Rebuts (kg)</label>
-                    <input type="number" step="0.001" value={form.rebuts} inputMode="decimal"
-                      onChange={e=>setForm(p=>({...p,rebuts:e.target.value}))}
                       style={{...inp,fontSize:16,border:'1px solid #fca5a5'}} placeholder="0.000"/>
                   </div>
                 </div>
@@ -761,16 +859,25 @@ export default function Operateur() {
                   </select>
                 </div>
                 <div style={{marginBottom:10}}>
-                  <label style={{fontSize:11,fontWeight:600,color:'#374151',display:'block',marginBottom:3}}>Bobine source</label>
+                  <label style={{fontSize:11,fontWeight:600,color:'#374151',display:'block',marginBottom:3}}>Bobine source <span style={{fontWeight:400,color:'#9ca3af'}}>({bobinesDispo.length} disponible{bobinesDispo.length>1?'s':''})</span></label>
+                  <input type='search' placeholder='🔍 Rechercher une bobine (n° du ticket)' value={rechBobine} onChange={e=>setRechBobine(e.target.value)}
+                    style={{width:'100%',padding:'10px',borderRadius:8,border:'1px solid #e5e7eb',fontSize:13,marginBottom:6,boxSizing:'border-box'}}/>
                   <select value={form.bobine_parent_id||''} onChange={e=>setForm(p=>({...p,bobine_parent_id:e.target.value}))}
                     style={{width:'100%',padding:'10px',borderRadius:8,border:'1px solid #e5e7eb',fontSize:13}}>
                     <option value=''>-- Saisir manuellement --</option>
-                    {bobinesDispo.map(b=><option key={b.id} value={b.id}>{b.numero_ticket} — {parseFloat(b.poids_restant_kg!==undefined?b.poids_restant_kg:b.poids_net_kg).toFixed(3)} kg restant</option>)}
+                    {bobinesFiltrees.map(b=><option key={b.id} value={b.id}>{b.numero_ticket} — {parseFloat(b.poids_restant_kg!==undefined?b.poids_restant_kg:b.poids_net_kg).toFixed(3)} kg restant</option>)}
                   </select>
+                  {rechBobine.trim()&&bobinesFiltrees.length===0&&<div style={{fontSize:12,color:'#dc2626',marginTop:4}}>Aucune bobine ne correspond à « {rechBobine} »</div>}
                   {!form.bobine_parent_id && (
                     <input type='text' placeholder='Ou saisir le numero de bobine manuellement' value={form.bobine_manuelle||''}
                       onChange={e=>setForm(p=>({...p,bobine_manuelle:e.target.value}))}
                       style={{...inp,marginTop:6}}/>
+                  )}
+                  {parentSel&&(
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:6,fontSize:12,color:'#374151'}}>
+                      <span>Restant sur la bobine : <b>{fmt(parentSel.poids_restant_kg)} kg</b></span>
+                      <button onClick={cloturerBobine} style={{background:'#fff7ed',color:'#c2410c',border:'1px solid #fdba74',borderRadius:6,padding:'4px 8px',cursor:'pointer',fontSize:11,fontWeight:700}}>✓ Bobine terminée</button>
+                    </div>
                   )}
                 </div>
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
@@ -781,7 +888,7 @@ export default function Operateur() {
                       style={{...inp,border:'2px solid #be123c'}} placeholder="0"/>
                   </div>
                   <div>
-                    <label style={{fontSize:11,fontWeight:600,color:'#374151',display:'block',marginBottom:3}}>Nombre de colis</label>
+                    <label style={{fontSize:11,fontWeight:600,color:'#374151',display:'block',marginBottom:3}}>N° du colis <span style={{fontWeight:400,color:'#9ca3af'}}>(auto)</span></label>
                     <input type="number" step="1" value={form.numero_colis} inputMode="numeric"
                       onChange={e=>setForm(p=>({...p,numero_colis:e.target.value}))}
                       style={{...inp,color:'#6b7280'}} placeholder="0"/>
@@ -789,17 +896,40 @@ export default function Operateur() {
                 </div>
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:10}}>
                   <div>
-                    <label style={{fontSize:11,fontWeight:600,color:'#374151',display:'block',marginBottom:3}}>Poids colis (kg)</label>
-                    <input type="number" step="0.001" value={form.poids_carton} inputMode="decimal"
-                      onChange={e=>setForm(p=>({...p,poids_carton:e.target.value}))}
-                      style={{...inp,color:'#6b7280'}} placeholder="0.000"/>
+                    <label style={{fontSize:11,fontWeight:600,color:'#374151',display:'block',marginBottom:3}}>Poids du colis pesé (kg) *</label>
+                    <input type="number" step="0.001" value={form.poids_colis} inputMode="decimal"
+                      onChange={e=>setForm(p=>({...p,poids_colis:e.target.value}))}
+                      style={{...inp,border:'2px solid #be123c'}} placeholder="0.000"/>
                   </div>
                   <div>
-                    <label style={{fontSize:11,fontWeight:600,color:'#374151',display:'block',marginBottom:3}}>Rebuts (kg)</label>
-                    <input type="number" step="0.001" value={form.rebuts} inputMode="decimal"
-                      onChange={e=>setForm(p=>({...p,rebuts:e.target.value}))}
-                      style={{...inp,fontSize:16,border:'1px solid #fca5a5'}} placeholder="0.000"/>
+                    <label style={{fontSize:11,fontWeight:600,color:'#374151',display:'block',marginBottom:3}}>Poids de l'emballage (kg)</label>
+                    <input type="number" step="0.001" value={form.poids_emballage} inputMode="decimal"
+                      onChange={e=>setForm(p=>({...p,poids_emballage:e.target.value}))}
+                      style={{...inp,color:'#6b7280'}} placeholder="0.000"/>
                   </div>
+                </div>
+                <div style={{marginBottom:10}}>
+                  <label style={{fontSize:11,fontWeight:600,color:'#374151',display:'block',marginBottom:3}}>Type d'emballage</label>
+                  <input type="text" value={form.type_emballage} onChange={e=>setForm(p=>({...p,type_emballage:e.target.value}))} placeholder="Carton, sac, film…"
+                    style={{width:'100%',padding:'10px',borderRadius:8,border:'1px solid #e5e7eb',fontSize:13,boxSizing:'border-box'}}/>
+                </div>
+                <div style={{background:'#fff1f2',border:'2px solid #fda4af',borderRadius:10,padding:'10px 14px',marginBottom:10}}>
+                  <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                    <span style={{fontSize:13,fontWeight:600,color:'#be123c'}}>POIDS NET DU COLIS</span>
+                    <span style={{fontSize:24,fontWeight:800,color:'#be123c'}}>{form.poids_colis?colisNet.toFixed(3):'—'} kg</span>
+                  </div>
+                  {form.poids_colis&&<div style={{fontSize:11,color:'#6b7280',marginTop:4,lineHeight:1.5}}>
+                    {reprisPrevu>0&&<div>Reliquat de la bobine précédente repris : <b>{reprisPrevu.toFixed(3)} kg</b></div>}
+                    {parentSel&&<div>Déduit de la bobine : <b>{deduitBobine.toFixed(3)} kg</b> · restant après : <b style={{color:restantApres<-0.001?'#dc2626':'#374151'}}>{restantApres.toFixed(3)} kg</b></div>}
+                    {parentSel&&restantApres<-0.001&&<div style={{color:'#dc2626',fontWeight:600}}>⚠ Le colis dépasse le poids restant de la bobine</div>}
+                  </div>}
+                  {!parentSel&&reliquatDispo>0&&<div style={{fontSize:11,color:'#92400e',marginTop:4}}>Reliquat à reprendre sur la prochaine bobine : <b>{reliquatDispo.toFixed(3)} kg</b></div>}
+                </div>
+                <div style={{marginBottom:10}}>
+                  <label style={{fontSize:11,fontWeight:600,color:'#374151',display:'block',marginBottom:3}}>Déchets (kg)</label>
+                  <input type="number" step="0.001" value={form.poids_dechets} inputMode="decimal"
+                    onChange={e=>setForm(p=>({...p,poids_dechets:e.target.value}))}
+                    style={{...inp,fontSize:16,border:'1px solid #fca5a5'}} placeholder="0.000"/>
                 </div>
                 </>
                 )}
@@ -854,7 +984,8 @@ export default function Operateur() {
             {!arretActif&&(
               <div style={{display:'flex',gap:10}}>
                 <button onClick={()=>setEtape('arret')} style={{flex:1,background:'#fff',color:'#dc2626',border:'2px solid #fca5a5',padding:'14px',borderRadius:12,cursor:'pointer',fontWeight:700,fontSize:13}}>⏹ Arrêt machine</button>
-                <button onClick={cloturerShift} disabled={cloturant} style={{flex:1,background:'#1c1917',color:'#f59e0b',border:'none',padding:'14px',borderRadius:12,cursor:cloturant?'not-allowed':'pointer',fontWeight:700,fontSize:13}}>
+                <button onClick={finirOf} disabled={cloturant} style={{flex:1,background:'#fff',color:'#047857',border:'2px solid #6ee7b7',padding:'14px',borderRadius:12,cursor:cloturant?'not-allowed':'pointer',fontWeight:700,fontSize:13}}>✅ Fin d'OF</button>
+                <button onClick={()=>setFinShift(true)} disabled={cloturant} style={{flex:1,background:'#1c1917',color:'#f59e0b',border:'none',padding:'14px',borderRadius:12,cursor:cloturant?'not-allowed':'pointer',fontWeight:700,fontSize:13}}>
                   {cloturant?'Clôture...':'🏁 Fin de shift'}
                 </button>
               </div>
@@ -864,7 +995,7 @@ export default function Operateur() {
             {tickets.length>0&&(
               <div style={{background:'#fff',borderRadius:14,padding:14,border:'1px solid #e5e7eb'}}>
                 <h4 style={{margin:'0 0 10px',fontSize:13,fontWeight:700}}>
-                  Bobines session ({tickets.length}) — {tickets.reduce((s,t)=>s+parseFloat(t.poids_net_kg||0),0).toFixed(3)} kg net
+                  {typePoste==='soudure_decoupe'?'Colis':'Bobines'} session ({tickets.length}) — {tickets.reduce((s,t)=>s+poidsTicket(t),0).toFixed(3)} kg net
                 </h4>
                 {tickets.slice(0,8).map(t=>(
                   <div key={t.id} style={{display:'flex',justifyContent:'space-between',padding:'7px 10px',background:'#f9fafb',borderRadius:8,marginBottom:6,fontSize:13,alignItems:'center'}}>
@@ -873,7 +1004,7 @@ export default function Operateur() {
                       <span style={{color:'#9ca3af',marginLeft:6}}>{new Date(t.created_at).toLocaleTimeString('fr-FR')}</span>
                     </div>
                     <div style={{display:'flex',gap:6,alignItems:'center'}}>
-                      <span style={{fontWeight:700,color:'#15803d'}}>{t.poids_net_kg} kg</span>
+                      <span style={{fontWeight:700,color:'#15803d'}}>{fmt(poidsTicket(t))} kg{parseInt(t.qte_pieces)>0?` · ${t.qte_pieces} pcs`:''}</span>
                       <button onClick={()=>setTicketAff({...t})} style={{background:'#f0fdf4',color:'#15803d',border:'1px solid #86efac',borderRadius:6,padding:'2px 7px',cursor:'pointer',fontSize:11,fontWeight:700}}>🖨️ Ticket</button>
                     </div>
                   </div>
@@ -919,6 +1050,20 @@ export default function Operateur() {
         <p style={{textAlign:'center',color:'#9ca3af',fontSize:11,marginTop:16}}>© 2026 NAIdo — NAI</p>
       </main>
 
+      {finShift&&!recap&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.6)',zIndex:9998,display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+          <div style={{background:'#fff',borderRadius:16,padding:20,width:'100%',maxWidth:420}}>
+            <div style={{fontWeight:800,fontSize:16,marginBottom:4}}>🏁 Fin de shift</div>
+            <div style={{fontSize:12,color:'#6b7280',marginBottom:12}}>Le récap reprendra {session?(shiftOfs.length?`l'OF en cours et ${shiftOfs.length} OF terminé${shiftOfs.length>1?'s':''}`:"l'OF en cours"):`${shiftOfs.length} OF terminé${shiftOfs.length>1?'s':''}`} pendant ce shift.</div>
+            <label style={{fontSize:12,fontWeight:700,color:'#374151',display:'block',marginBottom:3}}>Poids des sacs vides de matière (kg)</label>
+            <input type="number" step="0.001" inputMode="decimal" value={sacsVides} onChange={e=>setSacsVides(e.target.value)} placeholder="0.000"
+              style={{...inp,border:'2px solid #f59e0b',marginBottom:4}}/>
+            <div style={{fontSize:11,color:'#9ca3af',marginBottom:14}}>Ces sacs vides partent en zone de quarantaine, en attente de recyclage.</div>
+            <button onClick={cloturerShift} disabled={cloturant} style={{background:'#1c1917',color:'#f59e0b',border:'none',padding:'14px',borderRadius:10,cursor:cloturant?'not-allowed':'pointer',fontWeight:700,fontSize:15,width:'100%',marginBottom:8}}>{cloturant?'Clôture...':'Terminer mon shift'}</button>
+            <button onClick={()=>setFinShift(false)} style={{background:'#f3f4f6',color:'#374151',border:'none',padding:'12px',borderRadius:10,cursor:'pointer',fontWeight:600,width:'100%'}}>← Annuler</button>
+          </div>
+        </div>
+      )}
       {recap&&<RecapShift recap={recap} onNouveau={resetSession}/>}
       {ticketAff&&<TicketBobine ticket={ticketAff} of={ofSel} machine={machineTicket} shift={shiftSel} user={user} onClose={()=>setTicketAff(null)}/>}
       {ticketReglageAff&&<TicketReglage record={ticketReglageAff} onClose={()=>setTicketReglageAff(null)}/>}

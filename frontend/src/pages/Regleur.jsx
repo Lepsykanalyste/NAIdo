@@ -45,6 +45,7 @@ const SECTIONS = [
       { key: 'pression_bar',   label: 'Pression',       type: 'number', unite: 'bar',    requis: true, min: 0, max: 400 },
       { key: 'vitesse_vis',    label: 'Vitesse vis',    type: 'number', unite: 'tr/min', min: 0, max: 200 },
       { key: 'vitesse_tirage', label: 'Vitesse tirage', type: 'number', unite: 'm/min',  min: 0, max: 100 },
+      { key: 'dechet_reglage_kg', label: 'Déchet de réglage', type: 'number', unite: 'kg', min: 0, max: 5000 },
       { key: 'corona',         label: 'Corona',         type: 'select', options: ['Non', 'Oui'] },
     ],
   },
@@ -118,6 +119,7 @@ export function TicketImprimable({ record, onClose }) {
     { l: 'VIT. VIS',     v: params.vitesse_vis   ? `${params.vitesse_vis} tr/min`: `${record.vitesse || '—'} tr/min` },
     { l: 'VIT. TIRAGE',  v: params.vitesse_tirage ? `${params.vitesse_tirage} m/min` : '—' },
     { l: 'CORONA',       v: params.corona || '—' },
+    ...(parseFloat(params.dechet_reglage_kg) > 0 ? [{ l: 'DÉCHET RÉGLAGE', v: `${params.dechet_reglage_kg} kg` }] : []),
     ...(sig && sig.quart ? [null, { l: 'QUART', v: sig.quart }] : []),
   ];
 
@@ -649,7 +651,7 @@ export function EcranReglage({ cible, user, onBack, onSuccess }) {
     axios.get(`${API}/regleur/of/${item.id}/reglages`).then(r => {
       const dernier = (Array.isArray(r.data) ? r.data : []).slice(-1)[0];
       if (!dernier) return;
-      try { const p = JSON.parse(dernier.notes || '{}').params_complets || {}; setParams(prev => ({ ...prev, ...p })); } catch {}
+      try { const p = JSON.parse(dernier.notes || '{}').params_complets || {}; setParams(prev => ({ ...prev, ...p, dechet_reglage_kg: '' })); } catch {}
     }).catch(() => {});
   }, [reprise, item.id]);
 

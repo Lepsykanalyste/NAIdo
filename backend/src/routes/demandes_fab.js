@@ -86,8 +86,9 @@ router.put('/:id/valider', auth, async (req, res) => {
       });
     }
     if (!lignes.length) {   // demande sans bon de commande : l'article de la demande
-      const a = await client.query('SELECT cadence_theorique_kg_h, temps_reglage_min FROM articles WHERE id=$1', [d.article_id]);
-      lignes = [{ article_id: d.article_id, pcs: parseInt(d.quantite_pieces || 0), kg: num(d.quantite_demandee),
+      const a = await client.query('SELECT cadence_theorique_kg_h, temps_reglage_min, poids_theorique_kg FROM articles WHERE id=$1', [d.article_id]);
+      lignes = [{ article_id: d.article_id, pcs: parseInt(d.quantite_pieces || 0),
+                  kg: num(d.quantite_demandee) || (a.rows.length ? parseInt(d.quantite_pieces || 0) * num(a.rows[0].poids_theorique_kg) : 0),
                   cadence: a.rows.length ? num(a.rows[0].cadence_theorique_kg_h) : 0, reglage: a.rows.length ? num(a.rows[0].temps_reglage_min || 30) : 30 }];
     }
 
