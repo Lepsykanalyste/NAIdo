@@ -893,17 +893,16 @@ function EcranGMAO({ user, onBack, onReglage }) {
   const setF = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
   useEffect(() => {
-    axios.get(`${API}/equipements`).then(r => setMachines(Array.isArray(r.data) ? r.data : [])).catch(() => {});
+    axios.get(`${API}/regleur/equipements`).then(r => setMachines(Array.isArray(r.data) ? r.data : [])).catch(() => {});
   }, []);
 
   const envoyer = async () => {
     if (!form.machine_id || !form.type || !form.description) return toast.error('Complétez tous les champs');
     setSubmitting(true);
     try {
-      await axios.post(`${API}/tickets`, {
-        equipement_id: form.machine_id, type_intervention: form.type,
+      await axios.post(`${API}/regleur/signalement`, {
+        equipement_id: form.machine_id, type: form.type,
         urgence: form.urgence, description: form.description,
-        demandeur_id: user?.id, origine: 'regleur', statut: 'ouvert',
       });
       setSucces(true);
     } catch (err) { toast.error(err.response?.data?.error || 'Erreur'); }
@@ -961,8 +960,9 @@ function EcranGMAO({ user, onBack, onReglage }) {
           <select style={{ ...S.inp, textAlign:'left', fontSize:15, fontWeight:500, padding:'12px 14px', borderColor:'#e0e7ff' }}
             value={form.machine_id} onChange={e => setF('machine_id', e.target.value)}>
             <option value="">-- Sélectionner --</option>
-            {machines.map(m => <option key={m.id} value={m.id}>{m.code} — {m.libelle || m.nom}</option>)}
+            {machines.map(m => <option key={m.id} value={m.id}>{m.code} — {m.designation || m.libelle || m.nom}</option>)}
           </select>
+          {machines.length === 0 && <div style={{ fontSize:12, color:'#b91c1c', marginTop:6 }}>Aucun équipement trouvé : il doit être créé dans la GMAO (Équipements).</div>}
         </div>
         <div style={{ background:'#fff', borderRadius:14, padding:'16px', border:'1px solid #e0e7ff' }}>
           <label style={S.lbl}>Type de problème *</label>

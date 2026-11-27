@@ -184,4 +184,40 @@ ${rowsHtml}
   }
 });
 
+// GET /api/regleur/equipements — machines et équipements de la GMAO, pour signaler un problème depuis l'écran du poste
+router.get('/equipements', auth, async (req, res) => {
+  try {
+    const { rows } = await db.query(`SELECT id, code, designation FROM equipements WHERE actif = true ORDER BY code`);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /api/regleur/signalement — ordre de travail GMAO ouvert depuis l'écran du poste (panne, anomalie, usure...)
+router.post('/signalement', auth, async (req, res) => {
+  try {
+    const { equipement_id, type, urgence, description } = req.body || {};
+    const TYPES = { panne: 'Panne', anomalie: 'Anomalie', usure: 'Usure', reglage: 'Problème de réglage', autre: 'Autre' };
+    const PRIORITES = { critique: 'urgente', haute: 'haute', normale: 'normale', basse: 'basse' };
+    if (!equipement_id || !TYPES[type] || !String(description || '').trim())
+      return res.status(400).json({ error: 'Machine, type de problème et description obligatoires' });
+    const eq = await db.query('SELECT id, code, designation FROM equipements WHERE id::text = $1 AND actif = true', [String(equipement_id)]);
+    if (!eq.rows.length) return res.status(404).json({ error: 'Machine introuvable' });
+    const e = eq.rows[0];
+    const arret = urgence === 'critique';
+    const priorite = PRIORITES[urgence] || 'normale';
+    const typeOt = (type === 'panne' || arret) ? 'urgence' : 'curatif';
+    const u = await db.query(`SELECT trim(COALESCE(prenom,'') || ' ' || COALESCE(nom,'')) AS nom FROM utilisateurs WHERE id::text = $1`, [String(req.user.id)]);
+    const par = (u.rows[0] && u.rows[0].nom) || '';
+    const { rows } = await db.query(`
+      INSERT INTO ordres_travail (type_ot, equipement_id, titre, description, symptomes, priorite, duree_estimee_h, demandeur_id, arret_machine, statut, notes)
+      VALUES ($1,$2,$3,$4,$5,$6,1,$7,$8,'ouvert',$9)
+      RETURNING *`,
+    [typeOt, e.id, `${TYPES[type]} — ${e.code}`, String(description).trim(), String(description).trim(), priorite, req.user.id, arret,
+      `Signalé depuis l'écran de production${par ? ' par ' + par : ''}`]);
+    // Arrêt total : la machine passe « en panne » dans la GMAO, comme pour un ordre de travail créé par la maintenance
+    if (arret) await db.query(`UPDATE equipements SET statut = 'en_panne' WHERE id = $1`, [e.id]);
+    res.status(201).json({ ok: true, id: rows[0].id, numero: rows[0].numero_ot || rows[0].numero || null });
+  } catch (err) { console.error('[REGLEUR] signalement :', err.message); res.status(500).json({ error: 'Enregistrement impossible : ' + err.message }); }
+});
+
 module.exports = router;
