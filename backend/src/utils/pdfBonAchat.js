@@ -313,12 +313,18 @@ function pdfCommercial({ titre, numero, dateStr, statut, infos = [], client = []
     const L = W - 40;
     const largeur = L - G;
     const xDroite = W - 40 - 305 - (qr ? 90 : 0);
+    const normaliser = (cols) => { const s = cols.reduce((t, c) => t + c.w, 0); return s > 0 && Math.abs(s - largeur) > 0.5 ? cols.map(c => ({ ...c, w: c.w * largeur / s })) : cols; };
+    entete = normaliser(entete);
+    if (tableau2 && tableau2.entete) tableau2 = { ...tableau2, entete: normaliser(tableau2.entete) };
 
     // Bandeau
     doc.rect(0, 0, W, 90).fill(BLEU);
     doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(22).text('NAI', G, 28);
     doc.font('Helvetica').fontSize(9).text(sousTitre, G, 56);
-    doc.font('Helvetica-Bold').fontSize(16).text(titre, xDroite, 24, { width: 305, align: 'right' });
+    doc.font('Helvetica-Bold');
+    let tailleTitre = 16;
+    while (tailleTitre > 9 && doc.fontSize(tailleTitre).widthOfString(titre) > 305) tailleTitre -= 0.5;
+    doc.fontSize(tailleTitre).text(titre, xDroite, 24 + (16 - tailleTitre) / 2, { width: 305, align: 'right', lineBreak: false });
     doc.font('Helvetica').fontSize(11).text(numero || '', xDroite, 46, { width: 305, align: 'right' });
     doc.fontSize(9).text('Date : ' + (dateStr || '—') + (statut ? '  ·  ' + statut : ''), xDroite, 64, { width: 305, align: 'right' });
     doc.fillColor('#000000');
@@ -327,7 +333,9 @@ function pdfCommercial({ titre, numero, dateStr, statut, infos = [], client = []
     // Client et informations
     const y0 = 104;
     const demi = (largeur - 16) / 2;
-    const hBloc = Math.max(96, 32 + 14 * Math.max(client.filter(Boolean).length, infos.filter(Boolean).length));
+    doc.font('Helvetica').fontSize(8.5);
+    const hauteurTexte = (arr) => arr.filter(Boolean).reduce((s, t) => s + doc.heightOfString(t, { width: demi - 20 }) + 3, 0);
+    const hBloc = Math.max(96, 32 + hauteurTexte(client), 32 + hauteurTexte(infos));
     const bloc = (x, titreB, lignesTxt) => {
       doc.rect(x, y0, demi, hBloc).lineWidth(0.8).strokeColor(LIGNE).stroke();
       doc.rect(x, y0, demi, 18).fill(BLEU_CLAIR);
@@ -347,7 +355,7 @@ function pdfCommercial({ titre, numero, dateStr, statut, infos = [], client = []
     doc.rect(G, y, largeur, 20).fill(BLEU);
     doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(8.5);
     let x = G;
-    entete.forEach(c => { doc.text(c.t, x + 6, y + 6, { width: c.w - 12, align: c.al }); x += c.w; });
+    entete.forEach(c => { let ft = 8.5; while (ft > 6 && doc.fontSize(ft).widthOfString(c.t) > c.w - 10) ft -= 0.5; doc.fontSize(ft).text(c.t, x + 5, y + 6, { width: c.w - 10, align: c.al, lineBreak: false }); x += c.w; });
     doc.fillColor('#000000');
     y += 20;
     lignes.forEach((vals, i) => {
