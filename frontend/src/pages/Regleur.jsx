@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useAuth } from '../hooks/useAuth.jsx';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { ImageFichier } from '../utils/fichiers.jsx';
 // QRCode importé dynamiquement dans TicketImprimable
 
 const API = '/api';
@@ -371,6 +372,7 @@ function EcranListe({ user, onValider, onGmao, onHistorique }) {
   const [loading,  setLoading] = useState(true);
   const [ticket,   setTicket]  = useState(null);
   const [enProd,   setEnProd]  = useState(0);
+  const [monProfil, setMonProfil] = useState(false);
 
   const charger = useCallback(async () => {
     setLoading(true);
@@ -408,6 +410,7 @@ function EcranListe({ user, onValider, onGmao, onHistorique }) {
           </div>
         </div>
         <div style={{ display:'flex', gap:6 }}>
+          <button style={S.btnHisto} onClick={() => setMonProfil(true)}>👤 Mon profil</button>
           <button style={S.btnHisto} onClick={onHistorique}>📋 Historique</button>
           <button style={S.btnGmao}  onClick={onGmao}>🔧 GMAO</button>
           <button style={S.btnQ}     onClick={() => { logout(); navigate('/login'); }}>Quitter</button>
@@ -531,6 +534,71 @@ function EcranListe({ user, onValider, onGmao, onHistorique }) {
       </main>
 
       {ticket && <TicketImprimable record={ticket} onClose={() => setTicket(null)} />}
+      {monProfil && <MonProfilRegleur user={user} onClose={() => setMonProfil(false)} />}
+    </div>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// MON PROFIL : photo et signature du régleur (reprises sur le ticket de réglage et les documents)
+// ═════════════════════════════════════════════════════════════════════════════
+function MonProfilRegleur({ user, onClose }) {
+  const [signature, setSignature] = useState(null);
+  const [photo, setPhoto] = useState(null);
+  useEffect(() => {
+    axios.get(`${API}/profil/signature/moi`).then(r => setSignature(r.data.signature || null)).catch(() => {});
+    axios.get(`${API}/profil/moi`).then(r => setPhoto(r.data.photo || null)).catch(() => {});
+  }, []);
+  const envoyer = async (e, champ, url, appliquer, message) => {
+    const fichier = e.target.files && e.target.files[0];
+    if (!fichier) return;
+    const fd = new FormData();
+    fd.append(champ, fichier);
+    try {
+      const { data } = await axios.post(`${API}${url}`, fd);
+      appliquer(data[champ] || null);
+      toast.success(message);
+    } catch (err) { toast.error(err.response?.data?.error || 'Envoi impossible'); }
+    finally { e.target.value = ''; }
+  };
+  const FONCTIONS = { regleur: 'Régleur', technicien_regleur: 'Technicien régleur' };
+  const bouton = { padding:'8px 14px', border:'1px solid #c7d2fe', borderRadius:8, cursor:'pointer', fontSize:13, fontWeight:600, background:'#eef2ff', color:'#4338ca' };
+  return (
+    <div style={S.overlay}>
+      <div style={{ ...S.modal, maxWidth:420, width:'92%' }}>
+        <div style={{ fontWeight:800, fontSize:17, marginBottom:2 }}>👤 Mon profil</div>
+        <div style={{ fontSize:13, color:'#6b7280', marginBottom:14 }}>
+          {user?.prenom} {user?.nom} · {FONCTIONS[user?.role] || user?.role || ''}
+        </div>
+
+        <div style={{ fontWeight:700, fontSize:13, marginBottom:6 }}>Photo</div>
+        <div style={{ display:'flex', alignItems:'center', gap:14, marginBottom:16 }}>
+          <div style={{ width:64, height:64, borderRadius:'50%', background:'#e5e7eb', overflow:'hidden', display:'flex', alignItems:'center', justifyContent:'center', color:'#6b7280' }}>
+            {photo ? <ImageFichier chemin={photo} alt="" style={{ width:64, height:64, objectFit:'cover' }} /> : '👤'}
+          </div>
+          <label style={bouton}>
+            {photo ? 'Changer la photo' : 'Importer une photo'}
+            <input type="file" accept="image/jpeg,image/png,image/webp" style={{ display:'none' }}
+              onChange={e => envoyer(e, 'photo', '/profil/photo', setPhoto, 'Photo mise à jour')} />
+          </label>
+        </div>
+
+        <div style={{ fontWeight:700, fontSize:13, marginBottom:4 }}>Ma signature</div>
+        <div style={{ fontSize:12, color:'#6b7280', marginBottom:8 }}>
+          Image png, jpg ou webp (1 Mo maximum), idéalement sur fond blanc. Elle est placée automatiquement sur vos tickets de réglage.
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:14, marginBottom:18 }}>
+          <div style={{ width:160, height:60, border:'1px dashed #c7d2fe', borderRadius:8, overflow:'hidden', display:'flex', alignItems:'center', justifyContent:'center', color:'#9ca3af', fontSize:12, background:'#fff' }}>
+            {signature ? <ImageFichier chemin={signature} alt="Signature" style={{ maxWidth:'100%', maxHeight:'100%', objectFit:'contain' }} /> : 'Aucune signature'}
+          </div>
+          <label style={bouton}>
+            {signature ? 'Remplacer' : 'Importer'}
+            <input type="file" accept="image/png,image/jpeg,image/webp" style={{ display:'none' }}
+              onChange={e => envoyer(e, 'signature', '/profil/signature', setSignature, 'Signature enregistrée')} />
+          </label>
+        </div>
+        <button onClick={onClose} style={{ ...S.btnSec, width:'100%', padding:'12px' }}>Fermer</button>
+      </div>
     </div>
   );
 }
