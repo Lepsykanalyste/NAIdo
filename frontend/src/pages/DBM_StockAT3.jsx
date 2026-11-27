@@ -623,19 +623,34 @@ export function ModuleReceptionDBM() {
         }
       }
       setLots(lotsMap);
-      setLivraisons((data.lignes || []).map(l => ({
-        ligne_id:   l.id,
-        article_id: l.article_id,
-        famille_id: l.famille_id,
-        code:       l.code,
-        designation:l.designation,
-        qte_demandee: l.qte_demandee,
-        qte_restante: l.qte_restante,
-        qte_livree:  parseFloat(l.qte_restante || 0).toFixed(1),
-        lot_id: '',
-        numero_lot: '',
-      })));
+      // FIFO : le lot le plus ancien est propose d'office ; si la quantite depasse son stock, le reste est pris sur le lot suivant
+      setLivraisons((data.lignes || []).flatMap(l => {
+        const base = { ligne_id: l.id, article_id: l.article_id, famille_id: l.famille_id, code: l.code, designation: l.designation,
+                       qte_demandee: l.qte_demandee, qte_restante: l.qte_restante };
+        let reste = parseFloat(l.qte_restante || 0);
+        const rows = [];
+        for (const lot of (lotsMap[l.article_id] || [])) {
+          if (reste <= 0.0005) break;
+          const dispo = parseFloat(lot.qte_disponible || 0);
+          if (dispo <= 0) continue;
+          const prise = Math.min(reste, dispo);
+          rows.push({ ...base, lot_id: lot.id, numero_lot: lot.numero_lot, qte_livree: String(Math.round(prise * 1000) / 1000) });
+          reste -= prise;
+        }
+        return rows.length ? rows : [{ ...base, qte_livree: parseFloat(l.qte_restante || 0).toFixed(1), lot_id: '', numero_lot: '' }];
+      }));
     } catch { toast.error('Erreur'); }
+  };
+
+  // FIFO : renvoie le lot plus ancien dont le stock n'est pas encore entierement sorti (null si le lot choisi respecte le FIFO)
+  const lotPrioritaire = (articleId, lotId) => {
+    const liste = lots[articleId] || [];
+    const idx = liste.findIndex(x => x.id === lotId);
+    if (idx <= 0) return null;
+    return liste.slice(0, idx).find(o => {
+      const sorti = livraisons.filter(x => x.article_id === articleId && x.lot_id === o.id).reduce((s, x) => s + (parseFloat(x.qte_livree) || 0), 0);
+      return sorti < parseFloat(o.qte_disponible || 0) - 0.05;
+    }) || null;
   };
 
   const ajouterLigneParLot = (i) => {
@@ -672,6 +687,8 @@ export function ModuleReceptionDBM() {
 
   const livrer = async () => {
     if (!detail) return;
+    const horsFifo = livraisons.find(l => l.lot_id && parseFloat(l.qte_livree) > 0 && lotPrioritaire(l.article_id, l.lot_id) && l.exception_statut !== 'approuvee');
+    if (horsFifo) return toast.error(`FIFO : pour ${horsFifo.code}, sortez d'abord le lot ${lotPrioritaire(horsFifo.article_id, horsFifo.lot_id).numero_lot} (le plus ancien) avant le lot ${horsFifo.numero_lot}, ou demandez une exception à la direction`);
     setLoading(true);
     try {
       const { data } = await axios.put(`${API}/dbm/${detail.id}/livrer`, {
@@ -709,6 +726,9 @@ export function ModuleReceptionDBM() {
             <button onClick={() => setDetail(null)} style={{ background:'#f3f4f6', border:'none', padding:'4px 10px', borderRadius:6, cursor:'pointer' }}>✕</button>
           </div>
 
+          <div style={{ background:'#fef3c7', border:'1px solid #fcd34d', borderRadius:8, padding:'6px 10px', fontSize:11, color:'#92400e', marginBottom:10 }}>
+            FIFO : le lot le plus ancien est toujours sorti en premier. Les quantités sont réparties automatiquement ; sortir un lot plus récent exige l'accord de la direction.
+          </div>
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13, marginBottom:14 }}>
             <thead>
               <tr style={{ background:'#e0f2fe' }}>
@@ -740,7 +760,7 @@ export function ModuleReceptionDBM() {
                       setLivraisons(prev => prev.map((x,xi) => xi===i?{...x,exception_id:null,exception_statut:null,lot_id:e.target.value,numero_lot:lot?.numero_lot||'',qte_livree:Math.min(parseFloat(l.qte_restante||0),parseFloat(lot?.qte_disponible||0)).toFixed(1)}:x));
                     }} style={{ width:'100%', border:'1px solid #7dd3fc', borderRadius:6, padding:'5px', fontSize:12, boxSizing:'border-box', marginBottom:3 }}>
                       <option value="">-- Choisir lot --</option>
-                      {(lots[l.article_id]||[]).map(lot => {
+                      {(lots[l.article_id]||[]).map((lot, rang) => {
                         // Déduire ce qui est déjà alloué dans les autres lignes
                         const dejaAlloue = livraisons
                           .filter((x, xi) => xi !== i && x.lot_id === lot.id)
@@ -748,18 +768,18 @@ export function ModuleReceptionDBM() {
                         const dispo = Math.max(0, parseFloat(lot.qte_disponible) - dejaAlloue);
                         return (
                           <option key={lot.id} value={lot.id}>
-                            {lot.numero_lot} ({dispo.toFixed(0)} kg dispo)
+                            {rang === 0 ? '① ' : ''}{lot.numero_lot} ({dispo.toFixed(0)} kg dispo){lot.date_reception ? ' · reçu le ' + new Date(lot.date_reception).toLocaleDateString('fr-FR') : ''}{rang === 0 ? ' — À SORTIR EN PREMIER' : ''}
                           </option>
                         );
                       })}
                     </select>
                     {(() => {
-                      const liste = [...(lots[l.article_id]||[])];
-                      const plusAncien = liste[0];
-                      const choisi = liste.find(x => x.id === l.lot_id);
-                      if (!choisi || !plusAncien || choisi.id === plusAncien.id) return null;
+                      const choisi = (lots[l.article_id]||[]).find(x => x.id === l.lot_id);
+                      const plusAncien = choisi ? lotPrioritaire(l.article_id, l.lot_id) : null;
+                      if (!choisi || !plusAncien) return null;
                       return (
                         <div style={{ fontSize:10, marginBottom:3 }}>
+                          {l.exception_statut !== 'approuvee' && <div style={{ color:'#dc2626', fontWeight:700, marginBottom:2 }}>⚠ FIFO : le lot {plusAncien.numero_lot} doit être sorti en premier</div>}
                           {l.exception_statut === 'approuvee' && <span style={{ color:'#15803d', fontWeight:700 }}>✓ Exception approuvée</span>}
                           {l.exception_id && l.exception_statut !== 'approuvee' && <span style={{ color:'#b45309' }}>⏳ Exception en attente de la direction </span>}
                           {l.exception_id && l.exception_statut !== 'approuvee' && (

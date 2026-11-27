@@ -257,6 +257,16 @@ router.get('/:id/pdf', auth, async (req, res, next) => {
   } catch (e) { console.error('[DBM-LIV] pdf dbm', e); res.status(500).json({ error: 'Erreur PDF : ' + e.message }); }
 });
 
+// GET /api/dbm/lots/:article_id — lots disponibles dans l'ordre FIFO (le plus ancien d'abord, meme ordre que la livraison)
+router.get('/lots/:article_id', auth, async (req, res) => {
+  try {
+    const { rows } = await db.query(`SELECT id, numero_lot, qte_disponible, date_reception, date_dluo, fournisseur_nom FROM lots_stock
+      WHERE article_id = $1 AND statut = 'disponible' AND qte_disponible > 0
+      ORDER BY date_reception ASC NULLS LAST, date_dluo ASC NULLS LAST, id ASC`, [req.params.article_id]);
+    ok(res, rows);
+  } catch (e) { err(res, e, 'Erreur lots'); }
+});
+
 // GET /api/dbm/:id — detail DBM (lignes + livraisons)
 router.get('/:id', auth, async (req, res, next) => {
   if (!UUID.test(req.params.id)) return next();
@@ -316,7 +326,9 @@ router.put('/:id/livrer', auth, async (req, res, next) => {
     const plan = [];
     for (const it of items) {
       const l = lignes[it.ligne_id];
-      const lots = await lotsFifo(client, l.article_id);
+      const lotsTous = await lotsFifo(client, l.article_id);
+      const lots = lotsTous.map(x => ({ ...x, qte_disponible: num(x.qte_disponible) - plan.filter(p => p.article_id === l.article_id && p.lot === x.numero_lot).reduce((s, p) => s + p.qte, 0) }))
+                           .filter(x => x.qte_disponible > EPS);
       const total = lots.reduce((t, x) => t + num(x.qte_disponible), 0);
       if (it.qte > total + EPS) throw userError(`${l.code} : stock insuffisant (disponible ${fmt(total, 3)} kg, demande ${fmt(it.qte, 3)} kg)`, 400);
       if (!it.lot) {
