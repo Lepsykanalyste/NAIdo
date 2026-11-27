@@ -26,7 +26,7 @@ const STATUT_DBM = {
   en_attente:    { bg:'#fef3c7', tx:'#92400e', label:'En attente' },
   approuve:      { bg:'#dbeafe', tx:'#1d4ed8', label:'Approuvé' },
   en_preparation:{ bg:'#f3e8ff', tx:'#6d28d9', label:'En transit → AT3' },
-  livre:         { bg:'#dcfce7', tx:'#15803d', label:'Livré ✓' },
+  livre:         { bg:'#dcfce7', tx:'#15803d', label:'Cédé ✓' },
   partiel:       { bg:'#fef9c3', tx:'#854d0e', label:'Partiel' },
   annule:        { bg:'#fee2e2', tx:'#dc2626', label:'Annulé' },
 };
@@ -502,7 +502,7 @@ export function ModuleDBM() {
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
             <thead>
               <tr style={{ background:'#fef3c7' }}>
-                {['MP', 'Famille', 'Demandé', 'Livré', 'Restant'].map(h => (
+                {['MP', 'Famille', 'Demandé', 'Cédé', 'Restant'].map(h => (
                   <th key={h} style={{ padding:'7px 10px', textAlign:'left', fontSize:11, fontWeight:600, color:'#92400e' }}>{h}</th>
                 ))}
               </tr>
@@ -545,7 +545,7 @@ export function ModuleDBM() {
               </div>
               <div style={{ textAlign:'right', display:'flex', flexDirection:'column', alignItems:'flex-end', gap:4 }}>
                 <div style={{ fontWeight:700, color:'#92400e' }}>{parseFloat(d.poids_total_demande||0).toFixed(1)} kg</div>
-                <div style={{ fontSize:11, color:'#15803d' }}>Livré : {parseFloat(d.poids_total_livre||0).toFixed(1)} kg</div>
+                <div style={{ fontSize:11, color:'#15803d' }}>Cédé : {parseFloat(d.poids_total_livre||0).toFixed(1)} kg</div>
                 <button onClick={e=>{e.stopPropagation();ouvrirPdfSecurise(`/api/dbm/${d.id}/pdf?t=${Date.now()}`);}}
                   style={{ background:'#fff7ed', color:'#92400e', border:'1px solid #fed7aa', borderRadius:6, padding:'3px 10px', cursor:'pointer', fontSize:11, fontWeight:600 }}>
                   🖨 PDF
@@ -765,7 +765,7 @@ export function ModuleReceptionDBM() {
           <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13, marginBottom:14 }}>
             <thead>
               <tr style={{ background:'#e0f2fe' }}>
-                {['MP', 'Demandé', 'Restant', 'Qté à livrer', 'N° Lot'].map(h => (
+                {['MP', 'Demandé', 'Restant', 'Qté à céder', 'N° Lot'].map(h => (
                   <th key={h} style={{ padding:'7px 10px', textAlign:'left', fontSize:11, fontWeight:600, color:'#0369a1' }}>{h}</th>
                 ))}
               </tr>
@@ -854,7 +854,7 @@ export function ModuleReceptionDBM() {
             <button onClick={livrer} disabled={loading}
               style={{ background: loading ? '#9ca3af' : '#0369a1', color:'#fff', border:'none', padding:'10px 24px', borderRadius:8, cursor: loading ? 'not-allowed' : 'pointer', fontWeight:700 }}
               onDoubleClick={e => e.preventDefault()}>
-              {loading ? '⏳ Envoi en cours...' : '✅ Valider Livraison → AT3'}
+              {loading ? '⏳ Envoi en cours...' : '✅ Valider la cession → AT3'}
             </button>
             <button onClick={() => setDetail(null)} style={{ background:'#f3f4f6', border:'none', padding:'10px 16px', borderRadius:8, cursor:'pointer' }}>Annuler</button>
           </div>
@@ -863,7 +863,7 @@ export function ModuleReceptionDBM() {
 
       {/* Onglets */}
       <div style={{ display:'flex', gap:0, marginBottom:16, borderRadius:10, overflow:'hidden', border:'2px solid #e5e7eb', width:'fit-content' }}>
-        {[['alivrer','📦 À livrer'],['historique','📋 Historique']].map(([id,label]) => (
+        {[['alivrer','📦 À céder'],['historique','📋 Historique']].map(([id,label]) => (
           <button key={id} onClick={() => setOnglet(id)} style={{
             padding:'8px 18px', border:'none', cursor:'pointer', fontSize:12, fontWeight:700,
             background: onglet===id ? '#0369a1' : '#fff', color: onglet===id ? '#fff' : '#6b7280'
@@ -936,7 +936,7 @@ export function ModuleReceptionDBM() {
       {onglet === 'historique' && (
         <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
           {bonsLivraison.length === 0 ? (
-            <div style={{ padding:48, textAlign:'center', color:'#9ca3af' }}>Aucun bon de livraison</div>
+            <div style={{ padding:48, textAlign:'center', color:'#9ca3af' }}>Aucun bon de cession interne</div>
           ) : bonsLivraison.map((b, i) => (
             <div key={i} style={{ background:'#fff', borderRadius:10, padding:'12px 16px', border:'1px solid #bae6fd' }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
@@ -947,7 +947,7 @@ export function ModuleReceptionDBM() {
                   <DetailBon numero={b.numero_livraison} />
                 </div>
                 <div style={{ textAlign:'right', display:'flex', flexDirection:'column', gap:4, alignItems:'flex-end' }}>
-                  <div style={{ fontWeight:700, color:'#15803d' }}>Livré : {parseFloat(b.poids_livre||0).toFixed(1)} kg | Reçu : {parseFloat(b.poids_recu||0).toFixed(1)} kg</div>
+                  <div style={{ fontWeight:700, color:'#15803d' }}>Cédé : {parseFloat(b.poids_livre||0).toFixed(1)} kg | Reçu : {parseFloat(b.poids_recu||0).toFixed(1)} kg</div>
                   <button onClick={() => ouvrirPdfSecurise(`/api/dbm/livraisons/${b.numero_livraison}/pdf?t=${Date.now()}`)}
                     style={{ background:'#f0f9ff', color:'#0369a1', border:'1px solid #bae6fd', borderRadius:6, padding:'3px 8px', cursor:'pointer', fontSize:11, fontWeight:600 }}>
                     🖨 PDF
@@ -1069,7 +1069,7 @@ export function ModuleStockAT3() {
         ))}
         {resume.filter(r => parseFloat(r.qte_totale||0) > 0).length === 0 && (
           <div style={{ gridColumn:'1/-1', textAlign:'center', color:'#9ca3af', padding:20, fontSize:13 }}>
-            Stock AT3 vide — en attente de livraison DBM
+            Stock AT3 vide — en attente de cession DBM
           </div>
         )}
       </div>
@@ -1263,7 +1263,7 @@ export function ModuleReceptionAT3() {
       {ongletRecep === 'historique' && (
         <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
           {bonsLivraison.length === 0 ? (
-            <div style={{ padding:48, textAlign:'center', color:'#9ca3af' }}>Aucun bon de livraison</div>
+            <div style={{ padding:48, textAlign:'center', color:'#9ca3af' }}>Aucun bon de cession interne</div>
           ) : bonsLivraison.map((b, i) => (
             <div key={i} style={{ background:'#faf5ff', borderRadius:10, padding:'12px 16px', border:'1px solid #c4b5fd' }}>
               <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
@@ -1274,7 +1274,7 @@ export function ModuleReceptionAT3() {
                   <DetailBon numero={b.numero_livraison} />
                 </div>
                 <div style={{ textAlign:'right', display:'flex', flexDirection:'column', gap:4, alignItems:'flex-end' }}>
-                  <div style={{ fontSize:12, color:'#7c3aed' }}>Livré : {parseFloat(b.poids_livre||0).toFixed(1)} kg</div>
+                  <div style={{ fontSize:12, color:'#7c3aed' }}>Cédé : {parseFloat(b.poids_livre||0).toFixed(1)} kg</div>
                   <div style={{ fontSize:12, color:'#15803d', fontWeight:700 }}>Reçu : {parseFloat(b.poids_recu||0).toFixed(1)} kg</div>
                   <button onClick={() => ouvrirPdfSecurise(`/api/dbm/livraisons/${b.numero_livraison}/pdf?t=${Date.now()}`)}
                     style={{ background:'#f3e8ff', color:'#7c3aed', border:'1px solid #c4b5fd', borderRadius:6, padding:'3px 8px', cursor:'pointer', fontSize:11, fontWeight:600 }}>
@@ -1407,7 +1407,7 @@ export function ModuleReceptionAT3() {
         {dbms.length === 0 && (
           <div style={{ padding:48, textAlign:'center', border:'1px solid #f3e8ff', borderRadius:12, color:'#9ca3af' }}>
             <div style={{ fontSize:36, marginBottom:8 }}>✅</div>
-            <p>Aucune livraison en attente de réception</p>
+            <p>Aucune cession en attente de réception</p>
           </div>
         )}
       </div>
@@ -1680,7 +1680,7 @@ export function DashboardMagasinMP() {
     <div>
       <div style={{ background:'linear-gradient(135deg,#0369a1,#0284c7)', borderRadius:14, padding:'14px 20px', marginBottom:20, color:'#fff' }}>
         <div style={{ fontWeight:800, fontSize:16 }}>🏪 Magasin MP — Tableau de bord</div>
-        <div style={{ fontSize:11, opacity:0.8, marginTop:2 }}>Vue d'ensemble des livraisons et du stock</div>
+        <div style={{ fontSize:11, opacity:0.8, marginTop:2 }}>Vue d'ensemble des cessions et du stock</div>
       </div>
 
       {/* KPIs */}
@@ -1688,8 +1688,8 @@ export function DashboardMagasinMP() {
         {[
           { label:'DBM en attente',    val:stats.en_attente,     bg:'#fef3c7', tx:'#92400e', icon:'📦' },
           { label:'En transit → AT3',  val:stats.en_preparation, bg:'#f3e8ff', tx:'#6d28d9', icon:'🚚' },
-          { label:'Livraisons partielles', val:stats.partiel,    bg:'#fef9c3', tx:'#854d0e', icon:'⚠' },
-          { label:'Livrées (total)',   val:stats.livre,          bg:'#dcfce7', tx:'#15803d', icon:'✅' },
+          { label:'Cessions partielles', val:stats.partiel,    bg:'#fef9c3', tx:'#854d0e', icon:'⚠' },
+          { label:'Cédées (total)',   val:stats.livre,          bg:'#dcfce7', tx:'#15803d', icon:'✅' },
         ].map((k,i) => (
           <div key={i} style={{ background:k.bg, borderRadius:12, padding:'14px 16px', border:`1px solid ${k.tx}30` }}>
             <div style={{ fontSize:20, marginBottom:4 }}>{k.icon}</div>
@@ -1719,9 +1719,9 @@ export function DashboardMagasinMP() {
 
       {/* Dernières livraisons */}
       <div style={{ background:'#fff', borderRadius:12, border:'1px solid #e5e7eb', padding:16 }}>
-        <div style={{ fontWeight:700, color:'#15803d', marginBottom:12, fontSize:13 }}>📋 Dernières livraisons</div>
+        <div style={{ fontWeight:700, color:'#15803d', marginBottom:12, fontSize:13 }}>📋 Dernières cessions</div>
         {dernLivraisons.length === 0 ? (
-          <div style={{ color:'#9ca3af', fontSize:13, textAlign:'center', padding:20 }}>Aucune livraison</div>
+          <div style={{ color:'#9ca3af', fontSize:13, textAlign:'center', padding:20 }}>Aucune cession</div>
         ) : (
           <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
             {dernLivraisons.map(d => (
@@ -1767,7 +1767,7 @@ export default function DBM_StockAT3() {
   }, []);
 
   const MODULES = user?.role === 'magasinier_mp' ? [
-    { id:'reception', icon:'🏪', label:'DBM à livrer', color:'#0369a1' },
+    { id:'reception', icon:'🏪', label:'DBM à céder', color:'#0369a1' },
   ] : [
     { id:'dbm',         icon:'📦', label:'Mes DBM',         color:'#92400e' },
     { id:'reception_at3', icon:'📥', label:'Réception MP',  color:'#7c3aed' },
@@ -1777,7 +1777,7 @@ export default function DBM_StockAT3() {
     <div>
       <div style={{ background:'linear-gradient(135deg,#92400e,#b45309)', borderRadius:14, padding:'14px 20px', marginBottom:16, color:'#fff' }}>
         <div style={{ fontWeight:800, fontSize:16 }}>
-          {user?.role === 'magasinier_mp' ? '🏪 Magasin MP — Gestion des livraisons' : '📦 Approvisionnement & Stock AT3'}
+          {user?.role === 'magasinier_mp' ? '🏪 Magasin MP — Gestion des cessions internes' : '📦 Approvisionnement & Stock AT3'}
         </div>
         <div style={{ fontSize:11, opacity:0.8, marginTop:2 }}>
           {user?.role === 'magasinier_mp' ? 'Réception et traitement des demandes de l\'Atelier 3' : 'Demandes de besoin MP + Stock interne Atelier 3'}

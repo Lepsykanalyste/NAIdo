@@ -99,7 +99,7 @@ router.get('/:id/pdf', auth, async (req, res) => {
   <div style="text-align:center">${qrUrl ? '<img src="'+qrUrl+'" width="80" height="80"/>' : ''}<div style="font-size:6pt;color:#9ca3af">${d.numero_dbm}</div></div>
   <div style="text-align:right;font-size:7pt;color:#6b7280">Date : ${new Date(d.created_at).toLocaleDateString('fr-FR')}<br>Statut : <span style="color:${statutColor[d.statut]||'#374151'};font-weight:700">${(d.statut||'').toUpperCase()}</span></div>
 </div>
-<div class="banner">📦 Bon de Livraison Matières — DBM</div>
+<div class="banner">📦 Bon de Cession Interne — Matières (DBM)</div>
 <div class="num">${d.numero_dbm}</div>
 <div class="grid">
   <div class="sec"><div class="sec-h">Informations</div><div class="sec-b">
@@ -212,7 +212,7 @@ router.put('/:id/livrer', auth, async (req, res) => {
       UPDATE dbm SET statut='en_preparation', livre_par=$1, date_livraison=NOW(), notes_magasin=$2 WHERE id=$3
     `, [mag_id, notes_magasin||'', req.params.id]);
     await client.query('COMMIT');
-    ok(res, { message: "Livraison envoyée — en attente de réception par l'Atelier 3 ✓" });
+    ok(res, { message: "Cession envoyée — en attente de réception par l'Atelier 3 ✓" });
   } catch(e) { await client.query('ROLLBACK'); err(res, e, 'Erreur livraison DBM'); }
   finally { client.release(); }
 });
@@ -300,6 +300,23 @@ router.get('/of/:of_id/besoins', auth, async (req, res) => {
         WHERE a.sous_famille_id=$1 AND a.type_article='matiere_premiere'
         GROUP BY a.id,a.code,a.designation ORDER BY a.code
       `, [g.groupe_id]);
+      // Aucune MP rattachee a ce groupe (sous-famille non renseignee sur la fiche article) : on propose les MP de la meme famille,
+      // puis, a defaut, toutes les MP qui ont du stock (AT3 ou magasin) : une matiere recue ne doit jamais etre introuvable
+      if (!artRes.rows.length) {
+        const SEL = `SELECT a.id, a.code, a.designation,
+               COALESCE((SELECT SUM(sa.qte_disponible) FROM stock_articles sa WHERE sa.article_id=a.id),0) AS stock_magasin,
+               COALESCE((SELECT SUM(qte_disponible) FROM stock_at3 WHERE article_id=a.id),0) AS stock_at3,
+               COALESCE((SELECT json_agg(json_build_object('lot',numero_lot,'qte',qte_disponible)) FROM stock_at3 WHERE article_id=a.id AND qte_disponible>0),'[]') AS lots_at3
+          FROM articles a WHERE a.type_article='matiere_premiere' AND `;
+        const essais = [
+          [SEL + `a.famille_id::text = $1::text ORDER BY a.code`, [String(g.famille_id)]],
+          [SEL + `(EXISTS (SELECT 1 FROM stock_at3 s WHERE s.article_id=a.id AND s.qte_disponible>0) OR EXISTS (SELECT 1 FROM stock_articles s2 WHERE s2.article_id=a.id AND s2.qte_disponible>0)) ORDER BY a.code`, []],
+        ];
+        for (const [sql, prm] of essais) {
+          const r2 = await db.query(sql, prm);
+          if (r2.rows.length) { artRes.rows = r2.rows; break; }
+        }
+      }
       const totalAt3 = artRes.rows.reduce((s,a)=>s+parseFloat(a.stock_at3||0),0);
       groupes.push({
         groupe_id:g.groupe_id, groupe_code:g.groupe_code, groupe_libelle:g.groupe_libelle,
@@ -774,7 +791,7 @@ router.get('/livraisons/:numero/pdf', auth, async (req, res) => {
     const statut = rows.every(l => l.receptionne) ? 'Réceptionné par l\'Atelier 3' : 'En transit — non réceptionné';
     const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8"><style>*{box-sizing:border-box;margin:0;padding:0}@page{size:A4;margin:15mm}body{font-family:Arial,sans-serif;font-size:9pt;color:#1f2937}.header{border-bottom:3px solid #0369a1;padding-bottom:8px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:flex-start}.company{font-size:16pt;font-weight:900;color:#0369a1}.banner{background:#0369a1;color:#fff;text-align:center;padding:8px;border-radius:4px;margin-bottom:12px;font-size:11pt;font-weight:700;text-transform:uppercase}.num{font-size:18pt;font-weight:900;color:#0369a1;text-align:center;margin:6px 0}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}.sec{border:1px solid #e5e7eb;border-radius:4px}.sec-h{background:#f3f4f6;padding:4px 8px;font-size:7pt;font-weight:700;text-transform:uppercase}.sec-b{padding:8px}.row{display:flex;justify-content:space-between;margin-bottom:3px}.lbl{color:#6b7280;font-size:7.5pt}.val{font-weight:700;font-size:8pt}table{width:100%;border-collapse:collapse;margin-bottom:12px}th{background:#0369a1;color:#fff;padding:5px 6px;text-align:left;font-size:7.5pt}.sigs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:12px}.sig{border:1px solid #d1d5db;border-radius:4px;padding:10px;min-height:60px;font-size:7pt;font-weight:700;text-transform:uppercase}.footer{border-top:1px solid #e5e7eb;padding-top:4px;text-align:center;font-size:6pt;color:#9ca3af;margin-top:8px}</style></head><body>
 <div class="header"><div><div class="company">NAI</div><div style="font-size:7pt;color:#6b7280">Magasin MP → Atelier 3</div></div><div style="text-align:center">${qr?'<img src="'+qr+'" width="80" height="80"/>':''}</div><div style="text-align:right;font-size:7pt;color:#6b7280">Date : ${new Date(d.date_livraison).toLocaleDateString('fr-FR')}<br>${statut}</div></div>
-<div class="banner">Bon de Livraison Matières</div><div class="num">${d.numero_livraison}</div>
+<div class="banner">Bon de Cession Interne — Matières</div><div class="num">${d.numero_livraison}</div>
 <div class="grid"><div class="sec"><div class="sec-h">Informations</div><div class="sec-b"><div class="row"><span class="lbl">DBM liée</span><span class="val">${d.numero_dbm}</span></div><div class="row"><span class="lbl">OF lié</span><span class="val">${d.numero_of||'—'}</span></div><div class="row"><span class="lbl">Demandeur</span><span class="val">${d.demandeur_nom||'—'}</span></div></div></div>
 <div class="sec"><div class="sec-h">Livraison</div><div class="sec-b"><div class="row"><span class="lbl">Livré par</span><span class="val">${d.livre_par_nom||'—'}</span></div><div class="row"><span class="lbl">Date</span><span class="val">${new Date(d.date_livraison).toLocaleDateString('fr-FR')}</span></div></div></div></div>
 <table><thead><tr><th>Code</th><th>Désignation</th><th style="text-align:center">Qté (kg)</th><th>N° Lot</th></tr></thead><tbody>${lignes}</tbody></table>

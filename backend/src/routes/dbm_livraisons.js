@@ -152,7 +152,7 @@ async function chargerBon(numero) {
 router.get('/livraisons/:numero', auth, async (req, res) => {
   try {
     const lignes = await chargerBon(req.params.numero);
-    if (!lignes.length) return res.status(404).json({ error: 'Bon de livraison introuvable' });
+    if (!lignes.length) return res.status(404).json({ error: 'Bon de cession introuvable' });
     ok(res, { numero_livraison: req.params.numero, numero_dbm: lignes[0].numero_dbm, numero_of: lignes[0].numero_of, lignes });
   } catch (e) { err(res, e, 'Erreur detail livraison'); }
 });
@@ -161,7 +161,7 @@ router.get('/livraisons/:numero', auth, async (req, res) => {
 router.get('/livraisons/:numero/pdf', auth, async (req, res) => {
   try {
     const lignes = await chargerBon(req.params.numero);
-    if (!lignes.length) return res.status(404).json({ error: 'Bon de livraison introuvable' });
+    if (!lignes.length) return res.status(404).json({ error: 'Bon de cession introuvable' });
     const h = lignes[0];
     const totLivre = lignes.reduce((s, l) => s + num(l.qte_livree), 0);
     const totRecu  = lignes.reduce((s, l) => s + (l.receptionne ? num(l.qte_recue ?? l.qte_livree) : 0), 0);
@@ -174,12 +174,12 @@ router.get('/livraisons/:numero/pdf', auth, async (req, res) => {
     });
     const obs = lignes.filter(l => l.receptionne && l.observation_reception).map(l => `${l.code} : ${l.observation_reception}`).join(' | ');
     const pdf = await pdfCommercial({
-      titre: 'BON DE LIVRAISON MATIÈRES PREMIÈRES',
+      titre: 'BON DE CESSION INTERNE - MATIÈRES PREMIÈRES',
       numero: req.params.numero,
       dateStr: dateCourte(h.date_livraison),
       statut: lignes.every(l => l.receptionne) ? 'Reçu' : 'En transit',
       sousTitre: 'Magasin MP - Atelier 3',
-      titreGauche: 'DEMANDE', titreDroite: 'LIVRAISON',
+      titreGauche: 'DEMANDE', titreDroite: 'CESSION',
       qrUrl: `BL ${req.params.numero} | DBM ${h.numero_dbm} | ${totLivre.toFixed(1)} kg`,
       client: ['DBM : ' + (h.numero_dbm || '—'), 'Ordre de fabrication : ' + (h.numero_of || '—')],
       infos: ['Livré par : ' + (h.livre_par_nom || '—'), 'Notes : ' + (h.notes_magasin || '—')],
@@ -421,7 +421,7 @@ router.put('/:id/livrer', auth, async (req, res, next) => {
     await client.query(`UPDATE dbm SET statut='en_preparation', livre_par=$1, date_livraison=NOW(), notes_magasin=$2 WHERE id=$3`,
       [mag_id, notes_magasin || '', dbm.id]);
     await client.query('COMMIT');
-    ok(res, { message: `Bon ${numeroLivraison} envoye - en attente de reception par l'Atelier 3`, numero_livraison: numeroLivraison });
+    ok(res, { message: `Bon de cession ${numeroLivraison} envoye - en attente de reception par l'Atelier 3`, numero_livraison: numeroLivraison });
   } catch (e) { await client.query('ROLLBACK'); err(res, e, 'Erreur livraison DBM'); }
   finally { client.release(); }
 });
