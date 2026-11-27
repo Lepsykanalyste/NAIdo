@@ -248,6 +248,7 @@ function GestionDevis() {
   });
   const [tfFichier, setTfFichier] = useState(null);
   const [tfAVenir, setTfAVenir] = useState(false);
+  const [tfAL, setTfAL] = useState({ ref:'', date:'', aVenir:false });   // appel à livraison du client
   const PER_PAGE = 10;
 
   const charger = async () => {
@@ -346,6 +347,20 @@ function GestionDevis() {
     try{await axios.put(`${API}/devis/${id}/statut`,{statut});toast.success('Statut mis à jour');charger();}
     catch{toast.error('Erreur');}
   };
+  // Validation des devis : direction commerciale, puis direction générale
+  const estDG = ['directeur','super_admin'].includes(user?.role);
+  const devisValide = d => !d.validation || d.validation==='validee';   // les anciens devis (sans validation) restent utilisables
+  const validerDevis = async (d, final) => {
+    try{await axios.post(`${API}/devis/${d.id}/validation`,{final:!!final});toast.success('Devis validé');charger();}
+    catch(e){toast.error(e.response?.data?.error||'Erreur validation');}
+  };
+  const refuserDevis = async (d) => {
+    const motif = (await saisir(`Motif du refus du devis ${d.numero_devis} :`));
+    if(!motif) return;
+    try{await axios.post(`${API}/devis/${d.id}/refus-validation`,{motif});toast.success('Devis refusé');charger();}
+    catch(e){toast.error(e.response?.data?.error||'Erreur');}
+  };
+  const labelValidation = d => ({en_attente_commerciale:'⏳ À valider : direction commerciale',en_attente_direction:'⏳ À valider : direction générale',refusee:'✗ Validation refusée'}[d.validation]||'');
   const envoyerEmail = async () => {
     setSendingEmail(true);
     try {
@@ -359,13 +374,15 @@ function GestionDevis() {
 
   const transformerBC = async () => {
     if (!tfFichier && !tfAVenir) return toast.error('Joignez le bon de commande du client, ou cochez « À VENIR »');
+    if (!tfAL.ref.trim() && !tfAL.aVenir) return toast.error("Indiquez la référence de l'appel à livraison, ou cochez « À VENIR »");
     const fd = new FormData();
     Object.entries(tfForm).forEach(([k,v])=>fd.append(k, v||''));
     if (tfFichier) fd.append('fichier_bc', tfFichier);
     fd.append('bc_a_venir', tfAVenir ? 'true' : 'false');
+    fd.append('appel_livraison_ref', tfAL.ref); fd.append('appel_livraison_date', tfAL.date); fd.append('al_a_venir', tfAL.aVenir ? 'true' : 'false');
     try{
       await axios.post(`${API}/devis/${showTransfo.id}/transformer-bc`, fd);
-      toast.success('BC créé !');setShowTransfo(null);setTfFichier(null);setTfAVenir(false);charger();
+      toast.success('BC créé !');setShowTransfo(null);setTfFichier(null);setTfAVenir(false);setTfAL({ref:'',date:'',aVenir:false});charger();
     }catch(e){toast.error(e.response?.data?.error||'Erreur');}
   };
 
@@ -418,11 +435,21 @@ function GestionDevis() {
                   </td>
                   <td style={{padding:'9px 12px'}}>
                     <span style={{background:bgStatut(d.statut),color:couleurStatut(d.statut),padding:'2px 8px',borderRadius:20,fontSize:11,fontWeight:700}}>{labelStatut(d.statut)}</span>
+                    {labelValidation(d)&&<div style={{fontSize:10,color:d.validation==='refusee'?'#dc2626':'#92400e',marginTop:3}}>{labelValidation(d)}</div>}
                   </td>
                   <td style={{padding:'9px 12px',display:'flex',gap:5}}>
+                    {d.validation==='en_attente_commerciale'&&(estDG||user?.role==='commercial')&&(
+                      <button onClick={()=>validerDevis(d,estDG)} style={{background:'#dcfce7',color:'#15803d',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11,fontWeight:700}}>{estDG?'✓ Valider (commerciale + générale)':'✓ Valider (dir. commerciale)'}</button>
+                    )}
+                    {d.validation==='en_attente_direction'&&estDG&&(
+                      <button onClick={()=>validerDevis(d,false)} style={{background:'#dcfce7',color:'#15803d',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11,fontWeight:700}}>✓ Valider (dir. générale)</button>
+                    )}
+                    {(d.validation==='en_attente_direction'&&estDG||d.validation==='en_attente_commerciale'&&(estDG||user?.role==='commercial'))&&(
+                      <button onClick={()=>refuserDevis(d)} style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>✗ Refuser</button>
+                    )}
                     <button onClick={()=>ouvrirPdfSecurise(`/api/devis/${d.id}/pdf`)} style={{background:'#e0f2fe',color:'#0891b2',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>🖨</button>
-                    {(d.statut==='brouillon'||d.statut==='envoye')&&<button onClick={()=>setShowEmail(d)} style={{background:'#fef3c7',color:'#d97706',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>✉ Email</button>}
-                    {d.statut==='brouillon'&&<button onClick={()=>changerStatut(d.id,'envoye')} style={{background:'#dbeafe',color:'#0369a1',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>📤</button>}
+                    {(d.statut==='brouillon'||d.statut==='envoye')&&devisValide(d)&&<button onClick={()=>setShowEmail(d)} style={{background:'#fef3c7',color:'#d97706',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>✉ Email</button>}
+                    {d.statut==='brouillon'&&devisValide(d)&&<button onClick={()=>changerStatut(d.id,'envoye')} style={{background:'#dbeafe',color:'#0369a1',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>📤</button>}
                     {d.statut==='envoye'&&<button onClick={()=>changerStatut(d.id,'accepte')} style={{background:'#dcfce7',color:'#15803d',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>✓</button>}
                     {d.statut==='envoye'&&<button onClick={()=>changerStatut(d.id,'refuse')} style={{background:'#fee2e2',color:'#dc2626',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11}}>✗</button>}
                     {d.statut==='accepte'&&<button onClick={()=>setShowTransfo(d)} style={{background:'#f5f3ff',color:'#7c3aed',border:'none',borderRadius:6,padding:'3px 8px',cursor:'pointer',fontSize:11,fontWeight:700}}>→ BC</button>}
@@ -490,6 +517,15 @@ function GestionDevis() {
               <label style={{display:'flex',alignItems:'center',gap:6,marginTop:8,fontSize:12,color:'#374151'}}>
                 <input type="checkbox" checked={tfAVenir} disabled={!!tfFichier} onChange={e=>setTfAVenir(e.target.checked)}/>
                 À VENIR (le client enverra son bon de commande plus tard)
+              </label>
+            </div>
+            <div style={{marginBottom:10,border:'1px solid #bbf7d0',background:'#f0fdf4',borderRadius:8,padding:10}}>
+              <div style={{fontSize:11,fontWeight:700,color:'#15803d',marginBottom:6}}>🚚 Appel à livraison *</div>
+              <input type="text" value={tfAL.ref} disabled={tfAL.aVenir} onChange={e=>setTfAL(p=>({...p,ref:e.target.value}))} style={inp({marginBottom:6})} placeholder="Référence de l'appel à livraison"/>
+              <input type="date" value={tfAL.date} disabled={tfAL.aVenir} onChange={e=>setTfAL(p=>({...p,date:e.target.value}))} style={inp()}/>
+              <label style={{display:'flex',alignItems:'center',gap:6,marginTop:8,fontSize:12,color:'#374151'}}>
+                <input type="checkbox" checked={tfAL.aVenir} onChange={e=>setTfAL(p=>({...p,aVenir:e.target.checked,ref:e.target.checked?'':p.ref}))}/>
+                À VENIR (le client enverra son appel à livraison plus tard)
               </label>
             </div>
             <div style={{display:'flex',gap:8,marginTop:14}}>
@@ -3589,7 +3625,7 @@ function Articles({ typeFixe = null } = {}) {
   const [form, setForm] = useState({
     code:'', designation:'', famille_id:'', unite_mesure_id:'',
     type_article: typeFixe || 'produit_fini', tracabilite_type:'lot', format_lot:'LOT-YYYYMMDD-001', matieres_principales:[],
-    couleur:'', longueur_mm:'', largeur_mm:'', hauteur_mm:'', epaisseur_mm:'',
+    couleur:'', longueur_mm:'', largeur_mm:'', hauteur_mm:'', epaisseur_mm:'', avec_soufflet:false, soufflet_mm:'',
     poids_theorique_kg:'', poids_reel_kg:'', poids_mandrin_kg:'',
     cadence_theorique_kg_h:'', temps_reglage_min:'30',
     prix_achat:'0', prix_achat_ttc:'0', prix_vente:'0', prix_vente_ttc:'0', prix_cession_interne:'0', taux_tva:'18',
@@ -3665,6 +3701,7 @@ function Articles({ typeFixe = null } = {}) {
       longueur_mm: a.longueur_mm || '',
       epaisseur_mm: a.epaisseur_mm || '',
       largeur_mm: a.largeur_mm || '',
+      avec_soufflet: !!a.avec_soufflet, soufflet_mm: a.soufflet_mm || '',
       hauteur_mm: a.hauteur_mm || '',
       poids_theorique_kg: a.poids_theorique_kg || '',
       poids_reel_kg: a.poids_reel_kg || '',
@@ -3695,7 +3732,7 @@ function Articles({ typeFixe = null } = {}) {
     setEditArtId(null);
     setComposition([]);
     setNewComp({ groupe_id:'', pct:'' });
-    setForm({ code:'', designation:'', famille_id:'', unite_mesure_id:'', type_article:'produit_fini', tracabilite_type:'lot', format_lot:'LOT-YYYYMMDD-001', matieres_principales:[], couleur:'', longueur_mm:'', largeur_mm:'', hauteur_mm:'', poids_theorique_kg:'', poids_reel_kg:'', poids_mandrin_kg:'', cadence_theorique_kg_h:'', temps_reglage_min:'30', prix_achat:'0', prix_vente:'0', prix_cession_interne:'0', stock_mini:'0', dlc_jours:'', allergenes:'', normes_iso:'', points_ccp:false, atelier_production_id:'' });
+    setForm({ code:'', designation:'', famille_id:'', unite_mesure_id:'', type_article:'produit_fini', tracabilite_type:'lot', format_lot:'LOT-YYYYMMDD-001', matieres_principales:[], couleur:'', longueur_mm:'', largeur_mm:'', hauteur_mm:'', epaisseur_mm:'', avec_soufflet:false, soufflet_mm:'', poids_theorique_kg:'', poids_reel_kg:'', poids_mandrin_kg:'', cadence_theorique_kg_h:'', temps_reglage_min:'30', prix_achat:'0', prix_vente:'0', prix_cession_interne:'0', stock_mini:'0', dlc_jours:'', allergenes:'', normes_iso:'', points_ccp:false, atelier_production_id:'' });
     setShowForm(true);
     setTimeout(() => document.getElementById('art-code')?.focus(), 100);
   };
@@ -3712,6 +3749,19 @@ function Articles({ typeFixe = null } = {}) {
 
   const totalPct = composition.reduce((s, c) => s + parseFloat(c.pct || 0), 0);
 
+  // Poids théorique automatique (atelier AT3) : longueur x largeur x épaisseur x densité x facteur ; avec soufflet, la largeur est augmentée du soufflet x 2
+  const poidsAuto = (f) => {
+    const u = unites.find((x) => String(x.id) === String(f.unite_mesure_id));
+    const code = (u?.code || '').toLowerCase();
+    const estDoublePli = /HOUSSE|HOUS|^SAC/i.test(`${f.designation || ''} ${f.code || ''}`.trim());
+    const facteur = code === 'kg' ? 1 : (code === 'pce' || code === 'pc' || code === 'piece' || code === 'pièce') ? (estDoublePli ? 2 : 1) : null;
+    const atAT3 = ateliers.find((x) => String(x.id) === String(f.atelier_production_id));
+    const atelierAT3 = !!atAT3 && (/^AT3$/i.test(atAT3.code || '') || /^AT3$/i.test(atAT3.parent_code || '') || /atelier\s*3/i.test(atAT3.libelle || ''));
+    const s = f.avec_soufflet ? (parseFloat(f.soufflet_mm) || 0) : 0;
+    const L = parseFloat(f.longueur_mm), l = parseFloat(f.largeur_mm) + 2 * s, e = parseFloat(f.epaisseur_mm);
+    return atelierAT3 && facteur && L > 0 && l > 0 && e > 0 ? Math.round((L * l * e * densiteAtelier * facteur / 1000000) * 10000) / 10000 : null;
+  };
+
   const sauvegarderArticle = async () => {
     if (!form.code.trim()) return toast.error('Code obligatoire');
     if (!form.designation.trim()) return toast.error('Désignation obligatoire');
@@ -3727,7 +3777,7 @@ function Articles({ typeFixe = null } = {}) {
       // Convertir les champs numériques
       ['longueur_mm','largeur_mm','hauteur_mm','epaisseur_mm','poids_theorique_kg','poids_reel_kg',
        'poids_mandrin_kg','cadence_theorique_kg_h','temps_reglage_min',
-       'prix_achat','prix_vente','prix_cession_interne','stock_mini','dlc_jours'].forEach(k => {
+       'soufflet_mm','prix_achat','prix_vente','prix_cession_interne','stock_mini','dlc_jours'].forEach(k => {
         if (payload[k] === '') payload[k] = null;
         else if (payload[k] !== null && payload[k] !== undefined) payload[k] = parseFloat(payload[k]) || 0;
       });
@@ -3735,6 +3785,11 @@ function Articles({ typeFixe = null } = {}) {
       ['famille_id','unite_mesure_id','atelier_production_id'].forEach(k => {
         if (payload[k] === '') payload[k] = null;
       });
+
+      // le poids calculé affiché dans la fiche est celui qui est enregistré
+      const pa = poidsAuto(form);
+      if (pa !== null) payload.poids_theorique_kg = pa;
+      if (!form.avec_soufflet) payload.soufflet_mm = null;
 
       let articleId = editArtId;
       if (modeEditArt && editArtId) {
@@ -3836,6 +3891,10 @@ function Articles({ typeFixe = null } = {}) {
                 <InputField label="Longueur (mm)" value={form.longueur_mm} onChange={e => setForm({...form,longueur_mm:e.target.value})} type="number" placeholder="0"/>
                 <InputField label="Largeur (mm)" value={form.largeur_mm} onChange={e => setForm({...form,largeur_mm:e.target.value})} type="number" placeholder="0"/>
                 <InputField label="Épaisseur (mm)" value={form.epaisseur_mm} onChange={e => setForm({...form,epaisseur_mm:e.target.value})} type="number" placeholder="0.08"/>
+                <label style={{ display:'flex', alignItems:'center', gap:6, fontSize:12, fontWeight:700, color:'#374151', paddingTop:22 }}>
+                  <input type="checkbox" checked={!!form.avec_soufflet} onChange={e => setForm({...form,avec_soufflet:e.target.checked})}/> Avec soufflet
+                </label>
+                {form.avec_soufflet && <InputField label="Soufflet (mm, d'un côté)" value={form.soufflet_mm} onChange={e => setForm({...form,soufflet_mm:e.target.value})} type="number" placeholder="13"/>}
                 {(() => {
                   // Poids théorique calculé en direct : L/100 × l/100 × e × densité × facteur (2 pièce, 1 Kg)
                   const u = unites.find((x) => String(x.id) === String(form.unite_mesure_id));
@@ -3846,7 +3905,10 @@ function Articles({ typeFixe = null } = {}) {
                   // Calcul réservé à l'atelier AT3 : pour les autres ateliers, le poids reste saisi à la main
                   const atAT3 = ateliers.find((x) => String(x.id) === String(form.atelier_production_id));
                   const atelierAT3 = !!atAT3 && (/^AT3$/i.test(atAT3.code || '') || /^AT3$/i.test(atAT3.parent_code || '') || /atelier\s*3/i.test(atAT3.libelle || ''));
-                  const L = parseFloat(form.longueur_mm), l = parseFloat(form.largeur_mm), e = parseFloat(form.epaisseur_mm);
+                  // Avec soufflet : largeur + soufflet x 2 (ex. 38 + 13 x 2) ; sans soufflet : la largeur seule
+                  const soufflet = form.avec_soufflet ? (parseFloat(form.soufflet_mm) || 0) : 0;
+                  const L = parseFloat(form.longueur_mm), e = parseFloat(form.epaisseur_mm);
+                  const l = parseFloat(form.largeur_mm) + 2 * soufflet;
                   // L, l, e en mm : mm x mm x mm = mm3 ; /1 000 000 donne des kg (densite g/cm3, 1 cm3 = 1 000 mm3, 1 kg = 1 000 g)
                   const calcule = atelierAT3 && facteur && L > 0 && l > 0 && e > 0 ? Math.round((L * l * e * densiteAtelier * facteur / 1000000) * 10000) / 10000 : null;
                   return (
@@ -3855,7 +3917,7 @@ function Articles({ typeFixe = null } = {}) {
                         onChange={e => setForm({...form,poids_theorique_kg:e.target.value})} type="number" placeholder="0.000"/>
                       <div style={{ gridColumn:'1 / -1', fontSize:11, color: calcule !== null ? '#15803d' : '#6b7280', marginTop:-4, marginBottom:8 }}>
                         {calcule !== null
-                          ? `Calculé : longueur × largeur × épaisseur (mm) × densité ${densiteAtelier} × ${facteur} ÷ 1 000 000 (unité ${u?.code}).`
+                          ? `Calculé : longueur × largeur${soufflet > 0 ? ` (largeur + soufflet × 2 = ${l} mm)` : ''} × épaisseur (mm) × densité ${densiteAtelier} × ${facteur} ÷ 1 000 000 (unité ${u?.code}).`
                           : atelierAT3
                             ? 'Se calcule automatiquement dès que longueur, largeur, épaisseur et une unité pièce ou Kg sont renseignées.'
                             : 'Poids saisi à la main (calcul automatique réservé à l\'atelier AT3).'}

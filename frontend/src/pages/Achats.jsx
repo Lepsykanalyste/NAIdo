@@ -40,6 +40,8 @@ const STATUTS = {
   annule:              { label: 'Annulée',              bg: '#fee2e2', color: '#dc2626' },
   en_attente:          { label: 'En attente',           bg: '#fef3c7', color: '#92400e' },
   traite:              { label: 'Transformée en BC',    bg: '#dcfce7', color: '#15803d' },
+  a_valider:           { label: 'À valider (direction)', bg: '#fef3c7', color: '#92400e' },
+  refusee:             { label: 'Refusée',               bg: '#fee2e2', color: '#dc2626' },
 };
 
 const inputStyle = { width: '100%', border: '1px solid #d1d5db', borderRadius: 8, padding: '8px 10px', fontSize: 13, boxSizing: 'border-box' };
@@ -170,10 +172,25 @@ function NouvelleCommande({ fournisseurs, articles, onClose, onCree }) {
   const [libelleId, setLibelleId] = useState('');
   const [ofsCmd, setOfsCmd] = useState([]);
   const [libellesCmd, setLibellesCmd] = useState([]);
+  const [demandesCmd, setDemandesCmd] = useState([]);   // demandes de besoin validées par la direction, à traiter
+  const [demandeId, setDemandeId] = useState('');
   useEffect(() => {
     axios.get(`${API}/achat/ofs-ouverts`).then(r => setOfsCmd(Array.isArray(r.data) ? r.data : [])).catch(() => {});
     axios.get(`${API}/achat/libelles-frais`).then(r => setLibellesCmd(Array.isArray(r.data) ? r.data : [])).catch(() => {});
+    axios.get(`${API}/achat/demandes?statut=en_attente`).then(r => setDemandesCmd(Array.isArray(r.data) ? r.data : [])).catch(() => {});
   }, []);
+  // Choisir une demande de besoin : ses articles, quantités et son motif (OF ou frais) sont repris dans le bon
+  const choisirDemande = async (id) => {
+    setDemandeId(id);
+    if (!id) return;
+    try {
+      const { data } = await axios.get(`${API}/achat/demandes/${id}`);
+      const l = (data.lignes || []).map(x => ({ article_id: x.article_id || '', designation: x.designation || '', quantite_commandee: String(x.quantite_demandee ?? '1'), prix_unitaire_ht: x.prix_achat ? String(x.prix_achat) : '' }));
+      if (l.length) setLignes(l);
+      if (data.of_id) { setMotifType('of'); setOfId(data.of_id); }
+      else if (data.libelle_frais_id) { setMotifType('libelle'); setLibelleId(data.libelle_frais_id); }
+    } catch (e) { toast.error(msg(e)); }
+  };
   const [envoi, setEnvoi] = useState(false);
   const majLigne = (i, patch) => setLignes(ls => ls.map((l, k) => (k === i ? { ...l, ...patch } : l)));
   const ht = lignes.reduce((s, l) => s + nb(l.quantite_commandee) * nb(l.prix_unitaire_ht), 0);
@@ -187,7 +204,7 @@ function NouvelleCommande({ fournisseurs, articles, onClose, onCree }) {
     if (!ok.length) return toast.error('Ajoutez au moins un article avec une quantité');
     setEnvoi(true);
     try {
-      await axios.post(`${API}/achat/commandes`, { ...form, ...(motifType === 'of' ? { of_id: ofId } : { libelle_frais_id: libelleId }), lignes: ok.map(l => ({ ...l, taux_tva: form.taux_tva })) });
+      await axios.post(`${API}/achat/commandes`, { ...form, ...(motifType === 'of' ? { of_id: ofId } : { libelle_frais_id: libelleId }), ...(demandeId ? { demande_id: demandeId } : {}), lignes: ok.map(l => ({ ...l, taux_tva: form.taux_tva })) });
       toast.success('Bon de commande créé : en attente de validation de la direction');
       onCree();
     } catch (e) { toast.error(msg(e)); }
@@ -203,6 +220,13 @@ function NouvelleCommande({ fournisseurs, articles, onClose, onCree }) {
             {fournisseurs.map(f => <option key={f.id} value={f.id}>{f.raison_sociale}</option>)}
           </select>
         </Champ>
+        <div style={{ gridColumn: '1 / -1', border: '1px solid #ddd6fe', background: '#faf5ff', borderRadius: 10, padding: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>🔗 Demande de besoin liée <span style={{ fontWeight: 400, color: '#6b7280' }}>(validée par la direction)</span></div>
+          <select value={demandeId} onChange={e => choisirDemande(e.target.value)} style={inputStyle}>
+            <option value="">-- Aucune (bon de commande sans demande de besoin) --</option>
+            {demandesCmd.map(dm => <option key={dm.id} value={dm.id}>{dm.numero_demande} — {dm.demandeur_nom || ''} ({dm.nb_lignes} article{dm.nb_lignes > 1 ? 's' : ''})</option>)}
+          </select>
+        </div>
         <div style={{ gridColumn: '1 / -1', border: '1px solid #e5e7eb', borderRadius: 10, padding: 10 }}>
           <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Pour quoi achetez-vous ? (obligatoire)</div>
           <div style={{ display: 'flex', gap: 16, marginBottom: 6, fontSize: 13 }}>
@@ -237,7 +261,10 @@ function NouvelleCommande({ fournisseurs, articles, onClose, onCree }) {
         <Btn plein onClick={() => setLignes([...lignes, { article_id: '', designation: '', quantite_commandee: '1', prix_unitaire_ht: '' }])}>+ Ajouter ligne</Btn>
       </div>
       {lignes.map((l, i) => (
-        <div key={i} style={{ display: 'grid', gridTemplateColumns: '3fr 1fr 1fr auto', gap: 8, marginBottom: 8, alignItems: 'end' }}>
+        <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 3fr 1fr 1fr auto', gap: 8, marginBottom: 8, alignItems: 'end' }}>
+          <Champ label={i === 0 ? 'Code' : ''}>
+            <input readOnly value={articles.find(a => a.id === l.article_id)?.code || ''} placeholder="Code" style={{ ...inputStyle, background: '#f3f4f6', fontFamily: 'monospace', fontWeight: 700 }} />
+          </Champ>
           <Champ label={i === 0 ? 'Article' : ''}>
             <ArticleChoix articles={articles} valeur={l.article_id}
               onChoisir={a => majLigne(i, a ? { article_id: a.id, designation: a.designation, prix_unitaire_ht: l.prix_unitaire_ht || String(a.prix_achat || '') } : { article_id: '', designation: '' })} />
@@ -378,7 +405,8 @@ function DetailCommande({ id, role, onClose, onChange, onReceptionner, onHistori
   const voitPrix = PRIX_ROLES.includes(role);
   const [c, setC] = useState(null);
   const charger = () => axios.get(`${API}/achat/commandes/${id}`).then(r => setC(r.data)).catch(e => toast.error(msg(e)));
-  useEffect(() => { charger(); }, [id]);
+  const [dem, setDem] = useState(null);   // demande de besoin à l'origine du bon
+  useEffect(() => { charger(); axios.get(`${API}/achat/commandes/${id}/demande`).then(r => setDem(r.data)).catch(() => {}); }, [id]);
   const statut = async s => {
     try { await axios.put(`${API}/achat/commandes/${id}/statut`, { statut: s }); toast.success('Statut mis à jour'); await charger(); onChange(); }
     catch (e) { toast.error(msg(e)); }
@@ -396,6 +424,7 @@ function DetailCommande({ id, role, onClose, onChange, onReceptionner, onHistori
         <Badge s={c.validation === 'validee' && c.statut === 'brouillon' ? 'valide' : c.statut} />
         {c.confirme_at && <span style={{ fontSize: 12, color: '#15803d' }}>✓ Validée par la direction le {jour(c.confirme_at)}</span>}
         {c.statut === 'envoye' && <span style={{ fontSize: 12, color: '#92400e' }}>En attente de validation de la direction</span>}
+        {dem && dem.numero_demande && <span style={{ fontSize: 12, color: '#6d28d9', background: '#ede9fe', borderRadius: 20, padding: '2px 10px', fontWeight: 700 }}>🔗 Demande de besoin {dem.numero_demande}</span>}
       </div>
       <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 12 }}>
         <thead><tr>{['Article', 'Désignation', 'Commandé', 'Reçu', 'Reste', ...(voitPrix ? ['Prix HT', 'Total HT'] : [])].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
@@ -442,11 +471,9 @@ function Reception({ commande, onClose, onFait }) {
   const [notes, setNotes] = useState('');
   const [rMode, setRMode] = useState('');
   const [rConteneur, setRConteneur] = useState('');
-  const [rPlomb, setRPlomb] = useState('');
   const [rImmat, setRImmat] = useState('');
   const [rChNom, setRChNom] = useState('');
   const [rChPrenom, setRChPrenom] = useState('');
-  const [rLotMat, setRLotMat] = useState('');
   const [rCommentaire, setRCommentaire] = useState('');
   const [saisie, setSaisie] = useState({});
   const [envoi, setEnvoi] = useState(false);
@@ -454,22 +481,23 @@ function Reception({ commande, onClose, onFait }) {
     axios.get(`${API}/achat/commandes/${commande.id}`).then(r => {
       setC(r.data);
       const s = {};
-      (r.data.lignes || []).forEach(l => { s[l.id] = { q: String(Math.max(0, nb(l.quantite_commandee) - nb(l.quantite_recue))), prix: String(l.prix_unitaire_ht ?? '') }; });
+      (r.data.lignes || []).forEach(l => { s[l.id] = { q: String(Math.max(0, nb(l.quantite_commandee) - nb(l.quantite_recue))), prix: String(l.prix_unitaire_ht ?? ''), lot: '' }; });
       setSaisie(s);
     }).catch(e => toast.error(msg(e)));
   }, [commande.id]);
   if (!c) return <Modal titre="Réception" onClose={onClose} largeur={860}><div style={{ padding: 20, textAlign: 'center', color: '#9ca3af' }}>Chargement...</div></Modal>;
 
   const valider = async () => {
-    const lignes = (c.lignes || []).filter(l => nb(saisie[l.id]?.q) > 0).map(l => ({ ligne_id: l.id, quantite_recue: nb(saisie[l.id].q), ...(voitPrix ? { prix_unitaire_ht: nb(saisie[l.id].prix) } : {}) }));
+    const lignes = (c.lignes || []).filter(l => nb(saisie[l.id]?.q) > 0).map(l => ({ ligne_id: l.id, quantite_recue: nb(saisie[l.id].q), numero_lot_matiere: String(saisie[l.id].lot || '').trim(), ...(voitPrix ? { prix_unitaire_ht: nb(saisie[l.id].prix) } : {}) }));
     if (!lignes.length) return toast.error('Saisissez au moins une quantité reçue');
+    if (lignes.some(l => !l.numero_lot_matiere)) return toast.error('Indiquez le n° de lot de la matière devant chaque article reçu');
     if (!rMode) return toast.error('Indiquez si la livraison est par conteneur ou par véhicule');
-    if (!rChNom.trim() || !rChPrenom.trim() || !rLotMat.trim()) return toast.error('Nom, prénom du chauffeur et lot de la matière obligatoires');
-    if (rMode === 'conteneur' && (!rConteneur.trim() || !rPlomb.trim())) return toast.error('Numéro de conteneur et de plomb obligatoires');
+    if (!rChNom.trim() || !rChPrenom.trim()) return toast.error('Nom et prénom du chauffeur obligatoires');
+    if (rMode === 'conteneur' && !rConteneur.trim()) return toast.error('Numéro de conteneur obligatoire');
     if (rMode === 'vehicule' && !rImmat.trim()) return toast.error('Immatriculation du véhicule obligatoire');
     setEnvoi(true);
     try {
-      const { data } = await axios.put(`${API}/achat/commandes/${c.id}/receptionner`, { date_reception: date, reference_bl: bl, notes, lignes, mode_transport: rMode, numero_conteneur: rConteneur, numero_plomb: rPlomb, immatriculation: rImmat, chauffeur_nom: rChNom, chauffeur_prenom: rChPrenom, numero_lot_matiere: rLotMat, commentaire_reception: rCommentaire });
+      const { data } = await axios.put(`${API}/achat/commandes/${c.id}/receptionner`, { date_reception: date, reference_bl: bl, notes, lignes, mode_transport: rMode, numero_conteneur: rConteneur, immatriculation: rImmat, chauffeur_nom: rChNom, chauffeur_prenom: rChPrenom, numero_lot_matiere: lignes[0].numero_lot_matiere, commentaire_reception: rCommentaire });
       toast.success(data.message || 'Réception enregistrée');
       if (data.plafonnees?.length) toast(`Quantité limitée au reste à recevoir : ${data.plafonnees.join(', ')}`, { icon: '⚠️' });
       if (data.stock_non_mis_a_jour?.length) toast.error(`Stock non mis à jour (aucun emplacement) : ${data.stock_non_mis_a_jour.join(', ')}`);
@@ -499,23 +527,22 @@ function Reception({ commande, onClose, onFait }) {
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
           {rMode === 'conteneur' && <Champ label="N° de conteneur *"><input value={rConteneur} onChange={e => setRConteneur(e.target.value)} style={inputStyle} /></Champ>}
-          {rMode === 'conteneur' && <Champ label="N° de plomb *"><input value={rPlomb} onChange={e => setRPlomb(e.target.value)} style={inputStyle} /></Champ>}
           {rMode === 'vehicule' && <Champ label="Immatriculation du véhicule *"><input value={rImmat} onChange={e => setRImmat(e.target.value)} style={inputStyle} /></Champ>}
           <Champ label="Nom du chauffeur *"><input value={rChNom} onChange={e => setRChNom(e.target.value)} style={inputStyle} /></Champ>
           <Champ label="Prénom du chauffeur *"><input value={rChPrenom} onChange={e => setRChPrenom(e.target.value)} style={inputStyle} /></Champ>
-          <Champ label="N° de lot de la matière *"><input value={rLotMat} onChange={e => setRLotMat(e.target.value)} style={inputStyle} /></Champ>
           {c.type_achat === 'export' && <Champ label="N° de lot du conteneur (transitaire)"><input value={c.numero_lot_conteneur || ''} disabled style={{ ...inputStyle, background: '#f3f4f6' }} /></Champ>}
           <Champ label="Commentaire (local / export)"><input value={rCommentaire} onChange={e => setRCommentaire(e.target.value)} placeholder={c.type_achat === 'export' ? 'Import' : 'Local'} style={inputStyle} /></Champ>
         </div>
       </div>
 
       <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 12 }}>
-        <thead><tr>{['Article', 'Commandé', 'Déjà reçu', 'Reste', 'À recevoir', ...(voitPrix ? ['Prix réel HT'] : [])].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
+        <thead><tr>{['N° lot matière *', 'Article', 'Commandé', 'Déjà reçu', 'Reste', 'À recevoir', ...(voitPrix ? ['Prix réel HT'] : [])].map(h => <th key={h} style={thStyle}>{h}</th>)}</tr></thead>
         <tbody>
           {(c.lignes || []).map(l => {
             const reste = Math.max(0, nb(l.quantite_commandee) - nb(l.quantite_recue));
             return (
               <tr key={l.id} style={{ opacity: reste <= 0 ? 0.5 : 1 }}>
+                <td style={tdStyle}><input disabled={reste <= 0} placeholder="N° de lot" value={saisie[l.id]?.lot ?? ''} onChange={e => setSaisie({ ...saisie, [l.id]: { ...saisie[l.id], lot: e.target.value } })} style={{ ...inputStyle, width: 130, fontFamily: 'monospace' }} /></td>
                 <td style={tdStyle}><b>{l.article_code || ''}</b> {l.designation}</td>
                 <td style={{ ...tdStyle, textAlign: 'right' }}>{qte(l.quantite_commandee)}</td>
                 <td style={{ ...tdStyle, textAlign: 'right' }}>{qte(l.quantite_recue)}</td>
@@ -581,13 +608,13 @@ function NouvelleDemande({ articles, onClose, onCree }) {
     setEnvoi(true);
     if (motifType === 'of' && !ofId) { setEnvoi(false); return toast.error('Choisissez un OF, ou passez en frais généraux'); }
     if (motifType === 'libelle' && !libelleId) { setEnvoi(false); return toast.error('Choisissez un libellé de frais'); }
-    try { await axios.post(`${API}/achat/demandes`, { notes, lignes: ok, ...(motifType === 'of' ? { of_id: ofId } : { libelle_frais_id: libelleId }) }); toast.success("Demande d'achat envoyée au service achat"); onCree(); }
+    try { await axios.post(`${API}/achat/demandes`, { notes, lignes: ok, ...(motifType === 'of' ? { of_id: ofId } : { libelle_frais_id: libelleId }) }); toast.success('Demande de besoin envoyée à la direction pour validation'); onCree(); }
     catch (e) { toast.error(msg(e)); }
     setEnvoi(false);
   };
   return (
     <Modal titre="📝 Nouvelle demande d'achat" onClose={onClose} largeur={760}>
-      <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>Indiquez ce dont vous avez besoin. Le service achat choisira le fournisseur et le prix.</div>
+      <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>Indiquez ce dont vous avez besoin. La direction valide la demande, puis le service achat la traite (fournisseur et prix).</div>
       <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 12, marginBottom: 14 }}>
         <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>À quoi sert cette demande ? (obligatoire)</div>
         <div style={{ display: 'flex', gap: 16, marginBottom: 8, fontSize: 13 }}>
@@ -697,8 +724,10 @@ function Transformer({ id, fournisseurs, articles, onClose, onFait }) {
 
 function PanneauDemandes({ peutTransformer, onBonCree }) {
   const { fournisseurs, articles } = useListes();
+  const { user } = useAuth();
+  const peutValider = ROLES_DIRECTION.includes(user?.role);   // la direction valide les demandes de besoin avant le service achat
   const [demandes, setDemandes] = useState([]);
-  const [filtre, setFiltre] = useState('en_attente');
+  const [filtre, setFiltre] = useState(peutValider ? 'a_valider' : 'en_attente');
   const [nouvelle, setNouvelle] = useState(false);
   const [aTransformer, setATransformer] = useState(null);
   const [vue, setVue] = useState(null);
@@ -708,11 +737,19 @@ function PanneauDemandes({ peutTransformer, onBonCree }) {
     if (!(await confirmer(`Annuler la demande ${d.numero_demande} ?`))) return;
     try { await axios.put(`${API}/achat/demandes/${d.id}/annuler`); toast.success('Demande annulée'); charger(); } catch (e) { toast.error(msg(e)); }
   };
+  const validerDemande = async d => {
+    try { await axios.put(`${API}/achat/demandes/${d.id}/valider`); toast.success('Demande validée : le service achat peut la traiter'); charger(); } catch (e) { toast.error(msg(e)); }
+  };
+  const refuserDemande = async d => {
+    const motif = (await saisir(`Motif du refus de la demande ${d.numero_demande} :`));
+    if (!motif) return;
+    try { await axios.put(`${API}/achat/demandes/${d.id}/refuser`, { motif }); toast.success('Demande refusée'); charger(); } catch (e) { toast.error(msg(e)); }
+  };
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          {[['', 'Toutes'], ['en_attente', 'En attente'], ['traite', 'Transformées'], ['annule', 'Annulées']].map(([v, l]) => (
+          {[['', 'Toutes'], ['a_valider', 'À valider (direction)'], ['en_attente', 'Validées — à traiter'], ['traite', 'Transformées'], ['refusee', 'Refusées'], ['annule', 'Annulées']].map(([v, l]) => (
             <button key={v} onClick={() => setFiltre(v)} style={{ padding: '5px 12px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, background: filtre === v ? '#6d28d9' : '#f3f4f6', color: filtre === v ? '#fff' : '#374151' }}>{l}</button>
           ))}
         </div>
@@ -734,7 +771,9 @@ function PanneauDemandes({ peutTransformer, onBonCree }) {
                   <div style={{ display: 'flex', gap: 5 }}>
                     <Btn onClick={() => setVue(d.id)}>👁 Voir</Btn>
                     {d.statut === 'en_attente' && peutTransformer && <Btn bg="#dcfce7" color="#15803d" onClick={() => setATransformer(d.id)}>🔁 Transformer en BC</Btn>}
-                    {d.statut === 'en_attente' && <Btn bg="#fee2e2" color="#dc2626" onClick={() => annuler(d)}>Annuler</Btn>}
+                    {d.statut === 'a_valider' && peutValider && <Btn bg="#dcfce7" color="#15803d" onClick={() => validerDemande(d)}>✓ Valider</Btn>}
+                    {d.statut === 'a_valider' && peutValider && <Btn bg="#fee2e2" color="#dc2626" onClick={() => refuserDemande(d)}>✗ Refuser</Btn>}
+                    {['a_valider', 'en_attente'].includes(d.statut) && <Btn bg="#fee2e2" color="#dc2626" onClick={() => annuler(d)}>Annuler</Btn>}
                   </div>
                 </td>
               </tr>
@@ -763,6 +802,7 @@ function DetailDemande({ id, onClose }) {
             <tbody>{(d.lignes || []).map(l => <tr key={l.id}><td style={tdStyle}><b>{l.article_code || ''}</b> {l.designation}</td><td style={{ ...tdStyle, textAlign: 'right', fontWeight: 700 }}>{qte(l.quantite_demandee)}</td></tr>)}</tbody>
           </table>
           {d.notes && <div style={{ background: '#f9fafb', borderRadius: 8, padding: '8px 10px', fontSize: 12, marginTop: 10 }}><b>Notes :</b> {d.notes}</div>}
+          {d.statut === 'refusee' && d.motif_refus && <div style={{ background: '#fef2f2', borderRadius: 8, padding: '8px 10px', fontSize: 12, marginTop: 10, color: '#991b1b' }}><b>Refusée par la direction :</b> {d.motif_refus}</div>}
         </div>
       )}
     </Modal>

@@ -98,7 +98,6 @@ export default function ArrivagesImport() {
                     <b style={{ fontFamily: 'monospace', color: '#92400e' }}>{numero}</b>
                     {lots[0].fournisseur_nom ? ` · ${lots[0].fournisseur_nom}` : ''}
                     {lots[0].numero_conteneur ? ` · conteneur ${lots[0].numero_conteneur}` : ''}
-                    {lots[0].numero_plomb ? ` · plomb ${lots[0].numero_plomb}` : ''}
                   </div>
                   {peut_transferer && lots.length > 1 && <button disabled={envoi} style={btn('#15803d')} onClick={() => transfererCommande(numero, lots)}>Tout transférer au magasin MP</button>}
                 </div>

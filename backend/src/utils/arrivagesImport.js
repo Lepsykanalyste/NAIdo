@@ -15,6 +15,12 @@ function assurerStructure() {
         ADD COLUMN IF NOT EXISTS reception_id uuid,
         ADD COLUMN IF NOT EXISTS numero_conteneur text,
         ADD COLUMN IF NOT EXISTS numero_plomb text`);
+      // N° de lot de la matiere propre a chaque ligne recue ; validation des demandes de besoin par la direction
+      await db.query(`ALTER TABLE lignes_reception_achat ADD COLUMN IF NOT EXISTS numero_lot_matiere text`);
+      await db.query(`ALTER TABLE demandes_achat ADD COLUMN IF NOT EXISTS validee_par text, ADD COLUMN IF NOT EXISTS validee_at timestamptz, ADD COLUMN IF NOT EXISTS motif_refus text`);
+      await db.query(`DO $$ DECLARE c record; BEGIN
+        FOR c IN SELECT conname FROM pg_constraint WHERE conrelid = 'demandes_achat'::regclass AND contype = 'c' AND pg_get_constraintdef(oid) ILIKE '%statut%'
+        LOOP EXECUTE 'ALTER TABLE demandes_achat DROP CONSTRAINT ' || quote_ident(c.conname); END LOOP; END $$`);
       await db.query(`
         CREATE TABLE IF NOT EXISTS transferts_quarantaine (
           id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

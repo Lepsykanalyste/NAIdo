@@ -27,6 +27,12 @@ async def lifespan(app: FastAPI):
     pool = await asyncpg.create_pool(DB_URL, min_size=3, max_size=10)
     import rbac as _rbac
     _rbac.definir_pool(pool)
+    # Soufflet : case a cocher + largeur du soufflet dans les caracteristiques physiques de l'article
+    try:
+        async with pool.acquire() as _c:
+            await _c.execute("ALTER TABLE articles ADD COLUMN IF NOT EXISTS avec_soufflet boolean DEFAULT false, ADD COLUMN IF NOT EXISTS soufflet_mm numeric")
+    except Exception as _e:
+        print("Soufflet (colonnes articles) :", _e)
     print("NAIdo Python API démarré OK")
     yield
     await pool.close()
@@ -156,6 +162,7 @@ async def get_articles(
                 a.temps_reglage_min, a.prix_achat, a.prix_vente, a.prix_cession_interne,
                 a.stock_mini, a.stock_maxi, a.tracabilite_type, a.format_lot, a.actif,
                 a.longueur_mm, a.largeur_mm, a.hauteur_mm,
+                a.epaisseur_mm, a.avec_soufflet, a.soufflet_mm,
                 a.photo_path, a.fiche_technique_path, a.fiche_securite_path,
                 a.dlc_jours, a.points_ccp, a.normes_iso, a.certifications,
                 a.fournisseur, a.reference_fournisseur, a.densite,
@@ -222,10 +229,11 @@ async def create_article(payload: dict, user=Depends(get_current_user)):
                     prix_achat,prix_vente,prix_cession_interne,
                     stock_mini,dlc_jours,allergenes,points_ccp,
                     normes_iso,atelier_production_id,
-                    composition,notes,actif,stock_maxi,fournisseur,reference_fournisseur,sous_famille_id
+                    composition,notes,actif,stock_maxi,fournisseur,reference_fournisseur,sous_famille_id,
+                    epaisseur_mm,soufflet_mm,avec_soufflet
                 ) VALUES (
                     $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,
-                    $15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,true,$28,$29,$30,$31
+                    $15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,true,$28,$29,$30,$31,$32,$33,$34
                 ) RETURNING id,code,designation,type_article
             """,
                 d["code"].upper().strip(),
@@ -259,6 +267,9 @@ async def create_article(payload: dict, user=Depends(get_current_user)):
                 d.get("fournisseur") or None,
                 d.get("reference_fournisseur") or None,
                 int_or_none(d.get("sous_famille_id")),
+                num(d.get("epaisseur_mm")),
+                num(d.get("soufflet_mm")) if d.get("avec_soufflet") else None,
+                bool(d.get("avec_soufflet", False)),
             )
             return dict(row)
         except asyncpg.UniqueViolationError:
@@ -291,6 +302,15 @@ async def update_article(article_id: str, payload: dict, user=Depends(get_curren
         if "stock_maxi" in d: add("stock_maxi", num(d["stock_maxi"]))
         if "reference_fournisseur" in d: add("reference_fournisseur", d["reference_fournisseur"] or None)
         if "sous_famille_id" in d: add("sous_famille_id", int_or_none(d["sous_famille_id"]))
+        # Dimensions et soufflet (poids theorique = longueur x largeur x epaisseur x densite ; avec soufflet : largeur + soufflet x 2)
+        if "longueur_mm" in d: add("longueur_mm", num(d["longueur_mm"]))
+        if "largeur_mm" in d: add("largeur_mm", num(d["largeur_mm"]))
+        if "hauteur_mm" in d: add("hauteur_mm", num(d["hauteur_mm"]))
+        if "epaisseur_mm" in d: add("epaisseur_mm", num(d["epaisseur_mm"]))
+        if "poids_reel_kg" in d: add("poids_reel_kg", num(d["poids_reel_kg"]))
+        if "poids_mandrin_kg" in d: add("poids_mandrin_kg", num(d["poids_mandrin_kg"]))
+        if "avec_soufflet" in d: add("avec_soufflet", bool(d["avec_soufflet"]))
+        if "soufflet_mm" in d: add("soufflet_mm", num(d["soufflet_mm"]) if d.get("avec_soufflet", True) else None)
         if "normes_iso" in d: add("normes_iso", d["normes_iso"] or None)
         if "notes" in d: add("notes", d["notes"] or None)
         if "points_ccp" in d: add("points_ccp", bool(d["points_ccp"]))
@@ -2429,7 +2449,8 @@ async def update_parametre(cle: str, payload: dict, user=Depends(get_current_use
             # Le poids théorique de chaque article à dimensions se recalcule avec la nouvelle densité
             await conn.execute(
                 """UPDATE articles a
-                      SET poids_theorique_kg = ROUND(((a.longueur_mm / 100) * (a.largeur_mm / 100) * a.epaisseur_mm * $1::float8
+                      SET poids_theorique_kg = ROUND(((a.longueur_mm * (a.largeur_mm + CASE WHEN COALESCE(a.avec_soufflet, false) THEN 2 * COALESCE(a.soufflet_mm, 0) ELSE 0 END)
+                            * a.epaisseur_mm * $1::float8 / 1000000.0)
                             * (CASE WHEN LOWER(um.code) = 'kg' THEN 1 ELSE 2 END))::numeric, 4)
                      FROM unites_mesure um, ateliers at
                     WHERE um.id = a.unite_mesure_id

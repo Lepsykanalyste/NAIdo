@@ -56,7 +56,7 @@ const SUJETS = [
   { id: 'achats_resume', nom: 'Achats', motif: '/api/achat', rx: /achat|commande|depense|bon de commande/, periode: true,
     sql: "SELECT COUNT(*)::int AS n, COALESCE(SUM(montant_ttc),0)::float AS m FROM commandes_achat WHERE date_commande::date BETWEEN $1 AND $2 AND statut <> 'annule'",
     texte: (r, p) => `Achats ${p.libelle} : ${r.n} commande(s), ${fcfa(r.m)} FCFA TTC.` },
-  { id: 'achats_validation', nom: 'Achats - validation direction', motif: '/api/achat', rx: /valid|attente.*direction|a valider/,
+  { id: 'achats_validation', nom: 'Achats - validation direction', motif: '/api/achat', rx: /^(?!.*(demande|besoin|devis)).*(valid|attente.*direction|a valider)/,
     sql: "SELECT COUNT(*)::int AS n FROM commandes_achat WHERE validation = 'en_attente_direction'",
     texte: (r) => `${r.n} commande(s) en attente de validation par la direction.` },
   { id: 'achats_envoi', nom: 'Achats - envoi fournisseur', motif: '/api/achat', rx: /envoy|envoi|a envoyer/,
@@ -65,9 +65,29 @@ const SUJETS = [
   { id: 'achats_reception', nom: 'Achats - réception', motif: '/api/achat', rx: /receptionn|reception|livrai|livrer/,
     sql: "SELECT COUNT(*)::int AS n FROM commandes_achat WHERE statut IN ('confirme','receptionne_partiel')",
     texte: (r) => `${r.n} commande(s) à réceptionner.` },
-  { id: 'demandes_achat', nom: "Demandes d'achat", motif: '/api/achat', rx: /demande/,
-    sql: "SELECT COUNT(*)::int AS n FROM demandes_achat WHERE statut = 'en_attente'",
-    texte: (r) => `${r.n} demande(s) d'achat en attente.` },
+  { id: 'demandes_achat', nom: 'Demandes de besoin', motif: '/api/achat', rx: /demande|besoin/,
+    sql: "SELECT COUNT(*) FILTER (WHERE statut = 'a_valider')::int AS a_valider, COUNT(*) FILTER (WHERE statut = 'en_attente')::int AS a_traiter FROM demandes_achat",
+    texte: (r) => `${r.a_valider} demande(s) de besoin à valider par la direction, ${r.a_traiter} validée(s) à traiter par le service achat.` },
+  { id: 'arrivages', nom: 'Arrivages conteneurs', motif: '/api/arrivages-import', rx: /quarantaine|arrivage|conteneur/,
+    sql: "SELECT COALESCE(SUM(qte_disponible),0)::float AS kg, COUNT(*)::int AS n FROM lots_stock WHERE statut = 'quarantaine' AND commande_id IS NOT NULL AND qte_disponible > 0",
+    texte: (r) => `${r.n} lot(s) en zone de quarantaine (arrivages import), ${Math.round((r.kg || 0) * 1000) / 1000} kg à transférer au stock du magasin MP.` },
+  { id: 'sacs_vides', nom: 'Sacs vides de matière', motif: '/api/sessions', rx: /sacs? vides?|recyclage/,
+    sql: "SELECT COALESCE(SUM(poids_kg),0)::float AS kg, COUNT(*)::int AS n FROM sacs_vides_matiere WHERE statut = 'quarantaine'",
+    texte: (r) => `${Math.round((r.kg || 0) * 1000) / 1000} kg de sacs vides en quarantaine (${r.n} déclaration(s) de fin de shift), en attente de recyclage.` },
+  { id: 'production', nom: 'Production', motif: '/api/tickets', rx: /production|produit|bobine|dechet|colis/, periode: true,
+    sql: `SELECT COUNT(*) FILTER (WHERE COALESCE(type_ticket, 'extrusion') <> 'soudure_decoupe')::int AS bobines,
+      COALESCE(SUM(poids_net_kg) FILTER (WHERE COALESCE(type_ticket, 'extrusion') <> 'soudure_decoupe'), 0)::float AS kg,
+      COUNT(*) FILTER (WHERE type_ticket = 'soudure_decoupe')::int AS colis,
+      COALESCE(SUM(qte_pieces) FILTER (WHERE type_ticket = 'soudure_decoupe'), 0)::float AS pieces,
+      COALESCE(SUM(poids_dechets_kg), 0)::float AS dechets
+      FROM tickets_production WHERE created_at::date BETWEEN $1 AND $2`,
+    texte: (r, p) => `Production ${p.libelle} : ${r.bobines} bobine(s) pour ${Math.round((r.kg || 0) * 10) / 10} kg net ; ${r.colis} colis de soudure/découpe (${r.pieces} pièces) ; déchets ${Math.round((r.dechets || 0) * 100) / 100} kg.` },
+  { id: 'of_en_cours', nom: 'Ordres de fabrication', motif: '/api/of', rx: /\bof\b|ordres? de fabrication|fabrication/,
+    sql: "SELECT COUNT(*) FILTER (WHERE statut IN ('lance','en_cours','en_attente_regleur','en_attente_operateur','pause'))::int AS en_cours, COUNT(*) FILTER (WHERE statut = 'planifie')::int AS planifies FROM ordres_fabrication",
+    texte: (r) => `${r.en_cours} OF en cours de production, ${r.planifies} planifié(s).` },
+  { id: 'devis_valider', nom: 'Devis à valider', motif: '/api/devis', rx: /devis/,
+    sql: "SELECT COUNT(*) FILTER (WHERE validation = 'en_attente_commerciale')::int AS commerciale, COUNT(*) FILTER (WHERE validation = 'en_attente_direction')::int AS direction, COUNT(*) FILTER (WHERE statut = 'envoye')::int AS envoyes FROM devis",
+    texte: (r) => `Devis : ${r.commerciale} en attente de la direction commerciale, ${r.direction} en attente de la direction générale, ${r.envoyes} envoyé(s) au client.` },
   { id: 'fournisseurs', nom: 'Fournisseurs', motif: '/api/fournisseurs', rx: /fournisseur/,
     sql: "SELECT COUNT(*)::int AS n FROM fournisseurs WHERE actif IS NOT FALSE",
     texte: (r) => `${r.n} fournisseur(s) actif(s).` },
@@ -94,7 +114,7 @@ const SUJETS = [
     texte: (r) => `${r.n} demande(s) de congé en attente.` },
 ];
 
-const SUGGESTIONS = ['CA du mois', 'Achats du mois', 'Combien de bons à envoyer ?', 'Graphique des ventes du mois', 'Mes droits'];
+const SUGGESTIONS = ['CA du mois', 'Achats du mois', 'Combien de bons à envoyer ?', 'Demandes de besoin à valider', 'Arrivages en quarantaine', 'Production du mois', 'Graphique des ventes du mois', 'Mes droits'];
 
 const AIDE = "Je suis l'assistant de NAIdo. Je réponds à partir des données de l'entreprise, uniquement dans les domaines accessibles à votre rôle, et je calcule tout sur place. Exemples : « CA du mois », « achats de mars 2026 », « ventes d'hier », « graphique des ventes ce mois », « combien de bons à envoyer ? ». Tapez « mes droits » pour voir votre périmètre.";
 

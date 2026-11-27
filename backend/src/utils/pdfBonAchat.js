@@ -253,20 +253,19 @@ function pdfReception({ numRec, cmd, rec, lignes, sign = null, nomRec = '' }) {
       'Bon de livraison : ' + (rec.reference_bl || '—'),
       'Reçu par : ' + (rec.cree_par_nom || '—'),
       conteneur ? 'Conteneur n° : ' + (rec.numero_conteneur || '—') : 'Véhicule (immatriculation) : ' + (rec.immatriculation || '—'),
-      conteneur ? 'N° de plomb : ' + (rec.numero_plomb || '—') : null,
       'Chauffeur : ' + chauffeur,
-      'Lot de la matière : ' + (rec.numero_lot_matiere || '—'),
     ]);
 
     // Tableau des lignes
     let y = y0 + hBloc + 14;
     const cols = [
-      { t: 'Code', x: G, w: 88, al: 'left' },
-      { t: 'Désignation', x: G + 88, w: 157, al: 'left' },
-      { t: 'Commandé', x: G + 245, w: 65, al: 'right' },
-      { t: 'Déjà reçu', x: G + 310, w: 65, al: 'right' },
-      { t: 'Reçu ce jour', x: G + 375, w: 75, al: 'right' },
-      { t: 'Reste', x: G + 450, w: largeur - 450, al: 'right' },
+      { t: 'N° lot', x: G, w: 72, al: 'left' },
+      { t: 'Code', x: G + 72, w: 70, al: 'left' },
+      { t: 'Désignation', x: G + 142, w: 108, al: 'left' },
+      { t: 'Commandé', x: G + 250, w: 62, al: 'right' },
+      { t: 'Déjà reçu', x: G + 312, w: 62, al: 'right' },
+      { t: 'Reçu ce jour', x: G + 374, w: 70, al: 'right' },
+      { t: 'Reste', x: G + 444, w: largeur - 444, al: 'right' },
     ];
     doc.rect(G, y, largeur, 20).fill(BLEU);
     doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(8.5);
@@ -274,8 +273,8 @@ function pdfReception({ numRec, cmd, rec, lignes, sign = null, nomRec = '' }) {
     doc.fillColor('#000000');
     y += 20;
     lignes.forEach((l, i) => {
-      const vals = [l.code, l.designation, quantite(l.commande), quantite(l.avant), quantite(l.recu), quantite(l.reste)];
-      const hauteur = Math.max(18, doc.heightOfString(String(vals[1]), { width: cols[1].w - 12, fontSize: 8.5 }) + 6);
+      const vals = [l.lot || rec.numero_lot_matiere || '', l.code, l.designation, quantite(l.commande), quantite(l.avant), quantite(l.recu), quantite(l.reste)];
+      const hauteur = Math.max(18, doc.heightOfString(String(vals[2]), { width: cols[2].w - 12, fontSize: 8.5 }) + 6);
       if (i % 2 === 1) doc.rect(G, y, largeur, hauteur).fill(ZEBRA);
       doc.fillColor('#111827').font('Helvetica').fontSize(8.5);
       cols.forEach((c, k) => doc.text(String(vals[k]), c.x + 6, y + 4, { width: c.w - 12, align: c.al }));

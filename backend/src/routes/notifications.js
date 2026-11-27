@@ -29,6 +29,8 @@ router.get('/', auth, async (req, res) => {
       await compter("SELECT COUNT(*)::int AS n FROM commandes_achat WHERE validation = 'en_attente_direction'"));
     ajouter('achat', 'Bons envoyés à confirmer par la direction',
       await compter("SELECT COUNT(*)::int AS n FROM commandes_achat WHERE statut = 'envoye'"));
+    ajouter('achat', 'Demandes de besoin à valider par la direction',
+      await compter("SELECT COUNT(*)::int AS n FROM demandes_achat WHERE statut = 'a_valider'"));
     ajouter('nc', 'Non-conformités critiques ou bloquantes ouvertes',
       await compter("SELECT COUNT(*)::int AS n FROM non_conformites WHERE statut NOT IN ('clos','annule') AND gravite IN ('critique','bloquante')"));
   }
@@ -52,7 +54,7 @@ router.get('/', auth, async (req, res) => {
       await compter("SELECT COUNT(*)::int AS n FROM commandes_achat WHERE validation = 'validee' AND statut = 'brouillon'"));
     ajouter('achat', 'Commandes à réceptionner',
       await compter("SELECT COUNT(*)::int AS n FROM commandes_achat WHERE statut IN ('confirme','receptionne_partiel')"));
-    ajouter('achat', "Demandes d'achat en attente",
+    ajouter('achat', 'Demandes de besoin validées à traiter',
       await compter("SELECT COUNT(*)::int AS n FROM demandes_achat WHERE statut = 'en_attente'"));
   }
   // Magasin : demandes de matieres (DBM) a livrer (ecran 'dbm')
@@ -119,6 +121,8 @@ router.get('/', auth, async (req, res) => {
   if (['commercial', 'vente', ...ROLES_DIRECTION].includes(role)) {
     ajouter('devis', 'Devis envoyés sans réponse',
       await compter("SELECT COUNT(*)::int AS n FROM devis WHERE statut = 'envoye'"));
+    ajouter('devis', 'Devis à valider (direction commerciale / générale)',
+      await compter('SELECT COUNT(*)::int AS n FROM devis WHERE validation = ANY($1)', [ROLES_DIRECTION.includes(role) ? ['en_attente_commerciale', 'en_attente_direction'] : ['en_attente_commerciale']]));
   }
 
   const total = items.reduce((s, i) => s + i.nombre, 0);

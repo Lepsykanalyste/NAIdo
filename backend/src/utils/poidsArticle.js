@@ -9,6 +9,7 @@
 
 // Recalcule le poids des articles (tous, ou un seul si articleId est donné). Renvoie le nombre de lignes modifiées.
 async function recalculerPoids(db, articleId = null) {
+  await db.query('ALTER TABLE articles ADD COLUMN IF NOT EXISTS avec_soufflet boolean DEFAULT false, ADD COLUMN IF NOT EXISTS soufflet_mm numeric');
   const { rows } = await db.query("SELECT valeur FROM parametres_systeme WHERE cle = 'densite_atelier3'");
   const densite = parseFloat(rows[0]?.valeur);
   if (!Number.isFinite(densite) || densite <= 0) return 0;
@@ -17,7 +18,7 @@ async function recalculerPoids(db, articleId = null) {
   if (articleId) { params.push(String(articleId)); filtre = ` AND a.id = $2`; }
   const res = await db.query(
     `UPDATE articles a
-        SET poids_theorique_kg = ROUND(((a.longueur_mm / 10.0) * (a.largeur_mm / 10.0) * a.epaisseur_mm * $1 / 10000.0
+        SET poids_theorique_kg = ROUND(((a.longueur_mm / 10.0) * ((a.largeur_mm + CASE WHEN COALESCE(a.avec_soufflet, false) THEN 2 * COALESCE(a.soufflet_mm, 0) ELSE 0 END) / 10.0) * a.epaisseur_mm * $1 / 10000.0
               * (CASE WHEN UPPER(a.designation) LIKE '%HOUSSE%' OR UPPER(a.code) LIKE 'HOUS%' OR UPPER(a.designation) LIKE 'SAC%' OR UPPER(a.code) LIKE 'SAC%' THEN 2 ELSE 1 END))::numeric, 4)
        FROM unites_mesure um, ateliers at
       WHERE um.id = a.unite_mesure_id

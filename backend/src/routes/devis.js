@@ -19,6 +19,17 @@ const uploadBcClient = multer({
 const { auth } = require('../middleware/auth');
 const { pdfCommercial, nombre, date } = require('../utils/pdfBonAchat');
 
+// Validation des devis : direction commerciale puis direction generale (comme les bons de commande d'achat) ;
+// appel a livraison saisi a la transformation du devis en bon de commande
+const structureDevis = (async () => {
+  await db.query(`ALTER TABLE devis ADD COLUMN IF NOT EXISTS validation text, ADD COLUMN IF NOT EXISTS validee_commerciale_par text,
+    ADD COLUMN IF NOT EXISTS validee_commerciale_at timestamptz, ADD COLUMN IF NOT EXISTS validee_direction_par text,
+    ADD COLUMN IF NOT EXISTS validee_direction_at timestamptz, ADD COLUMN IF NOT EXISTS motif_refus_validation text`);
+  await db.query(`ALTER TABLE bons_commande ADD COLUMN IF NOT EXISTS appel_livraison_ref text, ADD COLUMN IF NOT EXISTS appel_livraison_date date,
+    ADD COLUMN IF NOT EXISTS appel_livraison_a_venir boolean DEFAULT false`);
+})().catch(e => console.error('[DEVIS] structure :', e.message));
+const EST_DG = (u) => ['directeur', 'super_admin'].includes(String(u && u.role));
+
 // GET /api/devis
 router.get('/', auth, async (req, res) => {
   try {
@@ -52,6 +63,7 @@ router.get('/:id/lignes', auth, async (req, res) => {
 
 // POST /api/devis
 router.post('/', auth, async (req, res) => {
+  await structureDevis;
   const client = await db.connect();
   try {
     await client.query('BEGIN');
@@ -65,6 +77,8 @@ router.post('/', auth, async (req, res) => {
       VALUES ($1,$2,$3,$4,$5,$6,$7,'brouillon') RETURNING *
     `, [client_id||null, date_validite||null, conditions_livraison||null,
         notes||null, parseFloat(remise_pct||0), parseFloat(taux_tva||18), req.user.id]);
+    // Le devis attend la validation de la direction commerciale, puis de la direction generale
+    await client.query("UPDATE devis SET validation='en_attente_commerciale' WHERE id=$1", [dv[0].id]);
 
     let total_ht = 0, total_tva = 0, total_ttc = 0;
 
@@ -112,6 +126,12 @@ router.post('/', auth, async (req, res) => {
 // PUT /api/devis/:id/statut
 router.put('/:id/statut', auth, async (req, res) => {
   try {
+    await structureDevis;
+    if (['envoye', 'accepte'].includes(req.body.statut)) {
+      const v = await db.query('SELECT validation FROM devis WHERE id=$1', [req.params.id]);
+      if (v.rows[0] && v.rows[0].validation && v.rows[0].validation !== 'validee')
+        return res.status(400).json({ error: "Ce devis doit d'abord être validé par la direction commerciale puis par la direction générale" });
+    }
     const { rows } = await db.query(
       'UPDATE devis SET statut=$1, updated_at=NOW() WHERE id=$2 RETURNING *',
       [req.body.statut, req.params.id]
@@ -120,12 +140,60 @@ router.put('/:id/statut', auth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// POST /api/devis/:id/validation — validation par la direction commerciale, puis par la direction generale
+// (le directeur / super_admin peut tout valider d'un coup avec final=true ; un commercial ne valide pas son propre devis)
+router.post('/:id/validation', auth, async (req, res) => {
+  try {
+    await structureDevis;
+    const { rows } = await db.query('SELECT id, validation, commercial_id FROM devis WHERE id=$1', [req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: 'Devis introuvable' });
+    const dv = rows[0], u = req.user, dg = EST_DG(u);
+    if (dv.validation === 'en_attente_commerciale') {
+      if (!dg && u.role !== 'commercial') return res.status(403).json({ error: 'Validation réservée à la direction commerciale' });
+      if (!dg && String(dv.commercial_id) === String(u.id)) return res.status(403).json({ error: "Un devis doit être validé par un autre responsable commercial que son auteur" });
+      if (dg && req.body && req.body.final === true) {
+        const r = await db.query(`UPDATE devis SET validation='validee', validee_commerciale_par=$2, validee_commerciale_at=NOW(), validee_direction_par=$2, validee_direction_at=NOW(), updated_at=NOW() WHERE id=$1 RETURNING *`, [dv.id, String(u.id)]);
+        return res.json(r.rows[0]);
+      }
+      const r = await db.query(`UPDATE devis SET validation='en_attente_direction', validee_commerciale_par=$2, validee_commerciale_at=NOW(), updated_at=NOW() WHERE id=$1 RETURNING *`, [dv.id, String(u.id)]);
+      return res.json(r.rows[0]);
+    }
+    if (dv.validation === 'en_attente_direction') {
+      if (!dg) return res.status(403).json({ error: 'Validation finale réservée à la direction générale' });
+      const r = await db.query(`UPDATE devis SET validation='validee', validee_direction_par=$2, validee_direction_at=NOW(), updated_at=NOW() WHERE id=$1 RETURNING *`, [dv.id, String(u.id)]);
+      return res.json(r.rows[0]);
+    }
+    res.status(400).json({ error: "Ce devis n'attend pas de validation" });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST /api/devis/:id/refus-validation — refus motive (le devis passe a « refuse »)
+router.post('/:id/refus-validation', auth, async (req, res) => {
+  try {
+    await structureDevis;
+    const motif = String((req.body && req.body.motif) || '').trim();
+    if (!motif) return res.status(400).json({ error: 'Motif du refus obligatoire' });
+    const { rows } = await db.query('SELECT id, validation FROM devis WHERE id=$1', [req.params.id]);
+    if (!rows.length) return res.status(404).json({ error: 'Devis introuvable' });
+    const dv = rows[0], u = req.user;
+    if (!['en_attente_commerciale', 'en_attente_direction'].includes(dv.validation)) return res.status(400).json({ error: "Ce devis n'attend pas de validation" });
+    if (!(EST_DG(u) || (u.role === 'commercial' && dv.validation === 'en_attente_commerciale'))) return res.status(403).json({ error: "Vous ne pouvez pas refuser ce devis à cette étape" });
+    const r = await db.query(`UPDATE devis SET validation='refusee', statut='refuse', motif_refus_validation=$2, updated_at=NOW() WHERE id=$1 RETURNING *`, [dv.id, motif]);
+    res.json(r.rows[0]);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // POST /api/devis/:id/transformer-bc
 router.post('/:id/transformer-bc', auth, uploadBcClient.single('fichier_bc'), async (req, res) => {
   const client = await db.connect();
   try {
     await client.query('BEGIN');
+    await structureDevis;
     const { reference_client, date_livraison_souhaitee, adresse_livraison, notes } = req.body;
+    // Appel a livraison du client : reference (et date), ou case A VENIR
+    const alAVenir = String(req.body.al_a_venir) === 'true';
+    const alRef = String(req.body.appel_livraison_ref || '').trim();
+    if (!alRef && !alAVenir) throw new Error("Indiquez la référence de l'appel à livraison, ou cochez À VENIR");
     // Le BC ne peut pas etre cree sans le bon de commande du client : fichier joint, ou case A VENIR
     const aVenir = String(req.body.bc_a_venir) === 'true';
     if (!req.file && !aVenir) throw new Error('Joignez le bon de commande du client, ou cochez A VENIR');
@@ -134,6 +202,7 @@ router.post('/:id/transformer-bc', auth, uploadBcClient.single('fichier_bc'), as
     );
     if (!dv.length) throw new Error('Devis introuvable');
     const d = dv[0];
+    if (d.validation && d.validation !== 'validee') throw new Error("Ce devis n'est pas encore validé par la direction commerciale et la direction générale");
 
     const { rows: bc } = await client.query(`
       INSERT INTO bons_commande (devis_id, client_id, date_livraison_souhaitee,
@@ -144,6 +213,8 @@ router.post('/:id/transformer-bc', auth, uploadBcClient.single('fichier_bc'), as
         reference_client||null, notes||null, req.user.id,
         d.montant_ht, d.montant_tva, d.montant_total_fcfa, d.remise_pct, d.taux_tva,
         req.file ? '/uploads/bc_client/' + req.file.filename : null, !req.file && aVenir]);
+    await client.query('UPDATE bons_commande SET appel_livraison_ref=$2, appel_livraison_date=$3, appel_livraison_a_venir=$4 WHERE id=$1',
+      [bc[0].id, alRef || null, req.body.appel_livraison_date || null, alAVenir && !alRef]);
 
     // Copier les lignes
     const { rows: lignes } = await client.query(
@@ -390,6 +461,7 @@ router.post('/:id/envoyer-email', auth, async (req, res) => {
     `, [req.params.id]);
     if (!rows.length) return res.status(404).json({ error: 'Devis introuvable' });
     const d = rows[0];
+    if (d.validation && d.validation !== 'validee') return res.status(400).json({ error: "Devis non validé : la direction commerciale puis la direction générale doivent le valider avant l'envoi" });
     if (!d.client_email) return res.status(400).json({ error: 'Le client n\'a pas d\'email renseigné' });
 
     const nodemailer = require('nodemailer');

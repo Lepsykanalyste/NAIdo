@@ -94,6 +94,16 @@ router.post('/commandes', auth, async (req, res) => {
       l._ht = ht; l._tva = tva; totalHT += ht; totalTVA += tva;
     }
     if (!d.of_id && !d.libelle_frais_id) throw userError('Indiquez un OF ou un libellé de frais', 400);
+    // Demande de besoin liee : validee par la direction, pas encore traitee
+    let demande = null;
+    if (d.demande_id) {
+      if (!UUID.test(String(d.demande_id))) throw userError('Demande de besoin invalide', 400);
+      const dr = await client.query('SELECT * FROM demandes_achat WHERE id=$1 FOR UPDATE', [d.demande_id]);
+      if (!dr.rows.length) throw userError('Demande de besoin introuvable', 400);
+      if (dr.rows[0].statut !== 'en_attente')
+        throw userError(dr.rows[0].statut === 'a_valider' ? 'Cette demande de besoin doit d\'abord être validée par la direction' : 'Cette demande de besoin a déjà été traitée', 400);
+      demande = dr.rows[0];
+    }
     const statut = 'brouillon';
     const { rows: [cmd] } = await client.query(`
       INSERT INTO commandes_achat (statut,fournisseur_id,date_commande,date_livraison_prevue,montant_ht,taux_tva,montant_tva,montant_ttc,reference_fournisseur,notes,cree_par,type_achat,commentaire)
@@ -111,6 +121,7 @@ router.post('/commandes', auth, async (req, res) => {
     }
     await client.query(`UPDATE commandes_achat SET validation='en_attente_direction', of_id=$2, libelle_frais_id=$3 WHERE id=$1`,
       [cmd.id, d.of_id || null, d.libelle_frais_id || null]);
+    if (demande) await client.query(`UPDATE demandes_achat SET statut='traite', commande_id=$1, traite_par=$2, traite_at=NOW() WHERE id=$3`, [cmd.id, req.user?.id || null, demande.id]);
     await client.query('COMMIT');
     res.status(201).json({ ...cmd, validation: 'en_attente_direction' });
   } catch (e) { await client.query('ROLLBACK'); err(res, e, 'Erreur creation commande'); }
@@ -153,6 +164,12 @@ router.put('/commandes/:id/statut', auth, async (req, res, next) => {
   finally { client.release(); }
 });
 
+// Numero de lot de la matiere propre a une ligne ; si le meme lot arrive en plusieurs livraisons, il est suffixe -R2, -R3...
+async function numeroLotUnique(client, articleId, lot) {
+  const r = await client.query(`SELECT COUNT(*)::int AS n FROM lots_stock WHERE article_id = $1 AND (numero_lot = $2 OR numero_lot LIKE $2 || '-R%')`, [articleId, lot]);
+  return r.rows[0].n ? `${lot}-R${r.rows[0].n + 1}` : lot;
+}
+
 // PUT /commandes/:id/receptionner — receptions partielles cumulees
 router.put('/commandes/:id/receptionner', auth, async (req, res, next) => {
   if (!UUID.test(req.params.id)) return next();
@@ -166,8 +183,7 @@ router.put('/commandes/:id/receptionner', auth, async (req, res, next) => {
     const txt = v => String(v || '').trim();
     if (!['conteneur', 'vehicule'].includes(mode_transport)) throw userError('Indiquez si la livraison est par conteneur ou par véhicule', 400);
     if (!txt(chauffeur_nom) || !txt(chauffeur_prenom)) throw userError('Nom et prénom du chauffeur obligatoires', 400);
-    if (!txt(numero_lot_matiere)) throw userError('Numéro de lot de la matière obligatoire', 400);
-    if (mode_transport === 'conteneur' && (!txt(numero_conteneur) || !txt(numero_plomb))) throw userError('Numéro de conteneur et numéro de plomb obligatoires', 400);
+    if (mode_transport === 'conteneur' && !txt(numero_conteneur)) throw userError('Numéro de conteneur obligatoire', 400);
     if (mode_transport === 'vehicule' && !txt(immatriculation)) throw userError("Immatriculation du véhicule obligatoire", 400);
     if (!Array.isArray(lignes)) throw userError('Aucune ligne a receptionner', 400);
 
@@ -192,7 +208,10 @@ router.put('/commandes/:id/receptionner', auth, async (req, res, next) => {
       if (demande > restant + EPS) plafonnees.push(l.designation);
       const prix = inp.prix_unitaire_ht === undefined || inp.prix_unitaire_ht === '' ? num(l.prix_unitaire_ht) : num(inp.prix_unitaire_ht);
       if (prix < 0) throw userError('Prix unitaire négatif refusé', 400);
-      aRecevoir.push({ l, q, prix });
+      // N° de lot de la matiere : un par article recu (a defaut, celui saisi pour toute la livraison)
+      const lot = txt(inp.numero_lot_matiere) || txt(numero_lot_matiere);
+      if (!lot) throw userError(`N° de lot de la matière obligatoire pour « ${l.designation} »`, 400);
+      aRecevoir.push({ l, q, prix, lot });
     }
     if (!aRecevoir.length) throw userError('Aucune quantite a receptionner (tout est deja recu, ou quantites nulles)', 400);
 
@@ -200,9 +219,9 @@ router.put('/commandes/:id/receptionner', auth, async (req, res, next) => {
       INSERT INTO receptions_achat (commande_id,date_reception,reference_bl,notes,cree_par,mode_transport,numero_conteneur,numero_plomb,chauffeur_nom,chauffeur_prenom,immatriculation,numero_lot_matiere,commentaire)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
       [cmd.id, date_reception || new Date().toISOString().slice(0, 10), reference_bl || null, notes || null, req.user?.id || null,
-       mode_transport, mode_transport === 'conteneur' ? txt(numero_conteneur) : null, mode_transport === 'conteneur' ? txt(numero_plomb) : null,
+       mode_transport, mode_transport === 'conteneur' ? txt(numero_conteneur) : null, null,
        txt(chauffeur_nom), txt(chauffeur_prenom), mode_transport === 'vehicule' ? txt(immatriculation) : null,
-       txt(numero_lot_matiere), String(commentaire_reception || '').trim() || null]);
+       txt(numero_lot_matiere) || [...new Set(aRecevoir.map(x => x.lot))].join(', '), String(commentaire_reception || '').trim() || null]);
     const recId = rec.rows[0].id;
 
     // Le stock reçu doit aller dans l'emplacement de réception : sans lui, on refuse plutôt que de ranger au hasard
@@ -221,8 +240,8 @@ router.put('/commandes/:id/receptionner', auth, async (req, res, next) => {
     let enQuarantaine = 0;
     const fourn = await client.query('SELECT raison_sociale FROM fournisseurs WHERE id=$1', [cmd.fournisseur_id]);
     const fournisseurNom = fourn.rows[0]?.raison_sociale || null;
-    for (const { l, q, prix } of aRecevoir) {
-      await client.query(`INSERT INTO lignes_reception_achat (reception_id,ligne_achat_id,quantite_recue,prix_unitaire_ht) VALUES ($1,$2,$3,$4)`, [recId, l.id, q, prix]);
+    for (const { l, q, prix, lot } of aRecevoir) {
+      await client.query(`INSERT INTO lignes_reception_achat (reception_id,ligne_achat_id,quantite_recue,prix_unitaire_ht,numero_lot_matiere) VALUES ($1,$2,$3,$4,$5)`, [recId, l.id, q, prix, lot]);
       await client.query(`UPDATE lignes_achat SET quantite_recue = COALESCE(quantite_recue,0) + $1 WHERE id=$2`, [q, l.id]);
       if (l.article_id) {
         // lot de stock : c'est lui que la DBM et le FIFO utilisent (sans lot, le magasin paraît vide)
@@ -230,13 +249,13 @@ router.put('/commandes/:id/receptionner', auth, async (req, res, next) => {
         if (versQuarantaine) {
           await client.query(`INSERT INTO lots_stock (article_id, emplacement_id, numero_lot, fournisseur_nom, date_reception, qte_initiale, qte_disponible, prix_unitaire, statut, commande_id, reception_id, numero_conteneur, numero_plomb)
             VALUES ($1,$2,$3,$4,COALESCE($5::date, CURRENT_DATE),$6,$6,$7,'quarantaine',$8,$9,$10,$11)`,
-            [l.article_id, emplId, `${cmd.numero_commande}-${recId.slice(0, 8)}-${rang}`, fournisseurNom, date_reception || null, q, prix,
-             cmd.id, recId, mode_transport === 'conteneur' ? txt(numero_conteneur) : null, mode_transport === 'conteneur' ? txt(numero_plomb) : null]);
+            [l.article_id, emplId, await numeroLotUnique(client, l.article_id, lot), fournisseurNom, date_reception || null, q, prix,
+             cmd.id, recId, mode_transport === 'conteneur' ? txt(numero_conteneur) : null, null]);
           enQuarantaine += q;
         } else {
         await client.query(`INSERT INTO lots_stock (article_id, emplacement_id, numero_lot, fournisseur_nom, date_reception, qte_initiale, qte_disponible, prix_unitaire, statut)
           VALUES ($1,$2,$3,$4,COALESCE($5::date, CURRENT_DATE),$6,$6,$7,'disponible')`,
-          [l.article_id, emplId || null, `${cmd.numero_commande}-${recId.slice(0, 8)}-${rang}`, fournisseurNom, date_reception || null, q, prix]);
+          [l.article_id, emplId || null, await numeroLotUnique(client, l.article_id, lot), fournisseurNom, date_reception || null, q, prix]);
         }
       }
       if (l.article_id && !versQuarantaine) {
@@ -353,7 +372,7 @@ router.get('/receptions/:id/pdf', auth, async (req, res, next) => {
         JOIN receptions_achat r ON r.id=lr.reception_id
         WHERE lr.ligne_achat_id=$1 AND (r.created_at, r.id) < ($2::timestamptz, $3::uuid)`, [lg.ligne_achat_id, rec.created_at, rec.id])).rows[0].q;
       const restant = Math.max(0, num(lg.quantite_commandee) - num(avant) - num(lg.quantite_recue));
-      lignesRec[idx] = { code: lg.article_code || '', designation: lg.designation || '', commande: num(lg.quantite_commandee), avant: num(avant), recu: num(lg.quantite_recue), reste: restant };
+      lignesRec[idx] = { code: lg.article_code || '', designation: lg.designation || '', commande: num(lg.quantite_commandee), avant: num(avant), recu: num(lg.quantite_recue), reste: restant, lot: lg.numero_lot_matiere || '' };
       return `<tr><td class="b">${esc(lg.article_code || '')}</td><td>${esc(lg.designation)}</td>
         <td class="r">${fmt(lg.quantite_commandee, 3)}</td><td class="r">${fmt(avant, 3)}</td>
         <td class="r b">${fmt(lg.quantite_recue, 3)}</td><td class="r">${fmt(restant, 3)}</td></tr>`;
@@ -527,6 +546,7 @@ router.get('/demandes/:id', auth, async (req, res, next) => {
 });
 
 router.post('/demandes', auth, async (req, res) => {
+  await assurerStructure().catch(() => {});
   const client = await db.connect();
   try {
     await client.query('BEGIN');
@@ -540,7 +560,7 @@ router.post('/demandes', auth, async (req, res) => {
     if (!ok.length) throw userError('Ajoutez au moins un article avec une quantite', 400);
     const n = await client.query(`SELECT 'DA-' || TO_CHAR(NOW(),'YYYY') || '-' || LPAD(nextval('seq_demande_achat_num')::text,5,'0') AS num`);
     const { rows: [da] } = await client.query(
-      `INSERT INTO demandes_achat (numero_demande, demandeur_id, statut, notes, of_id, libelle_frais_id) VALUES ($1,$2,'en_attente',$3,$4,$5) RETURNING *`,
+      `INSERT INTO demandes_achat (numero_demande, demandeur_id, statut, notes, of_id, libelle_frais_id) VALUES ($1,$2,'a_valider',$3,$4,$5) RETURNING *`,
       [n.rows[0].num, req.user?.id || null, notes || null, of_id || null, libelle_frais_id || null]);
     for (const l of ok) {
       await client.query(`INSERT INTO lignes_demande_achat (demande_id,article_id,designation,quantite_demandee,notes) VALUES ($1,$2,$3,$4,$5)`,
@@ -555,10 +575,44 @@ router.post('/demandes', auth, async (req, res) => {
 router.put('/demandes/:id/annuler', auth, async (req, res, next) => {
   if (!UUID.test(req.params.id)) return next();
   try {
-    const { rows } = await db.query(`UPDATE demandes_achat SET statut='annule' WHERE id=$1 AND statut='en_attente' RETURNING *`, [req.params.id]);
+    const { rows } = await db.query(`UPDATE demandes_achat SET statut='annule' WHERE id=$1 AND statut IN ('a_valider','en_attente') RETURNING *`, [req.params.id]);
     if (!rows.length) return res.status(400).json({ error: 'Seule une demande en attente peut etre annulee' });
     res.json(rows[0]);
   } catch (e) { err(res, e, 'Erreur annulation demande'); }
+});
+
+// Demande de besoin : la direction la valide (ou la refuse) AVANT que le service achat la traite
+router.put('/demandes/:id/valider', auth, async (req, res, next) => {
+  if (!UUID.test(req.params.id)) return next();
+  if (!DIRECTION.includes(req.user?.role)) return res.status(403).json({ error: 'Seule la direction peut valider une demande de besoin' });
+  try {
+    await assurerStructure().catch(() => {});
+    const { rows } = await db.query(`UPDATE demandes_achat SET statut='en_attente', validee_par=$2, validee_at=NOW() WHERE id=$1 AND statut='a_valider' RETURNING *`, [req.params.id, String(req.user.id)]);
+    if (!rows.length) return res.status(400).json({ error: "Cette demande n'est plus à valider" });
+    res.json(rows[0]);
+  } catch (e) { err(res, e, 'Erreur validation de la demande'); }
+});
+
+router.put('/demandes/:id/refuser', auth, async (req, res, next) => {
+  if (!UUID.test(req.params.id)) return next();
+  if (!DIRECTION.includes(req.user?.role)) return res.status(403).json({ error: 'Seule la direction peut refuser une demande de besoin' });
+  const motif = String(req.body?.motif || '').trim();
+  if (!motif) return res.status(400).json({ error: 'Motif du refus obligatoire' });
+  try {
+    await assurerStructure().catch(() => {});
+    const { rows } = await db.query(`UPDATE demandes_achat SET statut='refusee', validee_par=$2, validee_at=NOW(), motif_refus=$3 WHERE id=$1 AND statut='a_valider' RETURNING *`, [req.params.id, String(req.user.id), motif]);
+    if (!rows.length) return res.status(400).json({ error: "Cette demande n'est plus à valider" });
+    res.json(rows[0]);
+  } catch (e) { err(res, e, 'Erreur refus de la demande'); }
+});
+
+// Demande de besoin a l'origine d'un bon de commande (affichee sur le bon)
+router.get('/commandes/:id/demande', auth, async (req, res, next) => {
+  if (!UUID.test(req.params.id)) return next();
+  try {
+    const { rows } = await db.query(`SELECT id, numero_demande, statut, validee_at FROM demandes_achat WHERE commande_id = $1 LIMIT 1`, [req.params.id]);
+    res.json(rows[0] || {});
+  } catch (e) { err(res, e, 'Erreur demande liee'); }
 });
 
 // Le service achat choisit fournisseur, quantites et prix : la demande devient un bon de commande 'envoye'
@@ -574,6 +628,7 @@ router.post('/demandes/:id/transformer', auth, async (req, res, next) => {
 
     const dr = await client.query('SELECT * FROM demandes_achat WHERE id=$1 FOR UPDATE', [req.params.id]);
     if (!dr.rows.length) throw userError('Demande introuvable', 404);
+    if (dr.rows[0].statut === 'a_valider') throw userError('Cette demande de besoin doit d\'abord être validée par la direction', 400);
     if (dr.rows[0].statut !== 'en_attente') throw userError('Cette demande a deja ete traitee', 400);
 
     const tva = taux_tva === undefined ? 18 : num(taux_tva);
