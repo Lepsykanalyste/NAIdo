@@ -74,6 +74,7 @@ app.use('/api/kpi',            require('./routes/kpi'));
 // QHSE
 app.use('/api/nc',             require('./routes/non_conformites'));
 app.use('/api/nc-matiere',     require('./routes/nc_matiere'));
+app.use('/api/arrivages-import', require('./routes/arrivages_import'));
 app.use('/api/incidents',      require('./routes/incidents'));
 app.use('/api/audits',         require('./routes/audits'));
 app.use('/api/processus',      require('./routes/processus'));

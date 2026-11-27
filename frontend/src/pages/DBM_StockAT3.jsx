@@ -15,6 +15,7 @@ import toast from 'react-hot-toast';
 import { useAuth } from '../hooks/useAuth.jsx';
 import { ouvrirPdfSecurise } from '../utils/pdf';
 import NcMatieresPanel from './NcMatieres.jsx';
+import ArrivagesImport from './ArrivagesImport.jsx';
 
 const API = '/api';
 
@@ -724,6 +725,7 @@ export function ModuleReceptionDBM() {
         <button onClick={charger} style={{ background:'#e0f2fe', border:'1px solid #7dd3fc', color:'#0369a1', padding:'7px 12px', borderRadius:8, cursor:'pointer', fontSize:12 }}>🔄</button>
       </div>
 
+      <ArrivagesImport />
       <NcMatieresPanel />
       {/* Ecarts de reception : l'atelier a recu moins que ce qui a ete livre */}
       {ecarts.length > 0 && (

@@ -14,6 +14,7 @@ import { confirmer, saisir } from '../utils/confirmer.jsx';
 import { ImageFichier, ouvrirFichier } from '../utils/fichiers.jsx';
 import { useAuth } from '../hooks/useAuth.jsx';
 import NcMatieresPanel from './NcMatieres.jsx';
+import ArrivagesImport from './ArrivagesImport.jsx';
 import { ouvrirPdfSecurise } from '../utils/pdf';
 
 const API = '/api';
@@ -368,7 +369,7 @@ function TransitPage() {
 export default function AchatsV2() {
   const { user } = useAuth();
   if (user?.role === 'transitaire') return <TransitPage />;
-  return (<><NcMatieresPanel /><AchatsStandard /></>);
+  return (<><ArrivagesImport /><NcMatieresPanel /><AchatsStandard /></>);
 }
 
 // Roles qui voient les prix d'achat (le magasin ne voit que les quantites)
@@ -487,6 +488,11 @@ function Reception({ commande, onClose, onFait }) {
       </div>
       <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, padding: 12, marginBottom: 12 }}>
         <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>Transport</div>
+        {(c.type_achat === 'export' || rMode === 'conteneur') && (
+          <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', color: '#92400e', borderRadius: 8, padding: '6px 10px', fontSize: 12, marginBottom: 10 }}>
+            🚢 Arrivage import : la marchandise reçue entre en <b>zone de quarantaine</b>. Le magasin MP (ou les achats) la transfère ensuite en stock.
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 16, marginBottom: 10 }}>
           <label style={{ fontSize: 13 }}><input type="radio" name="rmode" checked={rMode === 'conteneur'} onChange={() => setRMode('conteneur')} /> Conteneur (import)</label>
           <label style={{ fontSize: 13 }}><input type="radio" name="rmode" checked={rMode === 'vehicule'} onChange={() => setRMode('vehicule')} /> Véhicule (local)</label>

@@ -52,6 +52,8 @@ const cheminTransit = (m, c) => (m === 'GET' && c === '/api/achat/transit/comman
 // Commercial : transformer un bon de commande client en demande de fabrication
 // Non-conformites matieres : les roles du circuit (atelier, magasin, QHSE, achat) ; chaque action est ensuite controlee dans la route
 const NC_ROLES = ['chef_atelier', 'magasinier', 'magasinier_at3', 'magasinier_central', 'magasinier_mp', 'qualite', 'qhse', 'responsable_qhse', 'achat'];
+// Arrivages import (conteneurs) : etat, quarantaine et transfert vers le stock ; les droits fins sont controles dans la route
+const ARRIVAGES_ROLES = ['magasinier', 'magasinier_at3', 'magasinier_central', 'magasinier_mp', 'achat'];
 const cheminCommercial = (m, c) => m === 'POST' && /^\/api\/bc\/[^/]+\/transformer-df$/.test(c);
 const cheminReception = (m, c) => (m === 'PUT' && /^\/api\/achat\/commandes\/[^/]+\/receptionner$/.test(c))
   || (m === 'GET' && (c === '/api/achat/commandes' || /^\/api\/achat\/commandes\/[^/]+(\/receptions)?$/.test(c) || /^\/api\/achat\/receptions\/[^/]+\/pdf$/.test(c)));
@@ -66,6 +68,7 @@ function decider(roleBrut, methode, chemin) {
   if (role === 'magasinier_mp' && cheminReception(String(methode).toUpperCase(), chemin)) return { autorise: true, raison: 'magasin MP : reception' };
   if (role === 'commercial' && cheminCommercial(String(methode).toUpperCase(), chemin)) return { autorise: true, raison: 'commercial : demande de fabrication' };
   if (NC_ROLES.includes(role) && /^\/api\/nc-matiere(\/|$)/.test(chemin)) return { autorise: true, raison: 'non-conformites matieres' };
+  if (ARRIVAGES_ROLES.includes(role) && /^\/api\/arrivages-import(\/|$)/.test(chemin)) return { autorise: true, raison: 'arrivages import' };
   if (role === 'directeur') return { autorise: true, raison: 'directeur' };
   let meilleure = null;                                // regle la plus precise = celle qui a le plus de segments
   for (const r of POLITIQUE.regles) {

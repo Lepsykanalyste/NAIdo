@@ -26,6 +26,8 @@ const path = require('path');
 const lienSigne = require('../utils/lienSigne');
 const { pdfBonAchat, pdfReception } = require('../utils/pdfBonAchat');
 const { peutVoirPrix, retirerPrix } = require('../middleware/prix');
+const { assurerStructure, emplacementQuarantaine } = require('../utils/arrivagesImport');
+assurerStructure().catch(e => console.error('[ACHAT-V2] structure arrivages :', e.message));
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EPS  = 0.0005;
@@ -155,6 +157,7 @@ router.put('/commandes/:id/statut', auth, async (req, res, next) => {
 router.put('/commandes/:id/receptionner', auth, async (req, res, next) => {
   if (!UUID.test(req.params.id)) return next();
   if (Array.isArray(req.body?.lignes_recues) && !Array.isArray(req.body?.lignes)) return next();   // ancien format -> achat.js
+  await assurerStructure().catch(() => {});
   const client = await db.connect();
   try {
     await client.query('BEGIN');
@@ -203,12 +206,19 @@ router.put('/commandes/:id/receptionner', auth, async (req, res, next) => {
     const recId = rec.rows[0].id;
 
     // Le stock reçu doit aller dans l'emplacement de réception : sans lui, on refuse plutôt que de ranger au hasard
-    const empl = await client.query(`SELECT id, type FROM emplacements_stock WHERE actif=true ORDER BY (type='reception') DESC LIMIT 1`);
-    if (!empl.rows[0] || empl.rows[0].type !== 'reception')
-      throw userError('Aucun emplacement de réception actif : créez-en un (type réception) avant de recevoir', 400);
-    const emplId = empl.rows[0].id;
+    // Arrivage import (conteneur) : la matiere entre en zone de quarantaine ; achat local : directement en stock
+    const versQuarantaine = cmd.type_achat === 'export' || mode_transport === 'conteneur';
+    let emplId;
+    if (versQuarantaine) emplId = await emplacementQuarantaine(client);
+    else {
+      const empl = await client.query(`SELECT id, type FROM emplacements_stock WHERE actif=true ORDER BY (type='reception') DESC LIMIT 1`);
+      if (!empl.rows[0] || empl.rows[0].type !== 'reception')
+        throw userError('Aucun emplacement de réception actif : créez-en un (type réception) avant de recevoir', 400);
+      emplId = empl.rows[0].id;
+    }
     const sansStock = [];
     let rang = 0;
+    let enQuarantaine = 0;
     const fourn = await client.query('SELECT raison_sociale FROM fournisseurs WHERE id=$1', [cmd.fournisseur_id]);
     const fournisseurNom = fourn.rows[0]?.raison_sociale || null;
     for (const { l, q, prix } of aRecevoir) {
@@ -217,11 +227,19 @@ router.put('/commandes/:id/receptionner', auth, async (req, res, next) => {
       if (l.article_id) {
         // lot de stock : c'est lui que la DBM et le FIFO utilisent (sans lot, le magasin paraît vide)
         rang += 1;
+        if (versQuarantaine) {
+          await client.query(`INSERT INTO lots_stock (article_id, emplacement_id, numero_lot, fournisseur_nom, date_reception, qte_initiale, qte_disponible, prix_unitaire, statut, commande_id, reception_id, numero_conteneur, numero_plomb)
+            VALUES ($1,$2,$3,$4,COALESCE($5::date, CURRENT_DATE),$6,$6,$7,'quarantaine',$8,$9,$10,$11)`,
+            [l.article_id, emplId, `${cmd.numero_commande}-${recId.slice(0, 8)}-${rang}`, fournisseurNom, date_reception || null, q, prix,
+             cmd.id, recId, mode_transport === 'conteneur' ? txt(numero_conteneur) : null, mode_transport === 'conteneur' ? txt(numero_plomb) : null]);
+          enQuarantaine += q;
+        } else {
         await client.query(`INSERT INTO lots_stock (article_id, emplacement_id, numero_lot, fournisseur_nom, date_reception, qte_initiale, qte_disponible, prix_unitaire, statut)
           VALUES ($1,$2,$3,$4,COALESCE($5::date, CURRENT_DATE),$6,$6,$7,'disponible')`,
           [l.article_id, emplId || null, `${cmd.numero_commande}-${recId.slice(0, 8)}-${rang}`, fournisseurNom, date_reception || null, q, prix]);
+        }
       }
-      if (l.article_id) {
+      if (l.article_id && !versQuarantaine) {
         if (emplId) {
           await client.query(`
             INSERT INTO stock_articles (article_id,emplacement_id,qte_disponible,valeur_stock,derniere_entree)
@@ -238,8 +256,9 @@ router.put('/commandes/:id/receptionner', auth, async (req, res, next) => {
     const statut = bilan.rows[0].complet ? 'receptionne' : 'receptionne_partiel';
     await client.query(`UPDATE commandes_achat SET statut=$1, date_reception=$2 WHERE id=$3`, [statut, date_reception || new Date().toISOString().slice(0, 10), cmd.id]);
     await client.query('COMMIT');
-    res.json({ message: statut === 'receptionne' ? 'Reception enregistree : commande complete' : 'Reception partielle enregistree',
-               statut, reception_id: recId, plafonnees, stock_non_mis_a_jour: sansStock });
+    const msgQuar = versQuarantaine && enQuarantaine > 0 ? ` - ${num(enQuarantaine).toLocaleString('fr-FR', { maximumFractionDigits: 3 })} kg en zone de quarantaine (a transferer au stock du magasin MP)` : '';
+    res.json({ message: (statut === 'receptionne' ? 'Reception enregistree : commande complete' : 'Reception partielle enregistree') + msgQuar,
+               statut, reception_id: recId, plafonnees, stock_non_mis_a_jour: sansStock, quarantaine: versQuarantaine, kg_quarantaine: enQuarantaine });
   } catch (e) { await client.query('ROLLBACK'); err(res, e, 'Erreur reception'); }
   finally { client.release(); }
 });

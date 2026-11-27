@@ -91,6 +91,15 @@ router.get('/', auth, async (req, res) => {
     ajouter('achat', 'Non-conformités fournisseur en cours (information)',
       await compter("SELECT COUNT(*)::int AS n FROM nc_matiere WHERE origine = 'fournisseur' AND statut IN ('a_traiter_magasin', 'retour_effectue') AND vu_achat_at IS NULL"));
   }
+  // Arrivages import : matieres en zone de quarantaine a transferer vers le stock du magasin MP
+  if (['magasinier', 'magasinier_at3', 'magasinier_central', 'magasinier_mp', 'super_admin'].includes(role)) {
+    ajouter('dbm', 'Arrivages conteneurs en quarantaine à transférer au stock',
+      await compter("SELECT COUNT(*)::int AS n FROM lots_stock WHERE statut = 'quarantaine' AND commande_id IS NOT NULL AND qte_disponible > 0"));
+  }
+  if (['achat', 'super_admin'].includes(role)) {
+    ajouter('achat', 'Arrivages conteneurs en quarantaine (à transférer au magasin MP)',
+      await compter("SELECT COUNT(*)::int AS n FROM lots_stock WHERE statut = 'quarantaine' AND commande_id IS NOT NULL AND qte_disponible > 0"));
+  }
   if (['qualite', 'qhse', 'responsable_qhse', ...ROLES_DIRECTION].includes(role)) {
     ajouter('nc', 'Non-conformités ouvertes',
       await compter("SELECT COUNT(*)::int AS n FROM non_conformites WHERE statut NOT IN ('clos','annule')"));
