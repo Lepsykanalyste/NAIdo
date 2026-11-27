@@ -545,7 +545,7 @@ function EcranListe({ user, onValider, onGmao, onHistorique }) {
 // ═════════════════════════════════════════════════════════════════════════════
 // MON PROFIL : photo et signature du régleur (reprises sur le ticket de réglage et les documents)
 // ═════════════════════════════════════════════════════════════════════════════
-function MonProfilRegleur({ user, onClose }) {
+export function MonProfilRegleur({ user, onClose }) {
   const [signature, setSignature] = useState(null);
   const [photo, setPhoto] = useState(null);
   useEffect(() => {
@@ -564,7 +564,7 @@ function MonProfilRegleur({ user, onClose }) {
     } catch (err) { toast.error(err.response?.data?.error || 'Envoi impossible'); }
     finally { e.target.value = ''; }
   };
-  const FONCTIONS = { regleur: 'Régleur', technicien_regleur: 'Technicien régleur' };
+  const FONCTIONS = { regleur: 'Opérateur extrusion', technicien_regleur: 'Opérateur extrusion', operateur_ext: 'Opérateur extrusion' };
   const bouton = { padding:'8px 14px', border:'1px solid #c7d2fe', borderRadius:8, cursor:'pointer', fontSize:13, fontWeight:600, background:'#eef2ff', color:'#4338ca' };
   return (
     <div style={S.overlay}>

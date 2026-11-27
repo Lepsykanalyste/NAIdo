@@ -3,7 +3,7 @@ import axios from 'axios';
 import { useAuth } from '../hooks/useAuth.jsx';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { EcranReglage, TicketImprimable as TicketReglage } from './Regleur';
+import { EcranReglage, TicketImprimable as TicketReglage, MonProfilRegleur } from './Regleur';
 
 const API = '/api';
 
@@ -315,6 +315,7 @@ export default function Operateur() {
   const [reglagesOf,setReglagesOf]=useState([]);
   const [ticketReglageAff,setTicketReglageAff]=useState(null);
   const [cumulOf,setCumulOf]=useState(null);           // bobines de l'OF, tous quarts confondus
+  const [monProfil,setMonProfil]=useState(false);     // photo et signature de l'opérateur
 
   // Type de poste de l'opérateur (détermine ce qu'il voit)
   const typePoste = getTypePoste(user, machSel || ofSel);
@@ -518,6 +519,7 @@ export default function Operateur() {
           {alertesNonLues>0&&<span style={{background:'#dc2626',color:'#fff',padding:'3px 8px',borderRadius:20,fontSize:11,fontWeight:700}}>🔔 {alertesNonLues}</span>}
           {arretActif&&<span style={{background:'#dc2626',color:'#fff',padding:'3px 8px',borderRadius:20,fontSize:11,fontWeight:700}}>⚠ ARRÊT</span>}
           <span style={{fontSize:12,color:'#a8a29e'}}>{user?.prenom}</span>
+          <button onClick={()=>setMonProfil(true)} style={{background:'#292524',border:'none',color:'#a8a29e',padding:'5px 10px',borderRadius:6,cursor:'pointer',fontSize:12}}>👤 Mon profil</button>
           <button onClick={()=>{logout();navigate('/login');}} style={{background:'#292524',border:'none',color:'#a8a29e',padding:'5px 10px',borderRadius:6,cursor:'pointer',fontSize:12}}>Quitter</button>
         </div>
       </header>
@@ -920,6 +922,7 @@ export default function Operateur() {
       {recap&&<RecapShift recap={recap} onNouveau={resetSession}/>}
       {ticketAff&&<TicketBobine ticket={ticketAff} of={ofSel} machine={machineTicket} shift={shiftSel} user={user} onClose={()=>setTicketAff(null)}/>}
       {ticketReglageAff&&<TicketReglage record={ticketReglageAff} onClose={()=>setTicketReglageAff(null)}/>}
+      {monProfil&&<MonProfilRegleur user={user} onClose={()=>setMonProfil(false)}/>}
     </div>
   );
 }

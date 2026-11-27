@@ -47,10 +47,17 @@ function assurerReglages() {
 // Enregistre un réglage et renvoie son numéro de ticket et son rang
 async function enregistrerReglage(client, d) {
   await assurerReglages();
-  const n = await client.query(`SELECT COUNT(*)::int AS n FROM reglages_of WHERE of_id = $1`, [String(d.of_id)]);
+  const n = await client.query(`SELECT COALESCE(MAX(rang), 0)::int AS n FROM reglages_of WHERE of_id = $1`, [String(d.of_id)]);
   const rang = n.rows[0].n + 1;
-  const t = await client.query(`SELECT 'TKR-' || TO_CHAR(NOW(), 'YYYY') || '-' || LPAD(nextval('seq_ticket_reglage')::text, 4, '0') AS num`);
-  const numero = t.rows[0].num;
+  // Le ticket suit l'OF et se compte : OF-2026-1003 -> TKR-2026-1003-001, -002, -003...
+  const o = await client.query(`SELECT numero_of FROM ordres_fabrication WHERE id::text = $1`, [String(d.of_id)]);
+  let numero;
+  if (o.rows[0] && o.rows[0].numero_of) {
+    numero = 'TKR-' + String(o.rows[0].numero_of).replace(/^OF-/i, '') + '-' + String(rang).padStart(3, '0');
+  } else {
+    const t = await client.query(`SELECT 'TKR-' || TO_CHAR(NOW(), 'YYYY') || '-' || LPAD(nextval('seq_ticket_reglage')::text, 4, '0') AS num`);
+    numero = t.rows[0].num;
+  }
   const motif = String(d.motif || '').trim() || (rang === 1 ? 'Premier réglage' : 'Réglage pour la session de production');
   await client.query(
     `INSERT INTO reglages_of (of_id, session_id, numero_ticket, rang, motif, regleur_id, machine_id, temperature, pression, vitesse, notes)
