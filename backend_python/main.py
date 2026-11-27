@@ -10,6 +10,7 @@ import uvicorn
 from pathlib import Path
 from datetime import datetime, date
 from rbac import RbacMiddleware
+from logo_nai import LOGO_HTML
 
 # ── CONFIG ─────────────────────────────────────────────────────
 DB_URL = os.environ.get("DATABASE_URL")
@@ -2891,7 +2892,7 @@ async def df_pdf(df_id: str, user=Depends(get_current_user)):
 </head>
 <body>
 <div class="header">
-  <div><div class="company">NAI</div><div style="font-size:7pt;color:#6b7280;">Atelier 3 — Système de Production</div></div>
+  <div>{LOGO_HTML}<div style="font-size:7pt;color:#6b7280;">Atelier 3 — Système de Production</div></div>
   <div style="text-align:right;"><div style="font-size:7pt;color:#6b7280;">Date : {date_str}</div><div style="font-size:7pt;color:#6b7280;">Demandeur : {d.get('demandeur_nom') or '—'}</div></div>
 </div>
 <div class="banner">DEMANDE DE FABRICATION</div>
@@ -3149,7 +3150,7 @@ async def of_pdf(of_id: str, user=Depends(get_current_user)):
 <body>
 <div class="header">
   <div>
-    <div class="company">NAI</div>
+    {LOGO_HTML}
     <div style="font-size:7.5pt;color:#6b7280;">Atelier 3 — Système de Production MES</div>
   </div>
   <div style="text-align:right;">
@@ -3340,7 +3341,7 @@ async def ticket_prod_pdf(ticket_id: str, user=Depends(get_current_user)):
 </head>
 <body>
 <div class="header">
-  <div class="company">NAI</div>
+  {LOGO_HTML}
   <div style="font-size:7pt;color:#6b7280;">Atelier 3 — Production</div>
 </div>
 <div class="banner">{type_label}</div>

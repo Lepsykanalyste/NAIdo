@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
+const { logoImg } = require('../utils/logoNai');
 const { auth } = require('../middleware/auth');
 const { pdfCommercial, nombre, date } = require('../utils/pdfBonAchat');
 
@@ -197,7 +198,7 @@ router.get('/:id/pdf-html', auth, async (req, res) => {
   .footer{border-top:1px solid #e5e7eb;padding-top:6px;text-align:center;font-size:7pt;color:#9ca3af;margin-top:12px;}
 </style></head><body>
 <div class="header">
-  <div><div class="company">NAI</div><div style="font-size:8pt;color:#6b7280;">Bon de Commande Client</div></div>
+  <div>${logoImg()}<div style="font-size:8pt;color:#6b7280;">Bon de Commande Client</div></div>
   <div style="text-align:right;"><div style="font-size:8pt;color:#6b7280;">Date réception : ${date_str}</div><div style="font-size:8pt;color:#6b7280;">Réf. BC : ${d.numero_bc}</div>${d.reference_client?`<div style="font-size:8pt;color:#6b7280;">Réf. client : ${d.reference_client}</div>`:''}</div>
 </div>
 <div class="banner">📦 Bon de Commande</div>

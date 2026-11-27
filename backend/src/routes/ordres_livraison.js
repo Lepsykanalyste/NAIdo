@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
+const { logoImg } = require('../utils/logoNai');
 const { auth } = require('../middleware/auth');
 
 // GET /api/ol
@@ -175,7 +176,7 @@ router.get('/:id/pdf', auth, async (req, res) => {
   .footer{border-top:1px solid #e5e7eb;padding-top:5px;text-align:center;font-size:6.5pt;color:#9ca3af;margin-top:6px;}
 </style></head><body>
 <div class="header">
-  <div><div class="company">NAI</div><div style="font-size:7pt;color:#6b7280;">Magasin Central - Livraison</div></div>
+  <div>${logoImg()}<div style="font-size:7pt;color:#6b7280;">Magasin Central - Livraison</div></div>
   <div style="text-align:right;">
     <div style="font-size:7pt;color:#6b7280;">Date : ${date_str}</div>
     <div style="font-size:7pt;color:#6b7280;">Demandeur : ${d.demandeur_nom||'—'}</div>

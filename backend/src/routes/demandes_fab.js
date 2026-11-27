@@ -2,6 +2,7 @@ const express = require('express');
 const QRCode = require('qrcode');
 const router = express.Router();
 const db = require('../config/db');
+const { logoImg } = require('../utils/logoNai');
 const { auth } = require('../middleware/auth');
 const { pdfCommercial, nombre, date } = require('../utils/pdfBonAchat');
 
@@ -319,7 +320,7 @@ router.get('/:id/pdf-html', auth, async (req, res) => {
 
 <div class="header">
   <div>
-    <div class="company">NAI</div>
+    ${logoImg()}
     <div class="sub">Atelier 3 — Système de Production</div>
   </div>
   <div style="text-align:right;">

@@ -18,6 +18,7 @@
 const express = require('express');
 const router  = express.Router();
 const db      = require('../config/db');
+const { logoImg } = require('../utils/logoNai');
 const { auth } = require('../middleware/auth');
 const { envoyerDepuisCompte } = require('../utils/mailcompte');
 const fs = require('fs');
@@ -339,7 +340,7 @@ router.get('/receptions/:id/pdf', auth, async (req, res, next) => {
         <td class="r b">${fmt(lg.quantite_recue, 3)}</td><td class="r">${fmt(restant, 3)}</td></tr>`;
     }))).join('');
     const body = `
-      <div class="header"><div><div class="company">NAI</div><div style="font-size:7pt;color:#6b7280">Service Achats - Magasin</div></div>
+      <div class="header"><div>${logoImg()}<div style="font-size:7pt;color:#6b7280">Service Achats - Magasin</div></div>
         <div style="text-align:right;font-size:7.5pt;color:#6b7280">Reception du ${dateFr(rec.date_reception)}</div></div>
       <div class="banner">Bordereau de reception</div>
       <div class="num">${esc(numRec)}</div>

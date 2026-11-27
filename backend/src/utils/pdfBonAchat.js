@@ -8,6 +8,16 @@ const BLEU_CLAIR = '#e0f2fe';
 const GRIS = '#6b7280';
 const LIGNE = '#d1d5db';
 const ZEBRA = '#f3f4f6';
+const { LOGO_BUFFER } = require('./logoNai');
+
+// Logo NAI sur une pastille blanche dans le bandeau bleu ; renvoie false si le logo n'a pas pu etre dessine (le texte « NAI » prend alors le relais)
+function dessinerLogo(doc, x, y, taille) {
+  try {
+    doc.roundedRect(x, y, taille, taille, 5).fill('#ffffff');
+    doc.image(LOGO_BUFFER, x + 3, y + 3, { fit: [taille - 6, taille - 6] });
+    return true;
+  } catch (e) { return false; }
+}
 
 // Montants lisibles : 5 000 000 (espaces simples, virgule pour les decimales)
 const nombre = (n, d = 0) => {
@@ -61,8 +71,10 @@ function pdfBonAchat(cmd, lignes, urlQr, sign = {}, opts = {}) {
 
       // ----- Bandeau avec QR code en haut a droite -----
       doc.rect(0, 0, 595, 96).fill(BLEU);
-      doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(22).text('NAI', G, 30);
-      doc.font('Helvetica').fontSize(9).text('Service Achats', G, 58);
+      const logoOk = dessinerLogo(doc, G, 12, 72);
+      doc.fillColor('#ffffff');
+      if (!logoOk) { doc.font('Helvetica-Bold').fontSize(22).text('NAI', G, 30); doc.font('Helvetica').fontSize(9).text('Service Achats', G, 58); }
+      else doc.font('Helvetica').fontSize(9).text('Service Achats', G + 82, 48, { width: 80, lineBreak: false });
       doc.font('Helvetica-Bold').fontSize(17).text('BON DE COMMANDE', 170, 28, { width: 260, align: 'right' });
       doc.font('Helvetica').fontSize(11).text(cmd.numero_commande || '', 170, 52, { width: 260, align: 'right' });
       doc.fontSize(9).text('Date : ' + date(cmd.date_commande), 170, 68, { width: 260, align: 'right' });
@@ -98,13 +110,13 @@ function pdfBonAchat(cmd, lignes, urlQr, sign = {}, opts = {}) {
       // ----- Tableau des lignes -----
       let y = 216;
       const cols = sansPrix ? [
-        { t: 'Code', x: G, w: 62, al: 'left' },
-        { t: 'Désignation', x: G + 62, w: largeur - 62 - 130, al: 'left' },
+        { t: 'Code', x: G, w: 88, al: 'left' },
+        { t: 'Désignation', x: G + 88, w: largeur - 88 - 130, al: 'left' },
         { t: 'Unité', x: G + largeur - 130, w: 50, al: 'center' },
         { t: 'Quantité', x: G + largeur - 80, w: 80, al: 'right' },
       ] : [
-        { t: 'Code', x: G, w: 62, al: 'left' },
-        { t: 'Désignation', x: G + 62, w: 175, al: 'left' },
+        { t: 'Code', x: G, w: 88, al: 'left' },
+        { t: 'Désignation', x: G + 88, w: 149, al: 'left' },
         { t: 'Unité', x: G + 237, w: 50, al: 'center' },
         { t: 'Quantité', x: G + 287, w: 58, al: 'right' },
         { t: 'Prix HT', x: G + 345, w: 70, al: 'right' },
@@ -204,8 +216,10 @@ function pdfReception({ numRec, cmd, rec, lignes, sign = null, nomRec = '' }) {
 
     // Bandeau
     doc.rect(0, 0, 595, 90).fill(BLEU);
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(22).text('NAI', G, 28);
-    doc.font('Helvetica').fontSize(9).text('Service Achats - Magasin', G, 56);
+    const logoRecOk = dessinerLogo(doc, G, 9, 72);
+    doc.fillColor('#ffffff');
+    if (!logoRecOk) { doc.font('Helvetica-Bold').fontSize(22).text('NAI', G, 28); doc.font('Helvetica').fontSize(9).text('Service Achats - Magasin', G, 56); }
+    else doc.font('Helvetica').fontSize(9).text('Service Achats - Magasin', G + 82, 40, { width: 150, lineBreak: false });
     doc.font('Helvetica-Bold').fontSize(16).text('BON DE LIVRAISON', 250, 24, { width: 305, align: 'right' });
     doc.font('Helvetica').fontSize(9).text('Bordereau de réception', 250, 44, { width: 305, align: 'right' });
     doc.font('Helvetica').fontSize(11).text(numRec, 250, 58, { width: 305, align: 'right' });
@@ -247,8 +261,8 @@ function pdfReception({ numRec, cmd, rec, lignes, sign = null, nomRec = '' }) {
     // Tableau des lignes
     let y = y0 + hBloc + 14;
     const cols = [
-      { t: 'Code', x: G, w: 60, al: 'left' },
-      { t: 'Désignation', x: G + 60, w: 185, al: 'left' },
+      { t: 'Code', x: G, w: 88, al: 'left' },
+      { t: 'Désignation', x: G + 88, w: 157, al: 'left' },
       { t: 'Commandé', x: G + 245, w: 65, al: 'right' },
       { t: 'Déjà reçu', x: G + 310, w: 65, al: 'right' },
       { t: 'Reçu ce jour', x: G + 375, w: 75, al: 'right' },
@@ -319,8 +333,12 @@ function pdfCommercial({ titre, numero, dateStr, statut, infos = [], client = []
 
     // Bandeau
     doc.rect(0, 0, W, 90).fill(BLEU);
-    doc.fillColor('#ffffff').font('Helvetica-Bold').fontSize(22).text('NAI', G, 28);
-    doc.font('Helvetica').fontSize(9).text(sousTitre, G, 56);
+    const logoOk = dessinerLogo(doc, G, 9, 72);
+    // sous-titre a cote du logo en paysage (place suffisante) ; en portrait il passe dans le pied de page
+    const sousTitreCote = !!(logoOk && paysage && sousTitre);
+    doc.fillColor('#ffffff');
+    if (!logoOk) { doc.font('Helvetica-Bold').fontSize(22).text('NAI', G, 28); doc.font('Helvetica').fontSize(9).text(sousTitre, G, 56); }
+    else if (sousTitreCote) doc.font('Helvetica').fontSize(9).text(sousTitre, G + 84, 40, { width: 240, lineBreak: false });
     doc.font('Helvetica-Bold');
     let tailleTitre = 16;
     while (tailleTitre > 9 && doc.fontSize(tailleTitre).widthOfString(titre) > 305) tailleTitre -= 0.5;
@@ -433,7 +451,7 @@ function pdfCommercial({ titre, numero, dateStr, statut, infos = [], client = []
       });
     }
     doc.font('Helvetica').fontSize(7.5).fillColor(GRIS)
-      .text(`NAI — ${numero || ''}`, G, H - 50, { width: largeur, align: 'center', lineBreak: false });
+      .text(`Nouvelle Afrique Industrie${(logoOk && !sousTitreCote && sousTitre) ? ' — ' + sousTitre : ''} — ${numero || ''}`, G, H - 50, { width: largeur, align: 'center', lineBreak: false });
     doc.end();
   });
 }

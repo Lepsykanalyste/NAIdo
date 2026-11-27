@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
+const { logoImg } = require('../utils/logoNai');
 const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
@@ -307,7 +308,7 @@ router.get('/:id/pdf-html', auth, async (req, res) => {
 </style></head><body>
 <div class="header">
   <div>
-    <div class="company">NAI</div>
+    ${logoImg()}
     <div style="font-size:7.5pt;color:#6b7280;">Fabrication de sacs plastiques — Atelier 3</div>
     <div style="font-size:7.5pt;color:#6b7280;margin-top:3px;">Commercial : ${d.commercial_nom||'—'}</div>
   </div>
