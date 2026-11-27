@@ -91,6 +91,8 @@ function TicketImprimable({ record, onClose }) {
 
   const lignes = [
     { l: 'N° TICKET', v: record.numero_ticket_reglage || '—', bold: true },
+    ...(record.rang ? [{ l: 'RÉGLAGE N°', v: String(record.rang) }] : []),
+    ...(record.rang > 1 ? [{ l: 'MOTIF', v: record.motif || '—' }] : []),
     { l: 'OF',        v: record.numero_of },
     { l: 'ARTICLE',   v: record.article },
     { l: 'COULEUR',   v: record.couleur || '—' },
@@ -318,7 +320,7 @@ function EcranHistorique({ user, onBack }) {
                     {r.poids_total_kg ? ` · ${fmt(r.poids_total_kg, 1)} kg` : ''}
                   </div>
                   <div style={{ fontSize:11, color:'#9ca3af', marginTop:3 }}>
-                    {r.machine_nom || r.machine_code || 'Machine NC'} · {r.regleur_nom || 'Régleur'} · {fmtDateTime(r.valide_at)}
+                    {r.machine_nom || r.machine_code || 'Machine NC'} · {r.regleur_nom || 'Régleur'} · {fmtDateTime(r.valide_at)}{r.rang > 1 ? ` · Réglage n°${r.rang}${r.motif ? ' (' + r.motif + ')' : ''}` : ''}
                   </div>
                 </div>
                 <button onClick={() => setTicket(r)}
@@ -554,6 +556,8 @@ function EcranReglage({ cible, user, onBack, onSuccess }) {
 
   const [params,     setParams]     = useState({ corona: 'Non' });
   const [notes,      setNotes]      = useState('');
+  const reprise = !!cible.reprise;                 // nouveau réglage d'un OF déjà réglé (ex. après un arrêt)
+  const [motif,      setMotif]      = useState('');
   const [secIdx,     setSecIdx]     = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [confirmer,  setConfirmer]  = useState(false);
@@ -568,11 +572,20 @@ function EcranReglage({ cible, user, onBack, onSuccess }) {
   }, [item]);
 
   const setP = (k, v) => setParams(p => ({ ...p, [k]: v }));
+  // Nouveau réglage : on repart des valeurs du dernier réglage de l'OF
+  useEffect(() => {
+    if (!reprise) return;
+    axios.get(`${API}/regleur/of/${item.id}/reglages`).then(r => {
+      const dernier = (Array.isArray(r.data) ? r.data : []).slice(-1)[0];
+      if (!dernier) return;
+      try { const p = JSON.parse(dernier.notes || '{}').params_complets || {}; setParams(prev => ({ ...prev, ...p })); } catch {}
+    }).catch(() => {});
+  }, [reprise, item.id]);
 
   const nbRemplis = SECTIONS.reduce((a, s) =>
     a + s.champs.filter(c => c.type !== 'select' && params[c.key] !== undefined && params[c.key] !== '').length, 0);
   const pct = Math.round(nbRemplis / TOTAL_CHAMPS * 100);
-  const peutValider = params.temp_zone1 && params.pression_bar && params.largeur_mm && params.epaisseur_um;
+  const peutValider = params.temp_zone1 && params.pression_bar && params.largeur_mm && params.epaisseur_um && (!reprise || motif.trim());
 
   const valider = async () => {
     setSubmitting(true);
@@ -584,11 +597,13 @@ function EcranReglage({ cible, user, onBack, onSuccess }) {
         notes:       JSON.stringify({ params_complets: params, notes_libres: notes }),
         regleur_id:  user?.id,
         of_id:       estSession ? item.of_id : item.id,
+        ...(reprise ? { motif: motif.trim(), reprise: true } : {}),
       };
       if (estSession) {
         await axios.post(`${API}/sessions/${item.id}/valider-regleur`, payload);
       } else {
-        await axios.patch(`${API}/of/${item.id}/reglage`, payload);
+        const rp = await axios.patch(`${API}/of/${item.id}/reglage`, payload);
+        if (rp.data && rp.data.rang > 1) toast(`Réglage n°${rp.data.rang} enregistré — nouveau ticket ${rp.data.numero_ticket_reglage}`, { icon: '🖨️' });
       }
       toast.success("✅ Réglage validé — l'opérateur peut démarrer");
       onSuccess();
@@ -695,6 +710,15 @@ function EcranReglage({ cible, user, onBack, onSuccess }) {
           </div>
         </div>
 
+        {reprise && (
+          <div style={{ background:'#fffbeb', borderRadius:14, padding:'16px', border:'2px solid #fcd34d' }}>
+            <label style={S.lbl}>↻ Motif du nouveau réglage <span style={{ color:'#ef4444' }}>*</span></label>
+            <textarea value={motif} onChange={e => setMotif(e.target.value)} rows={2}
+              placeholder="Ex. : reprise après arrêt machine, changement de bobine, dérive de l'épaisseur..."
+              style={{ width:'100%', border:'1px solid #fcd34d', borderRadius:10, padding:'12px', fontSize:14, boxSizing:'border-box', resize:'vertical', fontFamily:'inherit' }}/>
+            <div style={{ fontSize:11, color:'#92400e', marginTop:4 }}>Un nouveau ticket de réglage sera créé ; les réglages précédents de l'OF sont conservés.</div>
+          </div>
+        )}
         <div style={{ background:'#fff', borderRadius:14, padding:'16px', border:'1px solid #e0e7ff' }}>
           <label style={S.lbl}>📝 Remarques</label>
           <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3}
@@ -710,7 +734,7 @@ function EcranReglage({ cible, user, onBack, onSuccess }) {
       }}>
         {!peutValider && (
           <div style={{ textAlign:'center', fontSize:11, color:'#9ca3af', marginBottom:6 }}>
-            Requis : T° Zone 1 · Pression · Largeur · Épaisseur
+            Requis : T° Zone 1 · Pression · Largeur · Épaisseur{reprise ? ' · Motif' : ''}
           </div>
         )}
         <button onClick={() => setConfirmer(true)} disabled={!peutValider || submitting}
@@ -787,7 +811,13 @@ function ChampForm({ champ, val, onChange }) {
 // ═════════════════════════════════════════════════════════════════════════════
 // GMAO
 // ═════════════════════════════════════════════════════════════════════════════
-function EcranGMAO({ user, onBack }) {
+function EcranGMAO({ user, onBack, onReglage }) {
+  const [mode,  setMode]  = useState('probleme');   // 'probleme' (ticket maintenance) | 'reglage' (nouveau réglage d'un OF)
+  const [ofsReg, setOfsReg] = useState([]);
+  const [ofSel, setOfSel]  = useState('');
+  useEffect(() => {
+    axios.get(`${API}/of`).then(r => setOfsReg((Array.isArray(r.data) ? r.data : []).filter(o => ['lance','en_attente_regleur','en_attente_operateur','en_cours','pause'].includes(o.statut)))).catch(() => {});
+  }, []);
   const [machines,   setMachines]   = useState([]);
   const [form,       setForm]       = useState({ machine_id:'', type:'', urgence:'normale', description:'' });
   const [submitting, setSubmitting] = useState(false);
@@ -838,6 +868,26 @@ function EcranGMAO({ user, onBack }) {
         </div>
       </header>
       <main style={S.main}>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+          {[['probleme','🔧 Signaler un problème'],['reglage','⚙️ Nouveau réglage d\'un OF']].map(([id, lib]) => (
+            <button key={id} onClick={() => setMode(id)} style={{ padding:'12px', borderRadius:10, cursor:'pointer', fontWeight:700, fontSize:13,
+              border:`2px solid ${mode===id?'#6366f1':'#e0e7ff'}`, background: mode===id?'#ede9fe':'#fff', color: mode===id?'#4338ca':'#374151' }}>{lib}</button>
+          ))}
+        </div>
+        {mode === 'reglage' && (
+          <div style={{ background:'#fff', borderRadius:14, padding:'16px', border:'1px solid #e0e7ff' }}>
+            <label style={S.lbl}>Ordre de fabrication *</label>
+            <select style={{ ...S.inp, textAlign:'left', fontSize:15, fontWeight:500, padding:'12px 14px', borderColor:'#e0e7ff' }}
+              value={ofSel} onChange={e => setOfSel(e.target.value)}>
+              <option value="">-- Sélectionner l'OF --</option>
+              {ofsReg.map(o => <option key={o.id} value={o.id}>{o.numero_of} — {o.article_nom || o.article_code} ({o.statut})</option>)}
+            </select>
+            <div style={{ fontSize:12, color:'#6b7280', margin:'8px 0 12px' }}>Pour reprendre après un arrêt ou corriger un réglage : un nouveau ticket est créé, les réglages précédents de l'OF sont conservés.</div>
+            <button disabled={!ofSel} onClick={() => onReglage({ type:'of', reprise:true, data: ofsReg.find(o => String(o.id) === String(ofSel)) })}
+              style={{ ...S.btnV, background: ofSel ? '#4338ca' : '#d1d5db', color: ofSel ? '#fff' : '#9ca3af', cursor: ofSel ? 'pointer' : 'not-allowed' }}>⚙️ Faire le réglage →</button>
+          </div>
+        )}
+        {mode === 'probleme' && (<>
         <div style={{ background:'#fff', borderRadius:14, padding:'16px', border:'1px solid #e0e7ff' }}>
           <label style={S.lbl}>Machine *</label>
           <select style={{ ...S.inp, textAlign:'left', fontSize:15, fontWeight:500, padding:'12px 14px', borderColor:'#e0e7ff' }}
@@ -883,6 +933,7 @@ function EcranGMAO({ user, onBack }) {
         <button onClick={envoyer} disabled={submitting} style={{ ...S.btnV, background:'#dc2626' }}>
           {submitting ? 'Envoi...' : '🔧 Envoyer à la maintenance'}
         </button>
+        </>)}
       </main>
     </div>
   );
@@ -896,7 +947,7 @@ export default function Regleur() {
   const [vue,   setVue]   = useState('liste');
   const [cible, setCible] = useState(null);
   const retour = () => { setCible(null); setVue('liste'); };
-  if (vue === 'gmao')       return <EcranGMAO       user={user} onBack={retour} />;
+  if (vue === 'gmao')       return <EcranGMAO       user={user} onBack={retour} onReglage={item => { setCible(item); setVue('reglage'); }} />;
   if (vue === 'historique') return <EcranHistorique user={user} onBack={retour} />;
   if (vue === 'reglage' && cible) return <EcranReglage cible={cible} user={user} onBack={retour} onSuccess={retour} />;
   return <EcranListe user={user}

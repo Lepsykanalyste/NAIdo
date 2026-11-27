@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const db = require('../config/db');
 const { auth, role } = require('../middleware/auth');
+const { enregistrerReglage, assurerReglages } = require('../utils/reglagesOf');
+assurerReglages().catch(e => console.error('[SESSIONS] historique des reglages :', e.message));
 
 // POST /api/sessions — Démarrer une session
 router.post('/', auth, async (req, res) => {
@@ -38,7 +40,7 @@ router.post('/', auth, async (req, res) => {
 // POST /api/sessions/:id/valider-regleur — Régleur valide les paramètres
 router.post('/:id/valider-regleur', auth, role('regleur', 'technicien_regleur', 'chef_atelier'), async (req, res) => {
   try {
-    const { temperature, pression, vitesse, notes, of_id } = req.body;
+    const { temperature, pression, vitesse, notes, of_id, motif } = req.body;
     const { rows } = await db.query(`
       UPDATE sessions_production SET
         regleur_id=$1, regleur_valide=true, regleur_validation_at=NOW(),
@@ -50,16 +52,18 @@ router.post('/:id/valider-regleur', auth, role('regleur', 'technicien_regleur', 
     // Débloquer l'OF + enregistrer le numéro de ticket réglage sur l'OF
     let numeroTicketReglage = null;
     if (of_id) {
+      // chaque validation du régleur crée son propre ticket et reste dans l'historique de l'OF
+      const rg = await enregistrerReglage(db, { of_id, session_id: req.params.id, regleur_id: req.user.id, machine_id: rows[0] && rows[0].machine_id, temperature, pression, vitesse, notes, motif });
       const { rows: ofRows } = await db.query(`
         UPDATE ordres_fabrication SET
           statut = CASE WHEN statut='planifie' THEN 'en_attente_regleur' ELSE statut END,
           regleur_valide=true, regleur_valide_at=NOW(), regleur_id=$1,
-          numero_ticket_reglage = COALESCE(numero_ticket_reglage, 'TKR-'||TO_CHAR(NOW(),'YYYY')||'-'||LPAD(nextval('seq_ticket_reglage')::text,4,'0')),
+          numero_ticket_reglage = $7,
           regleur_temperature=$2, regleur_pression=$3, regleur_vitesse=$4, regleur_notes=$5,
           statut_reglage='regle'
         WHERE id=$6
         RETURNING numero_ticket_reglage
-      `, [req.user.id, temperature, pression, vitesse, notes, of_id]);
+      `, [req.user.id, temperature, pression, vitesse, notes, of_id, rg.numero_ticket]);
       numeroTicketReglage = ofRows[0]?.numero_ticket_reglage || null;
     }
     res.json({ ...rows[0], numero_ticket_reglage: numeroTicketReglage });

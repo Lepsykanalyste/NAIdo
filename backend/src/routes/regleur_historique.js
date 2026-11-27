@@ -2,6 +2,8 @@ const express = require('express');
 const router  = express.Router();
 const db      = require('../config/db');
 const { auth } = require('../middleware/auth');
+const { assurerReglages } = require('../utils/reglagesOf');
+assurerReglages().catch(e => console.error('[REGLEUR] historique des reglages :', e.message));
 
 // Protege les textes inseres dans les pages HTML publiques (QR code)
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -34,7 +36,8 @@ async function signataire(userId) {
 // GET /api/regleur/ticket/:numero/signataire — nom, fonction et signature du régleur (ticket affiché dans l'application)
 router.get('/ticket/:numero/signataire', auth, async (req, res) => {
   try {
-    const r = await db.query('SELECT regleur_id FROM ordres_fabrication WHERE numero_ticket_reglage = $1', [req.params.numero]);
+    await assurerReglages();
+    const r = await db.query('SELECT regleur_id FROM reglages_of WHERE numero_ticket = $1', [req.params.numero]);
     const s = r.rows[0] ? await signataire(r.rows[0].regleur_id) : null;
     res.json(s || {});
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -44,80 +47,42 @@ router.get('/ticket/:numero/signataire', auth, async (req, res) => {
 // Toutes les validations régleur (sessions + OFs directs), sans limite de date
 router.get('/historique', auth, async (req, res) => {
   try {
+    await assurerReglages();
+    // Un réglage = une ligne : un OF peut en avoir plusieurs (arrêt puis nouveau réglage)
     const { rows } = await db.query(`
-      SELECT
-        sp.id,
-        sp.regleur_validation_at AS valide_at,
-        sp.regleur_temperature   AS temperature,
-        sp.regleur_pression      AS pression,
-        sp.regleur_vitesse       AS vitesse,
-        sp.regleur_notes         AS notes,
-        o.numero_of,
-        o.quantite_cible,
-        o.quantite_pieces,
-        o.date_livraison_prevue,
-        o.regleur_valide_at      AS of_valide_at,
-        o.numero_ticket_reglage,
-        a.designation            AS article,
-        a.couleur,
-        a.largeur_mm,
-        COALESCE(NULLIF(o.at3_poids_cible_kg, 0), ROUND((o.quantite_cible * COALESCE(a.poids_theorique_kg, 0))::numeric, 1)) AS poids_total_kg,
-        um.code                  AS unite_code,
-        um.libelle               AS unite_libelle,
-        c.raison_sociale         AS client_nom,
-        m.code                   AS machine_code,
-        m.nom                    AS machine_nom,
-        trim(COALESCE(ur.prenom,'') || ' ' || COALESCE(ur.nom,'')) AS regleur_nom,
-        'session' AS origine
-      FROM sessions_production sp
-      JOIN ordres_fabrication o  ON o.id  = sp.of_id
-      JOIN articles a            ON a.id  = o.article_id
-      LEFT JOIN clients_complet c  ON c.id  = o.client_id
-      LEFT JOIN machines m         ON m.id  = sp.machine_id
-      LEFT JOIN unites_mesure um   ON um.id = o.unite_id
-      LEFT JOIN utilisateurs ur    ON ur.id = sp.regleur_id
-      WHERE sp.regleur_valide = true
-
-      UNION ALL
-
-      SELECT
-        o.id,
-        o.regleur_valide_at      AS valide_at,
-        o.regleur_temperature    AS temperature,
-        o.regleur_pression       AS pression,
-        o.regleur_vitesse        AS vitesse,
-        o.regleur_notes          AS notes,
-        o.numero_of,
-        o.quantite_cible,
-        o.quantite_pieces,
-        o.date_livraison_prevue,
-        o.regleur_valide_at      AS of_valide_at,
-        o.numero_ticket_reglage,
-        a.designation            AS article,
-        a.couleur,
-        a.largeur_mm,
-        COALESCE(NULLIF(o.at3_poids_cible_kg, 0), ROUND((o.quantite_cible * COALESCE(a.poids_theorique_kg, 0))::numeric, 1)) AS poids_total_kg,
-        um.code                  AS unite_code,
-        um.libelle               AS unite_libelle,
-        c.raison_sociale         AS client_nom,
-        m.code                   AS machine_code,
-        m.nom                    AS machine_nom,
-        trim(COALESCE(ur.prenom,'') || ' ' || COALESCE(ur.nom,'')) AS regleur_nom,
-        'of' AS origine
-      FROM ordres_fabrication o
-      JOIN articles a            ON a.id  = o.article_id
-      LEFT JOIN clients_complet c  ON c.id  = o.client_id
-      LEFT JOIN machines m         ON m.id  = o.machine_id
-      LEFT JOIN unites_mesure um   ON um.id = o.unite_id
-      LEFT JOIN utilisateurs ur    ON ur.id = o.regleur_id
-      WHERE o.regleur_valide = true
-        AND NOT EXISTS (
-          SELECT 1 FROM sessions_production sp
-          WHERE sp.of_id = o.id AND sp.regleur_valide = true
-        )
-
-      ORDER BY valide_at DESC NULLS LAST
+      SELECT r.id, r.valide_at, r.temperature, r.pression, r.vitesse, r.notes,
+             r.numero_ticket AS numero_ticket_reglage, r.rang, r.motif, r.of_id,
+             o.numero_of, o.quantite_cible, o.quantite_pieces, o.date_livraison_prevue,
+             o.regleur_valide_at AS of_valide_at,
+             a.designation AS article, a.couleur, a.largeur_mm,
+             COALESCE(NULLIF(o.at3_poids_cible_kg, 0), ROUND((o.quantite_cible * COALESCE(a.poids_theorique_kg, 0))::numeric, 1)) AS poids_total_kg,
+             um.code AS unite_code, um.libelle AS unite_libelle,
+             c.raison_sociale AS client_nom,
+             m.code AS machine_code, m.nom AS machine_nom,
+             trim(COALESCE(ur.prenom,'') || ' ' || COALESCE(ur.nom,'')) AS regleur_nom,
+             CASE WHEN r.session_id IS NULL THEN 'of' ELSE 'session' END AS origine
+      FROM reglages_of r
+      JOIN ordres_fabrication o ON o.id::text = r.of_id
+      JOIN articles a ON a.id = o.article_id
+      LEFT JOIN clients_complet c ON c.id = o.client_id
+      LEFT JOIN machines m ON m.id::text = COALESCE(r.machine_id, o.machine_id::text)
+      LEFT JOIN unites_mesure um ON um.id = o.unite_id
+      LEFT JOIN utilisateurs ur ON ur.id::text = r.regleur_id
+      ORDER BY r.valide_at DESC NULLS LAST
     `);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/regleur/of/:of_id/reglages — tous les réglages d'un OF (le dernier sert de base à un nouveau réglage)
+router.get('/of/:of_id/reglages', auth, async (req, res) => {
+  try {
+    await assurerReglages();
+    const { rows } = await db.query(`
+      SELECT r.id, r.rang, r.numero_ticket AS numero_ticket_reglage, r.motif, r.valide_at, r.notes,
+             trim(COALESCE(ur.prenom,'') || ' ' || COALESCE(ur.nom,'')) AS regleur_nom
+      FROM reglages_of r LEFT JOIN utilisateurs ur ON ur.id::text = r.regleur_id
+      WHERE r.of_id = $1 ORDER BY r.rang`, [String(req.params.of_id)]);
     res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -126,24 +91,26 @@ router.get('/historique', auth, async (req, res) => {
 // GET /api/regleur/ticket/:numero/view — Ticket réglage imprimable (accessible via QR code)
 router.get('/ticket/:numero/view', async (req, res) => {
   try {
+    await assurerReglages();
     const { rows } = await db.query(`
       SELECT o.numero_of, o.quantite_cible, o.quantite_pieces, o.date_livraison_prevue,
-             o.regleur_valide_at AS valide_at, o.numero_ticket_reglage, o.regleur_id,
-             o.regleur_temperature AS temperature, o.regleur_pression AS pression,
-             o.regleur_vitesse AS vitesse, o.regleur_notes AS notes,
+             r.valide_at AS valide_at, r.numero_ticket AS numero_ticket_reglage, r.regleur_id, r.rang, r.motif,
+             r.temperature AS temperature, r.pression AS pression,
+             r.vitesse AS vitesse, r.notes AS notes,
              a.designation AS article, a.couleur, a.largeur_mm,
              COALESCE(NULLIF(o.at3_poids_cible_kg, 0), ROUND((o.quantite_cible * COALESCE(a.poids_theorique_kg, 0))::numeric, 1)) AS poids_total_kg,
              um.code AS unite_code, um.libelle AS unite_libelle,
              c.raison_sociale AS client_nom,
              m.code AS machine_code, m.nom AS machine_nom,
              trim(COALESCE(ur.prenom,'') || ' ' || COALESCE(ur.nom,'')) AS regleur_nom
-      FROM ordres_fabrication o
+      FROM reglages_of r
+      JOIN ordres_fabrication o ON o.id::text = r.of_id
       JOIN articles a ON a.id = o.article_id
       LEFT JOIN clients_complet c ON c.id = o.client_id
-      LEFT JOIN machines m ON m.id = o.machine_id
+      LEFT JOIN machines m ON m.id::text = COALESCE(r.machine_id, o.machine_id::text)
       LEFT JOIN unites_mesure um ON um.id = o.unite_id
-      LEFT JOIN utilisateurs ur ON ur.id = o.regleur_id
-      WHERE o.numero_ticket_reglage = $1
+      LEFT JOIN utilisateurs ur ON ur.id::text = r.regleur_id
+      WHERE r.numero_ticket = $1
     `, [req.params.numero]);
     if (!rows.length) return res.status(404).send('<h1>Ticket introuvable</h1>');
     const r = rows[0];
@@ -156,7 +123,8 @@ router.get('/ticket/:numero/view', async (req, res) => {
     const fmtDate = (d) => d ? new Date(d).toLocaleDateString('fr-FR') : '—';
 
     const lignes = [
-      { l: 'N° TICKET', v: r.numero_ticket_reglage || '—', bold: true }, null,
+      { l: 'N° TICKET', v: r.numero_ticket_reglage || '—', bold: true },
+      { l: 'RÉGLAGE N°', v: String(r.rang || 1) }, ...(r.rang > 1 ? [{ l: 'MOTIF', v: r.motif || '—' }] : []), null,
       { l: 'OF', v: r.numero_of }, { l: 'ARTICLE', v: r.article },
       { l: 'COULEUR', v: r.couleur || '—' }, { l: 'CLIENT', v: r.client_nom || '—' },
       { l: 'MACHINE', v: r.machine_nom || r.machine_code || '—' }, null,
