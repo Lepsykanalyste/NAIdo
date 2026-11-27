@@ -5,9 +5,9 @@ const { auth } = require('../middleware/auth');
 const { pdfCommercial, nombre, date } = require('../utils/pdfBonAchat');
 const { enregistrerReglage, assurerReglages } = require('../utils/reglagesOf');
 assurerReglages().catch(e => console.error('[OF] historique des reglages :', e.message));
-// Un OF en pieces dont la quantite en kg est a 0 : kg = pieces x poids theorique de l'article
+// Un OF en pieces dont la quantite en kg est inferieure a 1 : kg = pieces x poids theorique de l'article
 const completerKg = () => db.query(`UPDATE ordres_fabrication o SET quantite_cible = ROUND((o.quantite_pieces * a.poids_theorique_kg)::numeric, 1)
-  FROM articles a WHERE a.id = o.article_id AND COALESCE(o.quantite_cible, 0) = 0 AND COALESCE(o.quantite_pieces, 0) > 0 AND COALESCE(a.poids_theorique_kg, 0) > 0`)
+  FROM articles a WHERE a.id = o.article_id AND COALESCE(o.quantite_cible, 0) < 1 AND COALESCE(o.quantite_pieces, 0) > 0 AND COALESCE(a.poids_theorique_kg, 0) > 0`)
   .catch(e => console.error('[OF] kg depuis les pieces :', e.message));
 completerKg();
 
