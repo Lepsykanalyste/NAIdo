@@ -1673,6 +1673,15 @@ export default function DBM_StockAT3() {
   const [module, setModule] = useState(
     user?.role === 'magasinier_mp' ? 'reception' : 'dbm'
   );
+  // Livraisons du magasin a receptionner : l'alerte ouvre directement l'onglet « Réception MP » et l'onglet affiche le nombre
+  const [aRecevoir, setARecevoir] = useState(0);
+  useEffect(() => {
+    axios.get(`${API}/notifications`).then(({ data }) => {
+      const n = ((data && data.items) || []).filter(i => i.ecran === 'dbm' && /réceptionner/.test(i.titre)).reduce((s, i) => s + i.nombre, 0);
+      setARecevoir(n);
+      if (n > 0 && user?.role !== 'magasinier_mp') setModule(prev => prev === 'dbm' ? 'reception_at3' : prev);
+    }).catch(() => {});
+  }, []);
 
   const MODULES = user?.role === 'magasinier_mp' ? [
     { id:'reception', icon:'🏪', label:'DBM à livrer', color:'#0369a1' },
@@ -1701,6 +1710,9 @@ export default function DBM_StockAT3() {
             padding:'8px 18px', borderRadius:10, cursor:'pointer', fontWeight:700, fontSize:13
           }}>
             {m.icon} {m.label}
+            {m.id === 'reception_at3' && aRecevoir > 0 && (
+              <span style={{ marginLeft:8, background:'#dc2626', color:'#fff', borderRadius:10, padding:'1px 7px', fontSize:11, fontWeight:800 }}>{aRecevoir}</span>
+            )}
           </button>
         ))}
       </div>
