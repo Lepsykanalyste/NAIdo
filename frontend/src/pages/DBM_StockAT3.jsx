@@ -579,6 +579,14 @@ export function ModuleReceptionDBM() {
   const [showAnnuler, setShowAnnuler] = useState(null);
   const [motifAnnul, setMotifAnnul] = useState('');
 
+  // Ecarts de reception (livre different de recu) a expliquer / prendre en compte par le magasin
+  const [ecarts, setEcarts] = useState([]);
+  const chargerEcarts = () => { axios.get(`${API}/dbm/livraisons/ecarts`).then(r => setEcarts(Array.isArray(r.data) ? r.data : [])).catch(() => setEcarts([])); };
+  const ecartVu = async (id) => {
+    try { await axios.put(`${API}/dbm/livraisons/ecarts/${id}/vu`); toast.success('Écart pris en compte'); chargerEcarts(); }
+    catch (e) { toast.error(e.response?.data?.error || 'Erreur'); }
+  };
+
   const charger = async () => {
     try {
       const [r1, r2, r3, r4, r5] = await Promise.all([
@@ -592,6 +600,7 @@ export function ModuleReceptionDBM() {
       setHistorique([...(r2.data||[]), ...(r3.data||[]), ...(r4.data||[]), ...(r5.data||[])]);
       // Charger les bons de livraison
       axios.get(`${API}/dbm/livraisons`).catch(()=>({data:[]})).then(r => setBonsLivraison(r.data||[]));
+      chargerEcarts();
     } catch { toast.error('Erreur'); }
   };
 
@@ -713,6 +722,26 @@ export function ModuleReceptionDBM() {
         </h3>
         <button onClick={charger} style={{ background:'#e0f2fe', border:'1px solid #7dd3fc', color:'#0369a1', padding:'7px 12px', borderRadius:8, cursor:'pointer', fontSize:12 }}>🔄</button>
       </div>
+
+      {/* Ecarts de reception : l'atelier a recu moins que ce qui a ete livre */}
+      {ecarts.length > 0 && (
+        <div style={{ background:'#fef2f2', border:'2px solid #fca5a5', borderRadius:12, padding:14, marginBottom:16 }}>
+          <div style={{ fontWeight:800, color:'#b91c1c', marginBottom:8 }}>⚠ Écarts de réception à traiter ({ecarts.length})</div>
+          {ecarts.map(e => (
+            <div key={e.id} style={{ background:'#fff', borderRadius:8, padding:'8px 12px', marginBottom:6, display:'flex', justifyContent:'space-between', gap:10, alignItems:'center' }}>
+              <div style={{ fontSize:12, color:'#374151', minWidth:0 }}>
+                <div><b>{e.code}</b> — {e.designation} <span style={{ color:'#6b7280' }}>· {e.numero_livraison} · lot {e.numero_lot || '—'} · DBM {e.numero_dbm}</span></div>
+                <div>Livré <b>{fmtKg(e.qte_livree)} kg</b> · Reçu <b>{fmtKg(e.qte_recue)} kg</b> · <b style={{ color:'#dc2626' }}>écart {fmtKg(e.ecart)} kg</b></div>
+                <div style={{ color:'#92400e' }}>Motif donné par l'atelier : {e.observation_reception || 'non renseigné'}</div>
+              </div>
+              <button onClick={() => ecartVu(e.id)}
+                style={{ flexShrink:0, background:'#15803d', color:'#fff', border:'none', borderRadius:8, padding:'8px 12px', cursor:'pointer', fontSize:12, fontWeight:700 }}>
+                ✓ Pris en compte
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Détail + formulaire livraison */}
       {detail && (
@@ -1188,7 +1217,7 @@ export function ModuleReceptionAT3() {
     // Vérifier observations obligatoires
     for (const r of receptions) {
       if (parseFloat(r.qte_recue||0) !== parseFloat(r.qte_en_transit||0) && !r.observation?.trim()) {
-        return toast.error('Observation obligatoire si quantité différente de celle livrée');
+        return toast.error(`${r.code} : expliquez l'écart (quantité reçue différente de la quantité livrée) dans la case Observation`);
       }
     }
     setLoading(true);
@@ -1288,6 +1317,24 @@ export function ModuleReceptionAT3() {
                         style={{ width:80, border:'2px solid #c4b5fd', borderRadius:6, padding:'5px', fontSize:13, textAlign:'center', fontWeight:700 }} />
                       <span style={{ fontSize:11 }}>kg</span>
                     </div>
+                  </td>
+                  <td style={{ padding:'7px 10px', minWidth:230 }}>
+                    {(() => {
+                      const diff = (parseFloat(r.qte_recue || 0) - parseFloat(r.qte_en_transit || 0));
+                      const ecart = Math.abs(diff) > 0.0005;
+                      const vide = !(r.observation || '').trim();
+                      return (<>
+                        <textarea rows={2} value={r.observation || ''}
+                          onChange={e => setReceptions(prev => prev.map((x, xi) => xi === i ? { ...x, observation: e.target.value } : x))}
+                          placeholder={ecart ? "Expliquez l'écart : pourquoi ? (obligatoire)" : 'Observation (facultative)'}
+                          style={{ width:'100%', border: (ecart && vide) ? '2px solid #dc2626' : '1px solid #c4b5fd', borderRadius:6, padding:'5px', fontSize:12, boxSizing:'border-box', resize:'vertical', fontFamily:'inherit' }} />
+                        {ecart && (
+                          <div style={{ fontSize:10, fontWeight:700, color:'#dc2626', marginTop:2 }}>
+                            ⚠ Écart de {Math.abs(diff).toFixed(1)} kg{vide ? ' : le motif est obligatoire' : ' : le magasin sera alerté'}
+                          </div>
+                        )}
+                      </>);
+                    })()}
                   </td>
                 </tr>
               ))}

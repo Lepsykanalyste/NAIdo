@@ -76,6 +76,37 @@ const sendHtml = (res, html) => {
 // BONS DE LIVRAISON  (doivent etre declares AVANT /:id)
 // ══════════════════════════════════════════════════════════════
 
+// Colonnes de suivi des ecarts de reception (creees automatiquement si elles n'existent pas)
+db.query(`ALTER TABLE dbm_livraisons ADD COLUMN IF NOT EXISTS ecart_vu_at TIMESTAMPTZ, ADD COLUMN IF NOT EXISTS ecart_vu_par TEXT`)
+  .catch(e => console.error('[DBM-LIV] colonnes ecart :', e.message));
+
+// GET /api/dbm/livraisons/ecarts — receptions dont la quantite recue differe de la quantite livree (a traiter par le magasin)
+router.get('/livraisons/ecarts', auth, async (req, res) => {
+  try {
+    const { rows } = await db.query(`
+      SELECT dv.id, dv.numero_livraison, dv.numero_lot, dv.qte_livree, dv.qte_recue, dv.observation_reception, dv.date_reception,
+             d.numero_dbm, o.numero_of, a.code, a.designation
+      FROM dbm_livraisons dv
+      JOIN dbm d ON d.id = dv.dbm_id
+      LEFT JOIN ordres_fabrication o ON o.id = d.of_id
+      LEFT JOIN articles a ON a.id = dv.article_id
+      WHERE dv.receptionne = true AND dv.qte_recue IS NOT NULL AND ABS(dv.qte_recue - dv.qte_livree) > $1
+        AND dv.ecart_vu_at IS NULL
+      ORDER BY dv.date_reception DESC NULLS LAST
+      LIMIT 100`, [EPS]);
+    ok(res, rows.map(r => ({ ...r, ecart: num(r.qte_livree) - num(r.qte_recue) })));
+  } catch (e) { err(res, e, 'Erreur ecarts de reception'); }
+});
+
+// PUT /api/dbm/livraisons/ecarts/:id/vu — le magasin prend en compte l'ecart
+router.put('/livraisons/ecarts/:id/vu', auth, async (req, res) => {
+  try {
+    await db.query(`UPDATE dbm_livraisons SET ecart_vu_at = NOW(), ecart_vu_par = $2 WHERE id::text = $1 AND ecart_vu_at IS NULL`,
+      [String(req.params.id), req.user?.id ? String(req.user.id) : null]);
+    ok(res, { message: 'Écart pris en compte' });
+  } catch (e) { err(res, e, 'Erreur prise en compte ecart'); }
+});
+
 // GET /api/dbm/livraisons — un bon par numero_livraison
 router.get('/livraisons', auth, async (req, res) => {
   try {
@@ -428,6 +459,8 @@ router.put('/:id/receptionner', auth, async (req, res, next) => {
       const envoye = liv ? num(liv.qte_livree) : num(r.qte_en_transit);
       if (!liv && envoye <= 0 && q <= 0) continue;
       if (q > envoye + EPS) throw userError(`Quantite recue superieure a la quantite livree (${fmt(envoye, 3)} kg)`);
+      if (Math.abs(q - envoye) > EPS && !String(r.observation || '').trim())
+        throw userError(`${r.code || 'Matiere'} : la quantite recue (${fmt(q, 3)} kg) differe de la quantite livree (${fmt(envoye, 3)} kg), le motif de l'ecart est obligatoire`);
 
       if (liv) {
         await client.query(`UPDATE dbm_livraisons SET receptionne = true, qte_recue = $1, observation_reception = $2, date_reception = NOW() WHERE id = $3`,

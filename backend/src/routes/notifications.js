@@ -59,6 +59,8 @@ router.get('/', auth, async (req, res) => {
   if (['magasinier', 'magasinier_at3', 'magasinier_central', 'magasinier_mp', 'super_admin'].includes(role)) {
     ajouter('dbm', 'Demandes de matières (DBM) à livrer',
       await compter("SELECT COUNT(*)::int AS n FROM dbm WHERE statut IN ('en_attente', 'partiel')"));
+    ajouter('dbm', 'Écarts de réception à traiter (reçu différent de livré)',
+      await compter("SELECT COUNT(*)::int AS n FROM dbm_livraisons WHERE receptionne = true AND qte_recue IS NOT NULL AND ABS(qte_recue - qte_livree) > 0.0005 AND ecart_vu_at IS NULL"));
   }
   // Chef d'atelier : matieres livrees par le magasin, a receptionner (ecran 'dbm')
   if (['chef_atelier', 'super_admin'].includes(role)) {
