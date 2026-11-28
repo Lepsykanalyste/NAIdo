@@ -16,7 +16,7 @@ const ROLES_OPERATEUR = ['operateur','operateur_ext','operateur_sou','operateur_
 const ROLES_CHEF = ['chef_atelier','super_admin','directeur','commercial','magasinier',
                     'magasinier_at3','magasinier_central','achat','vente','qhse','technicien',
                     'rh','responsable_qhse','responsable_rh',
-                    'controleur_qualite','comptable','responsable_stock','technicien_gmao','emballeur','magasinier_mp'];
+                    'controleur_qualite','comptable','responsable_stock','technicien_gmao','emballeur','magasinier_mp','transitaire'];
 
 class ErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { error: null, info: null }; }

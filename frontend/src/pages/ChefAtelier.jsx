@@ -185,6 +185,7 @@ const MENU_PAR_ROLE = {
   technicien_gmao:   ['dashboard','separator3','gmao','alertes'],
   responsable_stock: ['dashboard','separator2','stock','cession','alertes'],
   comptable:         ['dashboard','separator2','stock','separator2b','vente','achat','alertes'],
+  transitaire:       ['dashboard','separator2b','achat','alertes'],
 };
 
 const btnMenuPerso = { width:'100%', padding:'6px 10px', borderRadius:6, border:'1px solid #374151', background:'#1f2937', color:'#e5e7eb', cursor:'pointer', fontSize:12, textAlign:'left' };
